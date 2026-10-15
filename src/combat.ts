@@ -4,9 +4,11 @@ import { ISLAND_TOP, mulberry32, type Island } from "./island";
 // Everything lives on the same flat game plane as the player, with an altitude for depth.
 
 export const COMBAT = {
-  playerHp: 5,
+  playerHp: 100, // health in percent
+  hitDamage: 2, // percent lost per enemy hit
+  fallDamage: 10, // percent lost when falling into the haze
   playerRadius: 10,
-  invulnTime: 1.0, // seconds of invulnerability after being hit
+  invulnTime: 0.35, // seconds of invulnerability after being hit
 
   swordRange: 52,
   swordArc: 1.35, // half-angle (rad) of the swipe cone
@@ -16,6 +18,8 @@ export const COMBAT = {
   swordCooldown: 0.28,
 
   spearSpeed: 720,
+  spearLength: 46, // drawn shaft length
+  spearRadius: 12, // extra hit radius around the tip
   spearLife: 0.7,
   spearDamage: 1,
   spearCooldown: 0.45,
@@ -279,6 +283,17 @@ export class Combat {
         s.hits.add(b);
         this.damage(b, COMBAT.swordDamage, s.x, s.y);
       }
+      // The blade also blocks enemy projectiles passing through the swipe.
+      for (const sh of this.shots) {
+        if (sh.fromPlayer || sh.life <= 0) continue;
+        const ox = sh.x - s.x;
+        const oy = sh.y - s.y;
+        const d = Math.hypot(ox, oy);
+        if (d > COMBAT.swordRange + 8 || Math.abs(sh.alt - s.alt) > 50) continue;
+        if (d > 18 && (ox * s.dx + oy * s.dy) / d < cosArc) continue;
+        sh.life = 0;
+        this.burst(sh.x, sh.y, sh.alt, 8, "#f4ffd0");
+      }
     }
     this.slashes = this.slashes.filter((s) => s.age < COMBAT.swordTime + COMBAT.swordFade);
   }
@@ -292,7 +307,7 @@ export class Combat {
       if (s.fromPlayer) {
         for (const b of this.boids) {
           if (b.hp <= 0) continue;
-          if (Math.hypot(b.x - s.x, b.y - s.y) < b.r + 6 && Math.abs(b.alt - s.alt) < b.r + 22) {
+          if (Math.hypot(b.x - s.x, b.y - s.y) < b.r + COMBAT.spearRadius && Math.abs(b.alt - s.alt) < b.r + 26) {
             this.damage(b, COMBAT.spearDamage, s.x - s.vx * 0.05, s.y - s.vy * 0.05);
             s.life = 0;
             break;
@@ -301,7 +316,7 @@ export class Combat {
       } else if (player.targetable) {
         const d = Math.hypot(player.x - s.x, player.y - s.y, (player.alt - s.alt) * 0.7);
         if (d < COMBAT.playerRadius + 5) {
-          hitPlayer(1, s.x - s.vx, s.y - s.vy);
+          hitPlayer(COMBAT.hitDamage, s.x - s.vx, s.y - s.vy);
           s.life = 0;
         }
       }
@@ -347,7 +362,7 @@ export class Combat {
         b.x += b.vx * dt;
         b.y += b.vy * dt;
         if (player.targetable && Math.hypot(px, py, (player.alt - b.alt) * 0.7) < b.r + COMBAT.playerRadius) {
-          hitPlayer(1, b.x, b.y);
+          hitPlayer(COMBAT.hitDamage, b.x, b.y);
           b.lunge = 0;
           b.vx = (-px / dP) * 160;
           b.vy = (-py / dP) * 160;

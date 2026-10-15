@@ -156,7 +156,7 @@ function restart() {
 function hitPlayer(dmg: number, fromX: number, fromY: number) {
   const p = player;
   if (p.invuln > 0 || game.state !== "play") return;
-  p.hp -= dmg;
+  p.hp = Math.max(0, p.hp - dmg);
   p.invuln = COMBAT.invulnTime;
   game.shake = 0.35;
   combat.burst(p.x, p.y, p.alt, 10, "#ffd0b0");
@@ -291,7 +291,7 @@ function update(dt: number) {
     p.alt = Math.max(5, p.alt + p.vz * dt);
     if (p.lostTimer > 1.6) {
       if (game.state === "play") {
-        p.hp -= 1;
+        p.hp = Math.max(0, p.hp - COMBAT.fallDamage);
         if (p.hp <= 0) {
           game.state = "defeat";
           game.timer = 0;
@@ -842,20 +842,39 @@ function pushCombatDrawables(list: Drawable[], time: number) {
         if (sh.fromPlayer) {
           // Spear: shaft trailing behind a bright tip.
           const l = Math.hypot(sh.vx, sh.vy) || 1;
-          const tail = proj.project(sh.x - (sh.vx / l) * 26, sh.y - (sh.vy / l) * 26, sh.alt);
-          const tip = proj.project(sh.x, sh.y, sh.alt);
+          const ux = sh.vx / l;
+          const uy = sh.vy / l;
+          const L = COMBAT.spearLength;
+          const tail = proj.project(sh.x - ux * L, sh.y - uy * L, sh.alt);
+          const neck = proj.project(sh.x - ux * 12, sh.y - uy * 12, sh.alt);
+          const tip = proj.project(sh.x + ux * 4, sh.y + uy * 4, sh.alt);
           if (!tip.visible) return;
+          const k = tip.kt;
+          // Glow so it reads at speed
+          ctx.globalCompositeOperation = "screen";
+          ctx.drawImage(glowSprite, tip.x - 16 * k, tip.y - 16 * k, 32 * k, 32 * k);
+          ctx.globalCompositeOperation = "source-over";
           ctx.lineCap = "round";
-          ctx.strokeStyle = "#d9c49a";
-          ctx.lineWidth = 2.4 * tip.kt;
+          ctx.strokeStyle = "#c9a96e";
+          ctx.lineWidth = 4 * k;
           ctx.beginPath();
           ctx.moveTo(tail.x, tail.y);
-          ctx.lineTo(tip.x, tip.y);
+          ctx.lineTo(neck.x, neck.y);
           ctx.stroke();
-          ctx.fillStyle = "#f6f2ff";
+          // Broad leaf-shaped head
+          const hx = (tip.x - neck.x) / 16;
+          const hy = (tip.y - neck.y) / 16;
+          ctx.fillStyle = "#f2efff";
+          ctx.strokeStyle = "#7d7aa8";
+          ctx.lineWidth = 1.2 * k;
           ctx.beginPath();
-          ctx.arc(tip.x, tip.y, 2.6 * tip.kt, 0, Math.PI * 2);
+          ctx.moveTo(tip.x, tip.y);
+          ctx.lineTo(neck.x + hx * 6 - hy * 7, neck.y + hy * 6 + hx * 7);
+          ctx.lineTo(neck.x, neck.y);
+          ctx.lineTo(neck.x + hx * 6 + hy * 7, neck.y + hy * 6 - hx * 7);
+          ctx.closePath();
           ctx.fill();
+          ctx.stroke();
         } else {
           const pr = proj.project(sh.x, sh.y, sh.alt);
           if (!pr.visible) return;
@@ -1068,14 +1087,7 @@ function drawQueenPointer() {
   ctx.restore();
 }
 
-function heartPath(x: number, y: number, s: number) {
-  ctx.beginPath();
-  ctx.moveTo(x, y + s * 0.3);
-  ctx.bezierCurveTo(x, y, x - s * 0.5, y, x - s * 0.5, y + s * 0.3);
-  ctx.bezierCurveTo(x - s * 0.5, y + s * 0.6, x, y + s * 0.75, x, y + s);
-  ctx.bezierCurveTo(x, y + s * 0.75, x + s * 0.5, y + s * 0.6, x + s * 0.5, y + s * 0.3);
-  ctx.bezierCurveTo(x + s * 0.5, y, x, y, x, y + s * 0.3);
-}
+let hpTrail = 1;
 
 function drawHud() {
   if (player.mode === "lost") {
@@ -1085,17 +1097,21 @@ function drawHud() {
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Hearts
-  for (let i = 0; i < COMBAT.playerHp; i++) {
-    heartPath(26 + i * 26, 16, 20);
-    if (i < player.hp) {
-      ctx.fillStyle = "#ff5a6e";
-      ctx.fill();
-    }
-    ctx.strokeStyle = "rgba(255,220,230,0.8)";
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-  }
+  // Player health bar; the trailing light segment shows recent damage draining away.
+  const frac = Math.max(0, player.hp / COMBAT.playerHp);
+  hpTrail = Math.max(frac, hpTrail - 0.004);
+  const hw = Math.min(240, W * 0.3);
+  ctx.fillStyle = "rgba(20,8,35,0.7)";
+  ctx.fillRect(14, 14, hw + 4, 14);
+  ctx.fillStyle = "rgba(255,220,200,0.8)";
+  ctx.fillRect(16, 16, hw * hpTrail, 10);
+  ctx.fillStyle = frac > 0.3 ? "#ff5a6e" : `rgba(255,${60 + 60 * Math.sin(performance.now() / 90)},80,1)`;
+  ctx.fillRect(16, 16, hw * frac, 10);
+  ctx.font = "600 12px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#ffe0e6";
+  ctx.fillText(`♥ ${Math.ceil(player.hp)}%`, 16, 32);
 
   // Queen health
   const q = combat.queen;
@@ -1148,4 +1164,6 @@ function frame(now: number) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+
 
