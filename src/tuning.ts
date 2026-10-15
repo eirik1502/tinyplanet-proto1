@@ -3,19 +3,19 @@
 
 const defaults = {
   climbSpeed: 300, // units/s along the rim
-  climbChargeFactor: 0.4, // climb speed multiplier while charging a jump
-  gravity: 720,
+  climbChargeFactor: 0.7, // climb speed multiplier while charging a jump
+  gravity: 1200,
   jumpMin: 110, // horizontal range of a tapped jump (landing back at island-top height)
   jumpMax: 420, // ... and of a fully charged one
-  chargeTime: 0.9, // seconds of holding Space to reach jumpMax
-  airAccel: 420, // steering acceleration while airborne
-  bodyRadius: 9, // how close to an island body counts as touching it
-  slideMinSpeed: 140, // grabbing faster than this slides along the rim
-  slideKeep: 0.85, // fraction of the along-rim velocity kept when sliding starts
+  chargeTime: 0.5, // seconds of holding Space to reach jumpMax
+  airAccel: 750, // steering acceleration while airborne
+  bodyRadius: 18, // how close to an island body counts as touching it
+  slideMinSpeed: 100, // grabbing faster than this slides along the rim
+  slideKeep: 1.0, // fraction of the along-rim velocity kept when sliding starts
   slideFriction: 2.2, // exponential slide decay rate
   camHeight: 420, // camera height above the island tops
   camFollow: 2.4, // how quickly the camera catches up with the player
-  camLead: 0.25, // seconds of velocity the camera looks ahead
+  camLead: 0.6, // seconds of velocity the camera looks ahead
 };
 
 export type Tuning = typeof defaults;
