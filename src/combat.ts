@@ -1,61 +1,11 @@
 import { ISLAND_TOP, mulberry32, type Island } from "./island";
+import { COMBAT } from "./tuning";
 
 // Combat: the enemy swarm (boids), projectiles, sword slashes and hit particles.
 // Everything lives on the same flat game plane as the player, with an altitude for depth.
 
-export const COMBAT = {
-  playerHp: 100, // health in percent
-  hitDamage: 2, // percent lost per enemy hit
-  fallDamage: 10, // percent lost when falling into the haze
-  playerRadius: 10,
-  invulnTime: 0.35, // seconds of invulnerability after being hit
-
-  aimTime: 0.5, // seconds of holding an attack to reach full power (and lock the aim)
-  aimTurnRate: 14, // rad/s the aim turns toward the input at the start; slows to 0 by aimTime
-
-  swordRange: 52,
-  swordMaxRange: 88, // reach at full power
-  swordArc: 1.35, // half-angle (rad) of the swipe cone
-  swordDamage: 2,
-  swordMaxDamage: 5,
-  swordTime: 0.18, // seconds the swipe can hit
-  swordFade: 0.12, // extra seconds the swipe stays visible while fading out
-  swordCooldown: 0.28,
-
-  spearSpeed: 720,
-  spearLength: 46, // drawn shaft length
-  spearRadius: 12, // extra hit radius around the tip
-  spearLife: 0.7,
-  spearDamage: 1,
-  spearMaxDamage: 3,
-  spearMaxSpeed: 1050,
-  spearMaxScale: 1.8, // size multiplier at full power
-  spearCooldown: 0.45,
-
-  meleeCount: 28,
-  rangedCount: 14,
-  aggroRange: 320, // boids notice the player within this distance
-  disengageRange: 650, // ... and give up beyond this
-  guardRadius: 480, // boids this close to the queen defend her
-  threatRadius: 520, // the queen feels threatened when the player is this close
-
-  meleeSpeed: 190,
-  lungeRange: 95,
-  lungeSpeed: 470,
-  lungeTime: 0.32,
-  lungeCooldown: 1.3,
-
-  rangedSpeed: 160,
-  rangedKeepAway: 230,
-  orbSpeed: 280,
-  orbLife: 2.2,
-  orbCooldown: 1.7,
-  orbRange: 420,
-
-  queenHp: 24,
-  queenSpeed: 85,
-  queenTether: 230, // the queen stays within this distance of her home
-};
+// All combat numbers live in tuning.ts so they can be edited live from the slider panel.
+export { COMBAT };
 
 export type BoidKind = "melee" | "ranged" | "queen";
 
@@ -152,7 +102,7 @@ export class Combat {
     return this.queen.hp <= 0;
   }
 
-  /** New swarm at random positions, keeping clear of the player's start; the queen on the farthest island. */
+  /** New swarm at random positions, keeping clear of the player's start; the queen beside the farthest island. */
   reset(seed: number, startX: number, startY: number) {
     this.rand = mulberry32(seed);
     this.boids = [];
@@ -163,7 +113,10 @@ export class Combat {
     const home = this.islands.reduce((a, b) =>
       Math.hypot(a.cx - startX, a.cy - startY) > Math.hypot(b.cx - startX, b.cy - startY) ? a : b,
     );
-    this.queen = this.spawn("queen", home.cx, home.cy);
+    // Her home hovers just off that island's far side (boids don't fly over islands).
+    const hd = Math.hypot(home.cx - startX, home.cy - startY) || 1;
+    const off = home.radius * 1.3 + 90;
+    this.queen = this.spawn("queen", home.cx + ((home.cx - startX) / hd) * off, home.cy + ((home.cy - startY) / hd) * off);
 
     const randomSpot = () => {
       for (;;) {
@@ -383,6 +336,7 @@ export class Combat {
         b.alt += (player.alt + 4 - b.alt) * Math.min(1, dt * 10);
         b.x += b.vx * dt;
         b.y += b.vy * dt;
+        this.keepOffIslands(b);
         if (player.targetable && Math.hypot(px, py, (player.alt - b.alt) * 0.7) < b.r + COMBAT.playerRadius) {
           hitPlayer(COMBAT.hitDamage, b.x, b.y);
           b.lunge = 0;
@@ -408,11 +362,12 @@ export class Combat {
         const ox = b.x - o.x;
         const oy = b.y - o.y;
         const d = Math.hypot(ox, oy);
-        if (d < 28 && d > 0) {
-          sx += ox / (d * d);
-          sy += oy / (d * d);
+        if (d < COMBAT.separationRadius && d > 0) {
+          const push = 1 - d / COMBAT.separationRadius;
+          sx += (ox / d) * push;
+          sy += (oy / d) * push;
         }
-        if (d < 110) {
+        if (d < COMBAT.neighborRadius) {
           avx += o.vx;
           avy += o.vy;
           cx += o.x;
@@ -420,13 +375,13 @@ export class Combat {
           n++;
         }
       }
-      ax += sx * 9000;
-      ay += sy * 9000;
+      ax += sx * COMBAT.separation;
+      ay += sy * COMBAT.separation;
       if (n > 0) {
-        ax += (avx / n - b.vx) * 0.8;
-        ay += (avy / n - b.vy) * 0.8;
-        ax += (cx / n - b.x) * 0.6;
-        ay += (cy / n - b.y) * 0.6;
+        ax += (avx / n - b.vx) * COMBAT.alignment;
+        ay += (avy / n - b.vy) * COMBAT.alignment;
+        ax += (cx / n - b.x) * COMBAT.cohesion;
+        ay += (cy / n - b.y) * COMBAT.cohesion;
       }
 
       const seek = (tx: number, ty: number, speed: number, weight: number) => {
@@ -466,11 +421,11 @@ export class Combat {
       } else {
         // Idle: wander, drifting loosely toward the queen so the swarm gathers around her.
         const wa = Math.sin(b.phase * 0.7 + b.id) * Math.PI;
-        ax += Math.cos(wa) * 40;
-        ay += Math.sin(wa) * 40;
+        ax += Math.cos(wa) * COMBAT.wander;
+        ay += Math.sin(wa) * COMBAT.wander;
         if (queenAlive && toQueen < 1000 && toQueen > 200) {
-          ax += ((q.x - b.x) / toQueen) * 25;
-          ay += ((q.y - b.y) / toQueen) * 25;
+          ax += ((q.x - b.x) / toQueen) * COMBAT.queenAttraction;
+          ay += ((q.y - b.y) / toQueen) * COMBAT.queenAttraction;
         }
       }
 
@@ -507,6 +462,9 @@ export class Combat {
         ax += ob.x * 300;
         ay += ob.y * 300;
       }
+      const away = this.islandForce(b);
+      ax += away.x;
+      ay += away.y;
 
       b.vx += ax * dt;
       b.vy += ay * dt;
@@ -520,6 +478,7 @@ export class Combat {
       }
       b.x += b.vx * dt;
       b.y += b.vy * dt;
+      this.keepOffIslands(b);
       targetAlt = Math.max(ISLAND_TOP - 15, Math.min(ISLAND_TOP + 170, targetAlt));
       b.alt += Math.max(-90 * dt, Math.min(90 * dt, targetAlt - b.alt));
     }
@@ -528,7 +487,7 @@ export class Combat {
   private updateQueen(b: Boid, dt: number, player: PlayerView, dP: number) {
     let ax = 0;
     let ay = 0;
-    if (player.targetable && dP < 320) {
+    if (player.targetable && dP < COMBAT.queenFleeRange) {
       // Flee from the player...
       ax += ((b.x - player.x) / dP) * 160;
       ay += ((b.y - player.y) / dP) * 160;
@@ -546,6 +505,9 @@ export class Combat {
       ax += (hx / hd) * pull;
       ay += (hy / hd) * pull;
     }
+    const away = this.islandForce(b);
+    ax += away.x;
+    ay += away.y;
     b.vx += ax * dt;
     b.vy += ay * dt;
     const sp = Math.hypot(b.vx, b.vy);
@@ -556,7 +518,48 @@ export class Combat {
     }
     b.x += b.vx * dt;
     b.y += b.vy * dt;
+    this.keepOffIslands(b);
     b.alt = ISLAND_TOP + 50 + Math.sin(b.phase * 1.1) * 8;
+  }
+
+  /** Signed distance from an island's rim (negative inside) with the rim's outward normal there. */
+  private rimDistance(isl: Island, b: Boid): { d: number; nx: number; ny: number; x: number; y: number } | null {
+    // Cheap reject: far from the island's bounding circle.
+    if (Math.hypot(b.x - isl.cx, b.y - isl.cy) > isl.radius * 1.35 + COMBAT.islandMargin + b.r) return null;
+    const c = isl.closest(b.x, b.y);
+    const e = isl.pointAt(c.s);
+    return { d: isl.contains(b.x, b.y) ? -c.d : c.d, nx: e.nx, ny: e.ny, x: e.x, y: e.y };
+  }
+
+  /** Soft push away from island rims, growing as a boid gets within islandMargin. */
+  private islandForce(b: Boid): { x: number; y: number } {
+    let x = 0;
+    let y = 0;
+    for (const isl of this.islands) {
+      const r = this.rimDistance(isl, b);
+      if (!r || r.d > COMBAT.islandMargin) continue;
+      const depth = COMBAT.islandMargin - r.d;
+      x += r.nx * depth * COMBAT.islandAvoid;
+      y += r.ny * depth * COMBAT.islandAvoid;
+    }
+    return { x, y };
+  }
+
+  /** Hard constraint: a boid never ends up over an island; it is put back just outside the rim. */
+  private keepOffIslands(b: Boid) {
+    const clearance = b.r * 0.6;
+    for (const isl of this.islands) {
+      const r = this.rimDistance(isl, b);
+      if (!r || r.d >= clearance) continue;
+      b.x = r.x + r.nx * clearance;
+      b.y = r.y + r.ny * clearance;
+      // Drop the velocity component pointing into the island.
+      const into = b.vx * r.nx + b.vy * r.ny;
+      if (into < 0) {
+        b.vx -= r.nx * into;
+        b.vy -= r.ny * into;
+      }
+    }
   }
 
   private outOfBounds(b: Boid): { x: number; y: number } | null {

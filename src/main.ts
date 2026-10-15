@@ -100,6 +100,7 @@ const player = {
   vy: 0,
   vz: 0,
   charge: 0, // 0..1 while Space is held
+  jumpAim: null as number | null, // world angle of the jump being charged
   slide: 0, // speed along the rim (per s) after a fast grab
   launchIsland: -1,
   airTime: 0,
@@ -187,19 +188,22 @@ function grab(islandIdx: number, s: number, vx = 0, vy = 0) {
   player.s = s;
   player.vx = player.vy = player.vz = 0;
   player.charge = 0;
+  player.jumpAim = null;
   player.safeIsland = islandIdx;
   player.safeS = s;
 }
 
 interface Flight { x: number; y: number; alt: number; vx: number; vy: number; vz: number; t: number }
 
-/** Launch state for a jump straight out from rim parameter `s` with charge 0..1. */
-function launch(islandIdx: number, s: number, charge: number): Flight {
+/** Launch state for a jump from rim parameter `s` in direction `angle` with charge 0..1. */
+function launch(islandIdx: number, s: number, charge: number, angle: number): Flight {
   const e = islands[islandIdx]!.pointAt(s);
   const range = tune.jumpMin + (tune.jumpMax - tune.jumpMin) * charge;
   // 45° arc: horizontal and vertical speed equal, landing `range` away at launch height.
   const v = Math.sqrt((tune.gravity * range) / 2);
-  return { x: e.x + e.nx * 12, y: e.y + e.ny * 12, alt: ISLAND_TOP, vx: e.nx * v, vy: e.ny * v, vz: v, t: 0 };
+  const dx = Math.cos(angle);
+  const dy = Math.sin(angle);
+  return { x: e.x + e.nx * 12, y: e.y + e.ny * 12, alt: ISLAND_TOP, vx: dx * v, vy: dy * v, vz: v, t: 0 };
 }
 
 /**
@@ -237,10 +241,10 @@ function update(dt: number) {
   if (p.mode === "hang") {
     const isl = islands[p.island]!;
     let e = isl.pointAt(p.s);
-    // Climb along the rim using whichever part of the input runs along it (slower while charging).
-    // Aiming an attack takes over the input; an ongoing slide carries on.
-    const along = p.aim ? 0 : dir.x * e.tx + dir.y * e.ty;
-    const climb = along * tune.climbSpeed * (keys.has("Space") ? tune.climbChargeFactor : 1);
+    // Climb along the rim using whichever part of the input runs along it. Aiming a jump or an
+    // attack takes over the input; an ongoing slide carries on.
+    const along = p.aim || p.jumpAim !== null ? 0 : dir.x * e.tx + dir.y * e.ty;
+    const climb = along * tune.climbSpeed;
     p.s += (climb + p.slide) * dt;
     p.slide *= Math.exp(-tune.slideFriction * dt);
     if (Math.abs(p.slide) < 5) p.slide = 0;
@@ -252,9 +256,15 @@ function update(dt: number) {
 
     if (p.slide) emitDust(e.x, e.y, Math.min(1, Math.abs(p.slide) / 300), dt);
 
-    if (playing && keys.has("Space")) p.charge = Math.min(1, p.charge + dt / tune.chargeTime);
-    if (playing && released.has("Space")) {
-      const f = launch(p.island, p.s, p.charge);
+    if (playing && keys.has("Space")) {
+      // Aim starts straight out from the rim and turns toward the input, slower as it charges.
+      if (p.jumpAim === null) p.jumpAim = Math.atan2(e.ny, e.nx);
+      p.charge = Math.min(1, p.charge + dt / tune.chargeTime);
+      p.jumpAim = clampAimToRim(turnAim(p.jumpAim, dir, p.charge, dt));
+    }
+    if (playing && released.has("Space") && p.jumpAim !== null) {
+      const f = launch(p.island, p.s, p.charge, p.jumpAim);
+      p.jumpAim = null;
       Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
       p.mode = "air";
       p.airTime = 0;
@@ -344,6 +354,19 @@ function update(dt: number) {
   released.clear();
 }
 
+/**
+ * Turn an aim angle toward the input direction. The turn rate starts high and falls off as the
+ * charge (0..1) builds, leaving a small minimum so a full charge can still be fine-tuned.
+ */
+function turnAim(angle: number, dir: Vec, charge: number, dt: number): number {
+  if (!dir.x && !dir.y) return angle;
+  const falloff = Math.pow(Math.max(0, 1 - charge), 2);
+  const rate = Math.max(COMBAT.aimMinTurnRate, COMBAT.aimTurnRate * falloff);
+  let diff = Math.atan2(dir.y, dir.x) - angle;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+  return angle + Math.max(-rate * dt, Math.min(rate * dt, diff));
+}
+
 /** Power 0..1 of the attack being aimed. */
 function aimPower() {
   return player.aim ? Math.min(1, player.aim.t / COMBAT.aimTime) : 0;
@@ -398,13 +421,7 @@ function updateAttacks(dt: number, dir: Vec) {
 
   const aim = p.aim;
   aim.t += dt;
-  if (dir.x || dir.y) {
-    const rate = COMBAT.aimTurnRate * Math.pow(Math.max(0, 1 - aim.t / COMBAT.aimTime), 2);
-    let diff = Math.atan2(dir.y, dir.x) - aim.angle;
-    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-    aim.angle += Math.max(-rate * dt, Math.min(rate * dt, diff));
-  }
-  aim.angle = clampAimToRim(aim.angle);
+  aim.angle = clampAimToRim(turnAim(aim.angle, dir, aim.t / COMBAT.aimTime, dt));
 
   if (!held(aim.weapon)) {
     const power = aimPower();
@@ -900,8 +917,8 @@ function drawPlayer(time: number) {
  */
 function drawJumpPreview() {
   const p = player;
-  if (p.mode !== "hang" || !keys.has("Space")) return;
-  const f = launch(p.island, p.s, p.charge);
+  if (p.mode !== "hang" || p.jumpAim === null) return;
+  const f = launch(p.island, p.s, p.charge, p.jumpAim);
   const pts: Projected[] = [proj.project(f.x, f.y, f.alt)];
   let hit = false;
   for (let i = 0; i < 240 && f.alt > LOST_ALT; i++) {
@@ -1277,6 +1294,7 @@ function frame(now: number) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
 
 
 
