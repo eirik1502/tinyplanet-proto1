@@ -1,4 +1,5 @@
 import { ISLAND_TOP, mulberry32, type Island } from "./island";
+import type { Planet } from "./planet";
 import { params } from "./tuning";
 
 // Combat: the enemy swarm (boids), projectiles, sword slashes and hit particles.
@@ -84,54 +85,26 @@ export class Combat {
   slashes: Slash[] = [];
   sparks: Spark[] = [];
   queen!: Boid;
-  readonly bounds: { x: number; y: number; r: number };
+  bounds = { x: 0, y: 0, r: 1 };
+  private islands: Island[] = [];
   private nextId = 0;
   private rand = Math.random;
-
-  constructor(private islands: Island[]) {
-    const cx = islands.reduce((a, i) => a + i.cx, 0) / islands.length;
-    const cy = islands.reduce((a, i) => a + i.cy, 0) / islands.length;
-    const r = Math.max(...islands.map((i) => Math.hypot(i.cx - cx, i.cy - cy) + i.radius)) + 150;
-    this.bounds = { x: cx, y: cy, r };
-  }
 
   get queenDead() {
     return this.queen.hp <= 0;
   }
 
-  /** New swarm at random positions, keeping clear of the player's start; the queen beside the farthest island. */
-  reset(seed: number, startX: number, startY: number) {
-    this.rand = mulberry32(seed);
+  /** New swarm for a planet: boids at its spawn points, the queen at her home. */
+  reset(planet: Planet) {
+    this.islands = planet.islands;
+    this.bounds = planet.bounds;
+    this.rand = mulberry32(planet.seed ^ 0x5bd1e995);
     this.boids = [];
     this.shots = [];
     this.slashes = [];
     this.sparks = [];
-
-    const home = this.islands.reduce((a, b) =>
-      Math.hypot(a.cx - startX, a.cy - startY) > Math.hypot(b.cx - startX, b.cy - startY) ? a : b,
-    );
-    // Her home hovers just off that island's far side (boids don't fly over islands).
-    const hd = Math.hypot(home.cx - startX, home.cy - startY) || 1;
-    const off = home.radius * 1.3 + 90;
-    this.queen = this.spawn("queen", home.cx + ((home.cx - startX) / hd) * off, home.cy + ((home.cy - startY) / hd) * off);
-
-    const randomSpot = () => {
-      for (;;) {
-        const a = this.rand() * Math.PI * 2;
-        const d = Math.sqrt(this.rand()) * this.bounds.r;
-        const x = this.bounds.x + Math.cos(a) * d;
-        const y = this.bounds.y + Math.sin(a) * d;
-        if (Math.hypot(x - startX, y - startY) > 520) return { x, y };
-      }
-    };
-    for (let i = 0; i < params.boids.swarm.meleeCount; i++) {
-      const s = randomSpot();
-      this.spawn("melee", s.x, s.y);
-    }
-    for (let i = 0; i < params.boids.swarm.rangedCount; i++) {
-      const s = randomSpot();
-      this.spawn("ranged", s.x, s.y);
-    }
+    this.queen = this.spawn("queen", planet.queenHome.x, planet.queenHome.y);
+    for (const s of planet.spawns) this.spawn(s.kind, s.x, s.y);
   }
 
   private spawn(kind: BoidKind, x: number, y: number): Boid {
@@ -334,6 +307,7 @@ export class Combat {
         b.x += b.vx * dt;
         b.y += b.vy * dt;
         this.keepOffIslands(b);
+        this.keepInBounds(b);
         if (player.targetable && Math.hypot(px, py, (player.alt - b.alt) * 0.7) < b.r + params.player.health.hitRadius) {
           hitPlayer(params.enemyAttacks.hit.damage, b.x, b.y);
           b.lunge = 0;
@@ -476,6 +450,7 @@ export class Combat {
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       this.keepOffIslands(b);
+      this.keepInBounds(b);
       targetAlt = Math.max(ISLAND_TOP - 15, Math.min(ISLAND_TOP + 170, targetAlt));
       b.alt += Math.max(-90 * dt, Math.min(90 * dt, targetAlt - b.alt));
     }
@@ -516,6 +491,7 @@ export class Combat {
     b.x += b.vx * dt;
     b.y += b.vy * dt;
     this.keepOffIslands(b);
+    this.keepInBounds(b);
     b.alt = ISLAND_TOP + 50 + Math.sin(b.phase * 1.1) * 8;
   }
 
@@ -559,11 +535,32 @@ export class Combat {
     }
   }
 
+  /** Inward steering that ramps up over the last stretch before the boundary. */
   private outOfBounds(b: Boid): { x: number; y: number } | null {
     const dx = b.x - this.bounds.x;
     const dy = b.y - this.bounds.y;
     const d = Math.hypot(dx, dy);
-    if (d < this.bounds.r) return null;
-    return { x: -dx / d, y: -dy / d };
+    const start = this.bounds.r - 100;
+    if (d < start) return null;
+    const k = (d - start) / 100;
+    return { x: (-dx / d) * k, y: (-dy / d) * k };
+  }
+
+  /** Hard constraint: boids never leave the boundary circle. */
+  private keepInBounds(b: Boid) {
+    const dx = b.x - this.bounds.x;
+    const dy = b.y - this.bounds.y;
+    const d = Math.hypot(dx, dy);
+    const max = this.bounds.r - b.r;
+    if (d <= max) return;
+    const nx = dx / d;
+    const ny = dy / d;
+    b.x = this.bounds.x + nx * max;
+    b.y = this.bounds.y + ny * max;
+    const out = b.vx * nx + b.vy * ny;
+    if (out > 0) {
+      b.vx -= nx * out;
+      b.vy -= ny * out;
+    }
   }
 }

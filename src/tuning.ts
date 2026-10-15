@@ -13,6 +13,7 @@ const live = params as unknown as Tree;
 const defaults = DEFAULTS as unknown as Tree;
 
 const TAB_TITLES: Record<keyof Params, string> = {
+  world: "World",
   move: "Move",
   camera: "Camera",
   player: "Player",
@@ -21,6 +22,7 @@ const TAB_TITLES: Record<keyof Params, string> = {
 };
 
 const GROUP_TITLES: Record<string, string> = {
+  "world.planet": "Planet",
   "move.climb": "Climbing",
   "move.jump": "Jumping",
   "move.air": "Air",
@@ -43,6 +45,9 @@ const GROUP_TITLES: Record<string, string> = {
 /** [label, min, max, step, appliesOnRestart?] per slider; values without an entry get no slider. */
 type Slider = [string, number, number, number, boolean?];
 const SLIDERS: Record<string, Slider> = {
+  "world.planet.radius": ["Boundary radius", 500, 2000, 10, true],
+  "world.planet.islandCount": ["Islands", 2, 40, 1, true],
+
   "move.climb.speed": ["Climb speed", 50, 800, 10],
   "move.jump.min": ["Min jump length", 20, 400, 10],
   "move.jump.max": ["Max jump length", 100, 1000, 10],

@@ -2,6 +2,7 @@ import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
 import { createTuningPanel, params } from "./tuning";
 import { Combat, type Boid } from "./combat";
+import { generatePlanet, type Planet } from "./planet";
 
 // ---------------------------------------------------------------------------------------------
 // Setup
@@ -25,29 +26,9 @@ resize();
 
 const proj = new Projector();
 
-const islands = generateIslands(2024, 16);
-
-/**
- * Scatters islands outward from a starting one. Each new island is placed a jumpable gap away
- * from a random existing island and must keep its distance from all the others.
- */
-function generateIslands(seed: number, count: number): Island[] {
-  const rand = mulberry32(seed);
-  const out = [new Island(0, 0, 165, seed)];
-  for (let tries = 0; out.length < count && tries < 4000; tries++) {
-    const from = out[Math.floor(rand() * out.length)]!;
-    const r = 90 + rand() * 80;
-    const a = rand() * Math.PI * 2;
-    // Outlines wobble by up to ~30%, so pad nominal radii accordingly.
-    const gap = 50 + rand() * 170;
-    const d = 1.3 * (from.radius + r) + gap;
-    const x = from.cx + Math.cos(a) * d;
-    const y = from.cy + Math.sin(a) * d;
-    const clear = out.every((o) => Math.hypot(o.cx - x, o.cy - y) >= 1.3 * (o.radius + r) + 50);
-    if (clear) out.push(new Island(x, y, r, seed + out.length * 7919));
-  }
-  return out;
-}
+/** The current planet; a new one is generated every round. */
+let planet: Planet;
+let islands: Island[] = [];
 
 // Game parameters live in `params` (defaults in params.ts) and are editable live from the slider panel.
 createTuningPanel();
@@ -122,13 +103,16 @@ const player = {
   aim: null as null | { weapon: Weapon; t: number; angle: number },
 };
 
-/** Hang on the rim of the first island, facing its nearest neighbour, at full health. */
+/** Hang on the rim of the start island, facing its nearest neighbour, at full health. */
 function resetPlayer() {
-  const start = islands[0]!;
-  const near = islands.slice(1).reduce((a, b) =>
-    Math.hypot(a.cx - start.cx, a.cy - start.cy) < Math.hypot(b.cx - start.cx, b.cy - start.cy) ? a : b,
-  );
-  grab(0, start.closest(near.cx, near.cy).s);
+  const start = islands[planet.startIsland]!;
+  const others = islands.filter((i) => i !== start);
+  const near = others.length
+    ? others.reduce((a, b) =>
+        Math.hypot(a.cx - start.cx, a.cy - start.cy) < Math.hypot(b.cx - start.cx, b.cy - start.cy) ? a : b,
+      )
+    : { cx: planet.bounds.x, cy: planet.bounds.y };
+  grab(planet.startIsland, start.closest(near.cx, near.cy).s);
   const e = start.pointAt(player.s);
   player.x = player.rx = e.x + e.nx * 7;
   player.y = player.ry = e.y + e.ny * 7;
@@ -144,13 +128,22 @@ function resetPlayer() {
 // Game state
 // ---------------------------------------------------------------------------------------------
 
-const combat = new Combat(islands);
+const combat = new Combat();
 const game = { state: "play" as "play" | "victory" | "defeat", timer: 0, round: 0, shake: 0 };
 
+/** Generate a new planet and start a round on it. */
 function restart() {
-  resetPlayer();
   game.round++;
-  combat.reset(1000 + game.round * 7919 + Math.floor(Math.random() * 1e6), player.x, player.y);
+  const w = params.world.planet;
+  planet = generatePlanet(Math.floor(Math.random() * 1e9), {
+    radius: w.radius,
+    islandCount: w.islandCount,
+    meleeCount: params.boids.swarm.meleeCount,
+    rangedCount: params.boids.swarm.rangedCount,
+  });
+  islands = planet.islands;
+  combat.reset(planet);
+  resetPlayer();
   game.state = "play";
   game.timer = 0;
   cam.x = player.x;
@@ -627,9 +620,6 @@ function hash2(x: number, y: number, seed: number) {
 
 interface Drawable { alt: number; draw: () => void }
 
-const EARTH = [118, 82, 62];
-const ROCK_TOP = [122, 92, 104];
-const ROCK_DEEP = [56, 48, 104];
 const HAZE_COL = [150, 140, 220];
 const FOG_COL = [140, 125, 235];
 
@@ -724,6 +714,7 @@ function render(time: number) {
   }
 
   // Islands, tinted toward the atmosphere as they curve away over the horizon.
+  const theme = planet.theme;
   for (const isl of islands) {
     const distRatio = Math.hypot(isl.cx - cam.x, isl.cy - cam.y) / horizon;
     if (distRatio > 1.35) continue;
@@ -737,8 +728,8 @@ function render(time: number) {
           const t = sl.depth;
           // Cliff band alternates earthy strata; the root fades from rock into the haze colour.
           const base = sl.cliff
-            ? mix(EARTH, ROCK_TOP, t * 3 + (isl.slices.indexOf(sl) % 2) * 0.15)
-            : mix(ROCK_TOP, ROCK_DEEP, Math.min(1, t * 1.3));
+            ? mix(theme.earth, theme.rockTop, t * 3 + (isl.slices.indexOf(sl) % 2) * 0.15)
+            : mix(theme.rockTop, theme.rockDeep, Math.min(1, t * 1.3));
           const col = fogged(mix(base, HAZE_COL, Math.pow(t, 2) * 0.6));
           // Thin bright rim per slice reads as strata on the rock face.
           ctx.fillStyle = rgba(col);
@@ -754,7 +745,7 @@ function render(time: number) {
       alt: ISLAND_TOP - 2,
       draw: () => {
         if (!polyPath(isl.pts, ISLAND_TOP - 3)) return;
-        ctx.fillStyle = rgba(fogged([107, 74, 60]));
+        ctx.fillStyle = rgba(fogged(theme.lip));
         ctx.fill();
       },
     });
@@ -762,13 +753,13 @@ function render(time: number) {
       alt: ISLAND_TOP,
       draw: () => {
         if (!polyPath(isl.pts, ISLAND_TOP)) return;
-        ctx.fillStyle = rgba(fogged([79, 154, 94]));
+        ctx.fillStyle = rgba(fogged(theme.grass));
         ctx.fill();
-        ctx.strokeStyle = rgba(fogged([53, 110, 69]));
+        ctx.strokeStyle = rgba(fogged(theme.grassEdge));
         ctx.lineWidth = 2;
         ctx.stroke();
         polyPath(isl.inner, ISLAND_TOP);
-        ctx.fillStyle = rgba(fogged([100, 182, 111]));
+        ctx.fillStyle = rgba(fogged(theme.grassInner));
         ctx.fill();
       },
     });
@@ -785,7 +776,7 @@ function render(time: number) {
           for (let k = 0; k < 3; k++) {
             const a = ISLAND_TOP + 1 + k * 4;
             flatEllipsePath(proj.project(tr.x, tr.y, a), 3.2);
-            ctx.fillStyle = rgba(fogged([90, 59, 44]));
+            ctx.fillStyle = rgba(fogged(theme.trunk));
             ctx.fill();
           }
         },
@@ -793,7 +784,7 @@ function render(time: number) {
       for (let k = 0; k < layers; k++) {
         const a = ISLAND_TOP + 14 + k * 9;
         const r = tr.r * (1 - k * 0.2);
-        const g = fogged(mix([40, 100, 70], [130, 210, 120], (k / (layers - 1)) * 0.8 + tr.tint * 0.2));
+        const g = fogged(mix(theme.canopyDark, theme.canopyLight, (k / (layers - 1)) * 0.8 + tr.tint * 0.2));
         list.push({
           alt: a,
           draw: () => {
@@ -805,6 +796,8 @@ function render(time: number) {
       }
     }
   }
+
+  pushBoundsDrawables(list, time);
 
   // Player shadow: on grass if above an island, otherwise faint on the haze.
   const p = player;
@@ -949,6 +942,47 @@ function drawJumpPreview() {
   ctx.beginPath();
   ctx.arc(end.x, end.y, hit ? 5 : 3.5, 0, Math.PI * 2);
   ctx.fill();
+}
+
+/**
+ * The planet boundary: a shimmering curtain of light rings rising out of the haze. The brightest,
+ * solid ring sits at island height (the play level), fading above and below. Each ring is drawn at
+ * its own altitude so it sorts and curves with the world.
+ */
+function pushBoundsDrawables(list: Drawable[], time: number) {
+  const b = planet.bounds;
+  const alts = [4, 30, 60, 90, ISLAND_TOP, ISLAND_TOP + 30, ISLAND_TOP + 65];
+  for (let l = 0; l < alts.length; l++) {
+    const alt = alts[l]!;
+    const main = alt === ISLAND_TOP;
+    const fade = main ? 1 : 0.55 * (1 - Math.abs(alt - ISLAND_TOP) / (ISLAND_TOP + 20));
+    list.push({
+      alt,
+      draw: () => {
+        const n = 160;
+        ctx.strokeStyle = `rgba(150,235,255,${0.6 * fade})`;
+        ctx.lineWidth = main ? 3 : 1.5;
+        ctx.setLineDash(main ? [] : [14, 10]);
+        ctx.lineDashOffset = -time * 30 * (l % 2 ? 1 : -1);
+        ctx.beginPath();
+        let pen = false;
+        for (let i = 0; i <= n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          const wob = Math.sin(a * 9 + time * 1.5 + l) * 4;
+          const pr = proj.project(b.x + Math.cos(a) * (b.r + wob), b.y + Math.sin(a) * (b.r + wob), alt);
+          if (!pr.visible) {
+            pen = false;
+            continue;
+          }
+          if (pen) ctx.lineTo(pr.x, pr.y);
+          else ctx.moveTo(pr.x, pr.y);
+          pen = true;
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      },
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1353,7 +1387,7 @@ function drawHud() {
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillStyle = "#f0dcff";
-  ctx.fillText(`♛ QUEEN · swarm ${combat.boids.length - 1}`, W / 2, 32);
+  ctx.fillText(`♛ QUEEN · swarm ${combat.boids.length - 1} · planet ${planet.seed.toString(36)}`, W / 2, 32);
 
   if (game.state !== "play") {
     const a = Math.min(1, game.timer / 0.6);
@@ -1396,6 +1430,7 @@ function frame(now: number) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
 
 
 

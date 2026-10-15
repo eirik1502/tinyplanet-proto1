@@ -1,6 +1,12 @@
 // Default game parameters, grouped as tab → group → value (the tuning panel mirrors this layout).
 // The panel's "Copy" button produces a drop-in replacement for this whole object.
 export const DEFAULTS = {
+  world: {
+    planet: {
+      radius: 1000, // Boundary radius
+      islandCount: 12, // Islands
+    },
+  },
   move: {
     climb: {
       speed: 300, // Climb speed
