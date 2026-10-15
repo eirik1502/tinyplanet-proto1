@@ -1,7 +1,7 @@
 import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
-import { createTuningPanel, tune } from "./tuning";
-import { COMBAT, Combat, type Boid } from "./combat";
+import { createTuningPanel, params } from "./tuning";
+import { Combat, type Boid } from "./combat";
 
 // ---------------------------------------------------------------------------------------------
 // Setup
@@ -49,7 +49,7 @@ function generateIslands(seed: number, count: number): Island[] {
   return out;
 }
 
-// Movement tuning lives in `tune` (see tuning.ts) and is editable live from the slider panel.
+// Game parameters live in `params` (defaults in params.ts) and are editable live from the slider panel.
 createTuningPanel();
 const HANG_ALT = ISLAND_TOP - 9;
 
@@ -114,7 +114,7 @@ const player = {
   ralt: HANG_ALT,
   facing: 0, // world angle pointing from the player to the rim (or flight direction)
   spin: 0,
-  hp: COMBAT.playerHp,
+  hp: params.player.health.max,
   invuln: 0,
   swordCd: 0,
   spearCd: 0,
@@ -134,7 +134,7 @@ function resetPlayer() {
   player.y = player.ry = e.y + e.ny * 7;
   player.alt = player.ralt = HANG_ALT;
   player.slide = 0;
-  player.hp = COMBAT.playerHp;
+  player.hp = params.player.health.max;
   player.invuln = 0;
   player.swordCd = player.spearCd = 0;
   player.aim = null;
@@ -161,7 +161,7 @@ function hitPlayer(dmg: number, fromX: number, fromY: number) {
   const p = player;
   if (p.invuln > 0 || game.state !== "play") return;
   p.hp = Math.max(0, p.hp - dmg);
-  p.invuln = COMBAT.invulnTime;
+  p.invuln = params.player.health.invulnTime;
   game.shake = 0.35;
   combat.burst(p.x, p.y, p.alt, 10, "#ffd0b0");
   if (p.mode === "air") {
@@ -176,13 +176,13 @@ function hitPlayer(dmg: number, fromX: number, fromY: number) {
   }
 }
 
-const cam = { x: 0, y: 0, h: tune.camHeight };
+const cam = { x: 0, y: 0, h: params.camera.view.height };
 
 /** Grab a rim. Arriving fast turns the along-rim part of the velocity into a slide. */
 function grab(islandIdx: number, s: number, vx = 0, vy = 0) {
   const e = islands[islandIdx]!.pointAt(s);
   const along = vx * e.tx + vy * e.ty;
-  player.slide = Math.hypot(vx, vy) > tune.slideMinSpeed ? along * tune.slideKeep : 0;
+  player.slide = Math.hypot(vx, vy) > params.move.slide.minSpeed ? along * params.move.slide.keep : 0;
   player.mode = "hang";
   player.island = islandIdx;
   player.s = s;
@@ -198,9 +198,9 @@ interface Flight { x: number; y: number; alt: number; vx: number; vy: number; vz
 /** Launch state for a jump from rim parameter `s` in direction `angle` with charge 0..1. */
 function launch(islandIdx: number, s: number, charge: number, angle: number): Flight {
   const e = islands[islandIdx]!.pointAt(s);
-  const range = tune.jumpMin + (tune.jumpMax - tune.jumpMin) * charge;
+  const range = params.move.jump.min + (params.move.jump.max - params.move.jump.min) * charge;
   // 45° arc: horizontal and vertical speed equal, landing `range` away at launch height.
-  const v = Math.sqrt((tune.gravity * range) / 2);
+  const v = Math.sqrt((params.move.jump.gravity * range) / 2);
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
   return { x: e.x + e.nx * 12, y: e.y + e.ny * 12, alt: ISLAND_TOP, vx: dx * v, vy: dy * v, vz: v, t: 0 };
@@ -213,7 +213,7 @@ function launch(islandIdx: number, s: number, charge: number, angle: number): Fl
 function stepFlight(f: Flight, dt: number, fromIsland: number): { island: number; s: number } | null {
   const ox = f.x;
   const oy = f.y;
-  f.vz -= tune.gravity * dt;
+  f.vz -= params.move.jump.gravity * dt;
   f.x += f.vx * dt;
   f.y += f.vy * dt;
   f.alt += f.vz * dt;
@@ -225,7 +225,7 @@ function stepFlight(f: Flight, dt: number, fromIsland: number): { island: number
       const s = isl.segmentHit(ox, oy, f.x, f.y);
       if (s !== null) return { island: i, s };
     }
-    if (isl.intersects(f.x, f.y, f.alt, tune.bodyRadius)) return { island: i, s: isl.closest(f.x, f.y).s };
+    if (isl.intersects(f.x, f.y, f.alt, params.move.air.grabRadius)) return { island: i, s: isl.closest(f.x, f.y).s };
   }
   return null;
 }
@@ -245,9 +245,9 @@ function update(dt: number, dtReal: number) {
     // Climb along the rim using whichever part of the input runs along it. Aiming a jump or an
     // attack takes over the input; an ongoing slide carries on.
     const along = p.aim || p.jumpAim !== null ? 0 : dir.x * e.tx + dir.y * e.ty;
-    const climb = along * tune.climbSpeed;
+    const climb = along * params.move.climb.speed;
     p.s += (climb + p.slide) * dt;
-    p.slide *= Math.exp(-tune.slideFriction * dt);
+    p.slide *= Math.exp(-params.move.slide.friction * dt);
     if (Math.abs(p.slide) < 5) p.slide = 0;
     e = isl.pointAt(p.s);
     p.x = e.x + e.nx * 7;
@@ -260,7 +260,7 @@ function update(dt: number, dtReal: number) {
     if (playing && keys.has("Space")) {
       // Aim starts straight out from the rim and turns toward the input, slower as it charges.
       if (p.jumpAim === null) p.jumpAim = Math.atan2(e.ny, e.nx);
-      p.charge = Math.min(1, p.charge + dt / tune.chargeTime);
+      p.charge = Math.min(1, p.charge + dt / params.move.jump.chargeTime);
       p.jumpAim = clampAimToRim(turnAim(p.jumpAim, dir, p.charge, dt));
     }
     if (playing && released.has("Space") && p.jumpAim !== null) {
@@ -280,7 +280,7 @@ function update(dt: number, dtReal: number) {
       const cur = Math.atan2(p.vy, p.vx);
       let diff = Math.atan2(dir.y, dir.x) - cur;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      const a = cur + Math.max(-tune.airTurn * dt, Math.min(tune.airTurn * dt, diff));
+      const a = cur + Math.max(-params.move.air.turnRate * dt, Math.min(params.move.air.turnRate * dt, diff));
       p.vx = Math.cos(a) * sp;
       p.vy = Math.sin(a) * sp;
     }
@@ -300,20 +300,20 @@ function update(dt: number, dtReal: number) {
     p.lostTimer += dt;
     p.vx *= Math.exp(-2 * dt);
     p.vy *= Math.exp(-2 * dt);
-    p.vz = Math.max(p.vz - tune.gravity * 0.3 * dt, -260);
+    p.vz = Math.max(p.vz - params.move.jump.gravity * 0.3 * dt, -260);
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.alt = Math.max(5, p.alt + p.vz * dt);
     if (p.lostTimer > 1.6) {
       if (game.state === "play") {
-        p.hp = Math.max(0, p.hp - COMBAT.fallDamage);
+        p.hp = Math.max(0, p.hp - params.player.health.fallDamage);
         if (p.hp <= 0) {
           game.state = "defeat";
           game.timer = 0;
         }
       }
       grab(p.safeIsland, p.safeS);
-      p.invuln = COMBAT.invulnTime;
+      p.invuln = params.player.health.invulnTime;
       const e = islands[p.island]!.pointAt(p.s);
       p.x = p.rx = e.x + e.nx * 7;
       p.y = p.ry = e.y + e.ny * 7;
@@ -342,13 +342,13 @@ function update(dt: number, dtReal: number) {
   p.ralt += (p.alt - p.ralt) * (p.mode === "hang" ? 1 - Math.exp(-10 * dt) : 1);
 
   // Camera trails behind and slides in toward the player; it rises a bit with high jumps.
-  const lead = tune.camLead;
+  const lead = params.camera.view.lookAhead;
   const tx = p.rx + p.vx * lead;
   const ty = p.ry + p.vy * lead;
-  const ck = 1 - Math.exp(-tune.camFollow * dt);
+  const ck = 1 - Math.exp(-params.camera.view.followSpeed * dt);
   cam.x += (tx - cam.x) * ck;
   cam.y += (ty - cam.y) * ck;
-  const th = tune.camHeight + Math.max(0, p.alt - ISLAND_TOP) * 0.8;
+  const th = params.camera.view.height + Math.max(0, p.alt - ISLAND_TOP) * 0.8;
   cam.h += (th - cam.h) * (1 - Math.exp(-1.5 * dt));
 
   pressed.clear();
@@ -362,7 +362,7 @@ function update(dt: number, dtReal: number) {
 function turnAim(angle: number, dir: Vec, charge: number, dt: number): number {
   if (!dir.x && !dir.y) return angle;
   const falloff = Math.pow(Math.max(0, 1 - charge), 2);
-  const rate = Math.max(COMBAT.aimMinTurnRate, COMBAT.aimTurnRate * falloff);
+  const rate = Math.max(params.player.aim.minTurnRate, params.player.aim.turnRate * falloff);
   let diff = Math.atan2(dir.y, dir.x) - angle;
   diff = Math.atan2(Math.sin(diff), Math.cos(diff));
   return angle + Math.max(-rate * dt, Math.min(rate * dt, diff));
@@ -370,7 +370,7 @@ function turnAim(angle: number, dir: Vec, charge: number, dt: number): number {
 
 /** Power 0..1 of the attack being aimed. */
 function aimPower() {
-  return player.aim ? Math.min(1, player.aim.t / COMBAT.aimTime) : 0;
+  return player.aim ? Math.min(1, player.aim.t / params.player.aim.chargeTime) : 0;
 }
 
 /** On a rim, attacks may not point back into the island: keep them in the outward half-plane. */
@@ -423,7 +423,7 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
   const aim = p.aim;
   // Aiming runs on real time so slow motion doesn't slow the charge or the turning.
   aim.t += dtReal;
-  aim.angle = clampAimToRim(turnAim(aim.angle, dir, aim.t / COMBAT.aimTime, dtReal));
+  aim.angle = clampAimToRim(turnAim(aim.angle, dir, aim.t / params.player.aim.chargeTime, dtReal));
 
   if (!held(aim.weapon)) {
     const power = aimPower();
@@ -432,10 +432,10 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
     const alt = p.mode === "hang" ? ISLAND_TOP + 2 : p.alt;
     if (aim.weapon === "sword") {
       combat.swing(p.x, p.y, alt, ax, ay, power);
-      p.swordCd = COMBAT.swordCooldown;
+      p.swordCd = params.player.sword.cooldown;
     } else {
       combat.throwSpear(p.x, p.y, alt, ax, ay, power);
-      p.spearCd = COMBAT.spearCooldown;
+      p.spearCd = params.player.spear.cooldown;
     }
     p.aim = null;
   }
@@ -455,13 +455,13 @@ function drawAimIndicator() {
 
   ctx.lineJoin = "round";
   if (p.aim.weapon === "sword") {
-    const R = COMBAT.swordRange + (COMBAT.swordMaxRange - COMBAT.swordRange) * power;
+    const R = params.player.sword.range + (params.player.sword.maxRange - params.player.sword.range) * power;
     const n = 16;
     ctx.beginPath();
     const c = at(0, 0);
     ctx.moveTo(c.x, c.y);
     for (let i = 0; i <= n; i++) {
-      const q = at(a - COMBAT.swordArc + (2 * COMBAT.swordArc * i) / n, R);
+      const q = at(a - params.player.sword.arc + (2 * params.player.sword.arc * i) / n, R);
       ctx.lineTo(q.x, q.y);
     }
     ctx.closePath();
@@ -977,7 +977,7 @@ function pushCombatDrawables(list: Drawable[], time: number) {
           const ux = sh.vx / l;
           const uy = sh.vy / l;
           const sc = sh.scale;
-          const L = COMBAT.spearLength * sc;
+          const L = params.player.spear.length * sc;
           const tail = proj.project(sh.x - ux * L, sh.y - uy * L, sh.alt);
           const neck = proj.project(sh.x - ux * 12 * sc, sh.y - uy * 12 * sc, sh.alt);
           const tip = proj.project(sh.x + ux * 4 * sc, sh.y + uy * 4 * sc, sh.alt);
@@ -1038,11 +1038,11 @@ function pushCombatDrawables(list: Drawable[], time: number) {
 }
 
 function drawSlash(sl: { x: number; y: number; alt: number; dx: number; dy: number; age: number; range: number; power: number }) {
-  const t = sl.age / COMBAT.swordTime;
-  const fade = 1 - Math.min(1, sl.age / (COMBAT.swordTime + COMBAT.swordFade));
+  const t = sl.age / params.player.sword.activeTime;
+  const fade = 1 - Math.min(1, sl.age / (params.player.sword.activeTime + params.player.sword.fadeTime));
   const base = Math.atan2(sl.dy, sl.dx);
-  const a0 = base - COMBAT.swordArc;
-  const a1 = a0 + 2 * COMBAT.swordArc * Math.min(1, t * 1.8);
+  const a0 = base - params.player.sword.arc;
+  const a1 = a0 + 2 * params.player.sword.arc * Math.min(1, t * 1.8);
   const outer: Projected[] = [];
   const inner: Projected[] = [];
   const n = 14;
@@ -1159,7 +1159,7 @@ function drawBoid(b: Boid, time: number) {
       ctx.fill();
     } else {
       // Ranged: round body whose core brightens as the next shot charges.
-      const ready = 1 - Math.max(0, Math.min(1, b.cooldown / COMBAT.orbCooldown));
+      const ready = 1 - Math.max(0, Math.min(1, b.cooldown / params.enemyAttacks.ranged.cooldown));
       ctx.fillStyle = "#1f8f86";
       ctx.strokeStyle = "#0b3b38";
       ctx.lineWidth = 1.2 * k;
@@ -1190,7 +1190,7 @@ function drawBoid(b: Boid, time: number) {
 /**
  * Charging an attack in the air slows the world down until the attack is released or the player
  * grabs an island (or falls into the haze).
- * `scale` eases between 1 and COMBAT.slowScale over the fade times (in real time).
+ * `scale` eases between 1 and params.player.slowMo.scale over the fade times (in real time).
  */
 const slow = { scale: 1, intensity: 0, active: false, startedAt: 0 };
 
@@ -1198,9 +1198,9 @@ function updateTimeScale(dtReal: number) {
   const want = game.state === "play" && player.mode === "air" && player.aim !== null;
   if (want && !slow.active) slow.startedAt = performance.now();
   slow.active = want;
-  const span = 1 - COMBAT.slowScale;
-  const target = want ? COMBAT.slowScale : 1;
-  const fade = want ? COMBAT.slowFadeIn : COMBAT.slowFadeOut;
+  const span = 1 - params.player.slowMo.scale;
+  const target = want ? params.player.slowMo.scale : 1;
+  const fade = want ? params.player.slowMo.fadeIn : params.player.slowMo.fadeOut;
   const step = fade > 0 ? (span * dtReal) / fade : Infinity;
   slow.scale = slow.scale > target ? Math.max(target, slow.scale - step) : Math.min(target, slow.scale + step);
   slow.intensity = span > 0 ? Math.max(0, Math.min(1, (1 - slow.scale) / span)) : 0;
@@ -1326,7 +1326,7 @@ function drawHud() {
   }
 
   // Player health bar; the trailing light segment shows recent damage draining away.
-  const frac = Math.max(0, player.hp / COMBAT.playerHp);
+  const frac = Math.max(0, player.hp / params.player.health.max);
   hpTrail = Math.max(frac, hpTrail - 0.004);
   const hw = Math.min(240, W * 0.3);
   ctx.fillStyle = "rgba(20,8,35,0.7)";

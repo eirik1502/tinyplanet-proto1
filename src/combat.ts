@@ -1,11 +1,8 @@
 import { ISLAND_TOP, mulberry32, type Island } from "./island";
-import { COMBAT } from "./tuning";
+import { params } from "./tuning";
 
 // Combat: the enemy swarm (boids), projectiles, sword slashes and hit particles.
 // Everything lives on the same flat game plane as the player, with an altitude for depth.
-
-// All combat numbers live in tuning.ts so they can be edited live from the slider panel.
-export { COMBAT };
 
 export type BoidKind = "melee" | "ranged" | "queen";
 
@@ -127,18 +124,18 @@ export class Combat {
         if (Math.hypot(x - startX, y - startY) > 520) return { x, y };
       }
     };
-    for (let i = 0; i < COMBAT.meleeCount; i++) {
+    for (let i = 0; i < params.boids.swarm.meleeCount; i++) {
       const s = randomSpot();
       this.spawn("melee", s.x, s.y);
     }
-    for (let i = 0; i < COMBAT.rangedCount; i++) {
+    for (let i = 0; i < params.boids.swarm.rangedCount; i++) {
       const s = randomSpot();
       this.spawn("ranged", s.x, s.y);
     }
   }
 
   private spawn(kind: BoidKind, x: number, y: number): Boid {
-    const hp = kind === "queen" ? COMBAT.queenHp : 2;
+    const hp = kind === "queen" ? params.boids.queen.hp : 2;
     const a = this.rand() * Math.PI * 2;
     const b: Boid = {
       id: this.nextId++,
@@ -169,14 +166,14 @@ export class Combat {
 
   /** Sword swipe; `power` 0..1 scales reach and damage. */
   swing(x: number, y: number, alt: number, dx: number, dy: number, power: number) {
-    const range = lerp(COMBAT.swordRange, COMBAT.swordMaxRange, power);
-    const damage = lerp(COMBAT.swordDamage, COMBAT.swordMaxDamage, power);
+    const range = lerp(params.player.sword.range, params.player.sword.maxRange, power);
+    const damage = lerp(params.player.sword.damage, params.player.sword.maxDamage, power);
     this.slashes.push({ x, y, alt, dx, dy, age: 0, range, damage, power, hits: new Set() });
   }
 
   /** Spear throw; `power` 0..1 scales speed, damage and size. */
   throwSpear(x: number, y: number, alt: number, dx: number, dy: number, power: number) {
-    const speed = lerp(COMBAT.spearSpeed, COMBAT.spearMaxSpeed, power);
+    const speed = lerp(params.player.spear.speed, params.player.spear.maxSpeed, power);
     this.shots.push({
       x: x + dx * 10,
       y: y + dy * 10,
@@ -184,10 +181,10 @@ export class Combat {
       vx: dx * speed,
       vy: dy * speed,
       vz: 0,
-      life: COMBAT.spearLife,
+      life: params.player.spear.life,
       fromPlayer: true,
-      damage: lerp(COMBAT.spearDamage, COMBAT.spearMaxDamage, power),
-      scale: lerp(1, COMBAT.spearMaxScale, power),
+      damage: lerp(params.player.spear.damage, params.player.spear.maxDamage, power),
+      scale: lerp(1, params.player.spear.maxScale, power),
     });
   }
 
@@ -246,8 +243,8 @@ export class Combat {
   private updateSlashes(dt: number) {
     for (const s of this.slashes) {
       s.age += dt;
-      if (s.age > COMBAT.swordTime) continue;
-      const cosArc = Math.cos(COMBAT.swordArc);
+      if (s.age > params.player.sword.activeTime) continue;
+      const cosArc = Math.cos(params.player.sword.arc);
       for (const b of this.boids) {
         if (b.hp <= 0 || s.hits.has(b)) continue;
         const ox = b.x - s.x;
@@ -270,7 +267,7 @@ export class Combat {
         this.burst(sh.x, sh.y, sh.alt, 8, "#f4ffd0");
       }
     }
-    this.slashes = this.slashes.filter((s) => s.age < COMBAT.swordTime + COMBAT.swordFade);
+    this.slashes = this.slashes.filter((s) => s.age < params.player.sword.activeTime + params.player.sword.fadeTime);
   }
 
   private updateShots(dt: number, player: PlayerView, hitPlayer: HitPlayer) {
@@ -282,7 +279,7 @@ export class Combat {
       if (s.fromPlayer) {
         for (const b of this.boids) {
           if (b.hp <= 0) continue;
-          if (Math.hypot(b.x - s.x, b.y - s.y) < b.r + COMBAT.spearRadius * s.scale && Math.abs(b.alt - s.alt) < b.r + 26) {
+          if (Math.hypot(b.x - s.x, b.y - s.y) < b.r + params.player.spear.hitRadius * s.scale && Math.abs(b.alt - s.alt) < b.r + 26) {
             this.damage(b, s.damage, s.x - s.vx * 0.05, s.y - s.vy * 0.05);
             s.life = 0;
             break;
@@ -290,7 +287,7 @@ export class Combat {
         }
       } else if (player.targetable) {
         const d = Math.hypot(player.x - s.x, player.y - s.y, (player.alt - s.alt) * 0.7);
-        if (d < COMBAT.playerRadius + 5) {
+        if (d < params.player.health.hitRadius + 5) {
           hitPlayer(s.damage, s.x - s.vx, s.y - s.vy);
           s.life = 0;
         }
@@ -308,7 +305,7 @@ export class Combat {
     const q = this.queen;
     const queenAlive = q.hp > 0;
     const playerToQueen = Math.hypot(player.x - q.x, player.y - q.y);
-    const queenThreatened = queenAlive && player.targetable && playerToQueen < COMBAT.threatRadius;
+    const queenThreatened = queenAlive && player.targetable && playerToQueen < params.boids.queen.threatRadius;
 
     for (const b of this.boids) {
       if (b.hp <= 0) continue;
@@ -326,9 +323,9 @@ export class Combat {
       }
 
       // Engage when close; stay engaged until the player gets well away.
-      b.engaged = player.targetable && (dP < COMBAT.aggroRange || (b.engaged && dP < COMBAT.disengageRange));
+      b.engaged = player.targetable && (dP < params.boids.swarm.aggroRange || (b.engaged && dP < params.boids.swarm.disengageRange));
       const toQueen = Math.hypot(q.x - b.x, q.y - b.y);
-      const guarding = queenThreatened && toQueen < COMBAT.guardRadius;
+      const guarding = queenThreatened && toQueen < params.boids.queen.guardRadius;
 
       // Lunging melee boids just fly the lunge out.
       if (b.lunge > 0) {
@@ -337,8 +334,8 @@ export class Combat {
         b.x += b.vx * dt;
         b.y += b.vy * dt;
         this.keepOffIslands(b);
-        if (player.targetable && Math.hypot(px, py, (player.alt - b.alt) * 0.7) < b.r + COMBAT.playerRadius) {
-          hitPlayer(COMBAT.hitDamage, b.x, b.y);
+        if (player.targetable && Math.hypot(px, py, (player.alt - b.alt) * 0.7) < b.r + params.player.health.hitRadius) {
+          hitPlayer(params.enemyAttacks.hit.damage, b.x, b.y);
           b.lunge = 0;
           b.vx = (-px / dP) * 160;
           b.vy = (-py / dP) * 160;
@@ -362,12 +359,12 @@ export class Combat {
         const ox = b.x - o.x;
         const oy = b.y - o.y;
         const d = Math.hypot(ox, oy);
-        if (d < COMBAT.separationRadius && d > 0) {
-          const push = 1 - d / COMBAT.separationRadius;
+        if (d < params.boids.flocking.separationRadius && d > 0) {
+          const push = 1 - d / params.boids.flocking.separationRadius;
           sx += (ox / d) * push;
           sy += (oy / d) * push;
         }
-        if (d < COMBAT.neighborRadius) {
+        if (d < params.boids.flocking.neighborRadius) {
           avx += o.vx;
           avy += o.vy;
           cx += o.x;
@@ -375,13 +372,13 @@ export class Combat {
           n++;
         }
       }
-      ax += sx * COMBAT.separation;
-      ay += sy * COMBAT.separation;
+      ax += sx * params.boids.flocking.separation;
+      ay += sy * params.boids.flocking.separation;
       if (n > 0) {
-        ax += (avx / n - b.vx) * COMBAT.alignment;
-        ay += (avy / n - b.vy) * COMBAT.alignment;
-        ax += (cx / n - b.x) * COMBAT.cohesion;
-        ay += (cy / n - b.y) * COMBAT.cohesion;
+        ax += (avx / n - b.vx) * params.boids.flocking.alignment;
+        ay += (avy / n - b.vy) * params.boids.flocking.alignment;
+        ax += (cx / n - b.x) * params.boids.flocking.cohesion;
+        ay += (cy / n - b.y) * params.boids.flocking.cohesion;
       }
 
       const seek = (tx: number, ty: number, speed: number, weight: number) => {
@@ -394,7 +391,7 @@ export class Combat {
         ay += ((dy / d) * want - b.vy) * weight;
       };
 
-      const maxSpeed = b.kind === "melee" ? COMBAT.meleeSpeed : COMBAT.rangedSpeed;
+      const maxSpeed = b.kind === "melee" ? params.boids.swarm.meleeSpeed : params.boids.swarm.rangedSpeed;
       let targetAlt = CRUISE_ALT + Math.sin(b.phase * 1.3) * 10;
 
       if (guarding) {
@@ -412,7 +409,7 @@ export class Combat {
           seek(player.x, player.y, maxSpeed, 1.6);
         } else {
           // Hold a ring around the player, circling.
-          const ring = COMBAT.rangedKeepAway;
+          const ring = params.enemyAttacks.ranged.keepAway;
           const tx = player.x - (px / dP) * ring + (-py / dP) * 60 * Math.sign(Math.sin(b.id));
           const ty = player.y - (py / dP) * ring + (px / dP) * 60 * Math.sign(Math.sin(b.id));
           seek(tx, ty, maxSpeed, 1.6);
@@ -421,39 +418,39 @@ export class Combat {
       } else {
         // Idle: wander, drifting loosely toward the queen so the swarm gathers around her.
         const wa = Math.sin(b.phase * 0.7 + b.id) * Math.PI;
-        ax += Math.cos(wa) * COMBAT.wander;
-        ay += Math.sin(wa) * COMBAT.wander;
+        ax += Math.cos(wa) * params.boids.flocking.wander;
+        ay += Math.sin(wa) * params.boids.flocking.wander;
         if (queenAlive && toQueen < 1000 && toQueen > 200) {
-          ax += ((q.x - b.x) / toQueen) * COMBAT.queenAttraction;
-          ay += ((q.y - b.y) / toQueen) * COMBAT.queenAttraction;
+          ax += ((q.x - b.x) / toQueen) * params.boids.flocking.queenAttraction;
+          ay += ((q.y - b.y) / toQueen) * params.boids.flocking.queenAttraction;
         }
       }
 
       // Attacks
       if (player.targetable && (b.engaged || guarding) && b.cooldown <= 0) {
-        if (b.kind === "melee" && dP < COMBAT.lungeRange) {
-          b.lunge = COMBAT.lungeTime;
-          b.vx = (px / dP) * COMBAT.lungeSpeed;
-          b.vy = (py / dP) * COMBAT.lungeSpeed;
-          b.cooldown = COMBAT.lungeCooldown + this.rand() * 0.5;
+        if (b.kind === "melee" && dP < params.enemyAttacks.melee.lungeRange) {
+          b.lunge = params.enemyAttacks.melee.lungeTime;
+          b.vx = (px / dP) * params.enemyAttacks.melee.lungeSpeed;
+          b.vy = (py / dP) * params.enemyAttacks.melee.lungeSpeed;
+          b.cooldown = params.enemyAttacks.melee.cooldown + this.rand() * 0.5;
           continue;
         }
-        if (b.kind === "ranged" && dP < COMBAT.orbRange) {
+        if (b.kind === "ranged" && dP < params.enemyAttacks.ranged.range) {
           const dz = player.alt - b.alt;
           const d3 = Math.hypot(px, py, dz) || 1;
           this.shots.push({
             x: b.x,
             y: b.y,
             alt: b.alt,
-            vx: (px / d3) * COMBAT.orbSpeed,
-            vy: (py / d3) * COMBAT.orbSpeed,
-            vz: (dz / d3) * COMBAT.orbSpeed,
-            life: COMBAT.orbLife,
+            vx: (px / d3) * params.enemyAttacks.ranged.orbSpeed,
+            vy: (py / d3) * params.enemyAttacks.ranged.orbSpeed,
+            vz: (dz / d3) * params.enemyAttacks.ranged.orbSpeed,
+            life: params.enemyAttacks.ranged.orbLife,
             fromPlayer: false,
-            damage: COMBAT.hitDamage,
+            damage: params.enemyAttacks.hit.damage,
             scale: 1,
           });
-          b.cooldown = COMBAT.orbCooldown + this.rand() * 0.8;
+          b.cooldown = params.enemyAttacks.ranged.cooldown + this.rand() * 0.8;
         }
       }
 
@@ -487,7 +484,7 @@ export class Combat {
   private updateQueen(b: Boid, dt: number, player: PlayerView, dP: number) {
     let ax = 0;
     let ay = 0;
-    if (player.targetable && dP < COMBAT.queenFleeRange) {
+    if (player.targetable && dP < params.boids.queen.fleeRange) {
       // Flee from the player...
       ax += ((b.x - player.x) / dP) * 160;
       ay += ((b.y - player.y) / dP) * 160;
@@ -500,8 +497,8 @@ export class Combat {
     const hx = b.homeX - b.x;
     const hy = b.homeY - b.y;
     const hd = Math.hypot(hx, hy);
-    if (hd > COMBAT.queenTether * 0.6) {
-      const pull = ((hd - COMBAT.queenTether * 0.6) / (COMBAT.queenTether * 0.4)) * 220;
+    if (hd > params.boids.queen.tether * 0.6) {
+      const pull = ((hd - params.boids.queen.tether * 0.6) / (params.boids.queen.tether * 0.4)) * 220;
       ax += (hx / hd) * pull;
       ay += (hy / hd) * pull;
     }
@@ -511,8 +508,8 @@ export class Combat {
     b.vx += ax * dt;
     b.vy += ay * dt;
     const sp = Math.hypot(b.vx, b.vy);
-    if (sp > COMBAT.queenSpeed) {
-      const k = Math.max(COMBAT.queenSpeed / sp, Math.exp(-3 * dt));
+    if (sp > params.boids.queen.speed) {
+      const k = Math.max(params.boids.queen.speed / sp, Math.exp(-3 * dt));
       b.vx *= k;
       b.vy *= k;
     }
@@ -525,7 +522,7 @@ export class Combat {
   /** Signed distance from an island's rim (negative inside) with the rim's outward normal there. */
   private rimDistance(isl: Island, b: Boid): { d: number; nx: number; ny: number; x: number; y: number } | null {
     // Cheap reject: far from the island's bounding circle.
-    if (Math.hypot(b.x - isl.cx, b.y - isl.cy) > isl.radius * 1.35 + COMBAT.islandMargin + b.r) return null;
+    if (Math.hypot(b.x - isl.cx, b.y - isl.cy) > isl.radius * 1.35 + params.boids.islands.margin + b.r) return null;
     const c = isl.closest(b.x, b.y);
     const e = isl.pointAt(c.s);
     return { d: isl.contains(b.x, b.y) ? -c.d : c.d, nx: e.nx, ny: e.ny, x: e.x, y: e.y };
@@ -537,10 +534,10 @@ export class Combat {
     let y = 0;
     for (const isl of this.islands) {
       const r = this.rimDistance(isl, b);
-      if (!r || r.d > COMBAT.islandMargin) continue;
-      const depth = COMBAT.islandMargin - r.d;
-      x += r.nx * depth * COMBAT.islandAvoid;
-      y += r.ny * depth * COMBAT.islandAvoid;
+      if (!r || r.d > params.boids.islands.margin) continue;
+      const depth = params.boids.islands.margin - r.d;
+      x += r.nx * depth * params.boids.islands.avoid;
+      y += r.ny * depth * params.boids.islands.avoid;
     }
     return { x, y };
   }
