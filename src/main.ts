@@ -1188,13 +1188,14 @@ function drawBoid(b: Boid, time: number) {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Charging an attack in the air slows the world down until the attack is fully charged.
+ * Charging an attack in the air slows the world down until the attack is released or the player
+ * grabs an island (or falls into the haze).
  * `scale` eases between 1 and COMBAT.slowScale over the fade times (in real time).
  */
 const slow = { scale: 1, intensity: 0, active: false, startedAt: 0 };
 
 function updateTimeScale(dtReal: number) {
-  const want = game.state === "play" && player.mode === "air" && player.aim !== null && aimPower() < 1;
+  const want = game.state === "play" && player.mode === "air" && player.aim !== null;
   if (want && !slow.active) slow.startedAt = performance.now();
   slow.active = want;
   const span = 1 - COMBAT.slowScale;
