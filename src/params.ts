@@ -31,7 +31,7 @@ export const DEFAULTS = {
     jumpAim: {
       time: 1, // Aim time (s)
       turnRate: 7, // Aim turn rate (rad/s)
-      minTurnRate: 0.6, // Aim turn after aim time
+      minTurnRate: 2.3, // Aim turn after aim time
     },
     air: {
       turnRate: 2, // Air turn rate (rad/s)
@@ -54,7 +54,7 @@ export const DEFAULTS = {
     aim: {
       chargeTime: 0.5, // Attack charge time (s)
       turnRate: 14, // Aim turn rate (rad/s)
-      minTurnRate: 0.6, // Aim turn at full charge
+      minTurnRate: 3.6, // Aim turn at full charge
     },
     slowMo: {
       scale: 0.2, // World speed
@@ -100,10 +100,10 @@ export const DEFAULTS = {
       neighborRadius: 90, // Neighbour radius
       separationRadius: 50, // Separation radius
       separation: 720, // Separation
-      alignment: 0.6, // Alignment
-      cohesion: 0.25, // Cohesion
+      alignment: 0.55, // Alignment
+      cohesion: 0.2, // Cohesion
       wander: 40, // Wander
-      queenAttraction: 15, // Pull toward queen
+      queenAttraction: 10, // Pull toward queen
     },
     islands: {
       margin: 26, // Rim clearance
@@ -113,9 +113,9 @@ export const DEFAULTS = {
       hp: 24, // Health
       speed: 85, // Speed
       fleeRange: 320, // Flee range
-      tether: 230, // Stays near home
-      guardRadius: 480, // Guard radius
-      threatRadius: 520, // Threat radius
+      tether: 1000, // Stays near home
+      guardRadius: 210, // Guard radius
+      threatRadius: 410, // Threat radius
     },
   },
   enemyAttacks: {
