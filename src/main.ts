@@ -1,4 +1,4 @@
-import { Island, ISLAND_TOP, mulberry32, type EdgePoint, type Vec } from "./island";
+import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
 
 // ---------------------------------------------------------------------------------------------
@@ -49,11 +49,10 @@ function generateIslands(seed: number, count: number): Island[] {
 
 // Tuning
 const CAM_HEIGHT = 420; // camera height above the island tops
-const CLIMB_SPEED = 130;
+const CLIMB_SPEED = 300;
 const GRAVITY = 720;
-const AIR_ACCEL = 190;
-const MIN_JUMP = 60;
-const MAX_JUMP = 380; // horizontal range of a full jump
+const AIR_TURN = 2.2; // rad/s the flight direction can be turned
+const JUMP_RANGE = 300; // horizontal distance of a jump landing back at island-top height
 const BODY_RADIUS = 9;
 const HANG_ALT = ISLAND_TOP - 9;
 
@@ -63,7 +62,6 @@ const HANG_ALT = ISLAND_TOP - 9;
 
 const keys = new Set<string>();
 const pressed = new Set<string>();
-const released = new Set<string>();
 window.addEventListener("keydown", (e) => {
   if (!keys.has(e.code)) pressed.add(e.code);
   keys.add(e.code);
@@ -71,43 +69,12 @@ window.addEventListener("keydown", (e) => {
 });
 window.addEventListener("keyup", (e) => {
   keys.delete(e.code);
-  released.add(e.code);
 });
-window.addEventListener("blur", () => {
-  keys.clear();
-  mouse.down = false;
-});
+window.addEventListener("blur", () => keys.clear());
 
-const mouse = { x: 0, y: 0, down: false, pressed: false, released: false };
-canvas.addEventListener("pointermove", (e) => {
-  mouse.x = e.clientX;
-  mouse.y = e.clientY;
-});
-canvas.addEventListener("pointerdown", (e) => {
-  if (e.button !== 0) return;
-  mouse.x = e.clientX;
-  mouse.y = e.clientY;
-  mouse.down = true;
-  mouse.pressed = true;
-  canvas.setPointerCapture(e.pointerId);
-});
-canvas.addEventListener("pointerup", (e) => {
-  if (e.button !== 0) return;
-  mouse.down = false;
-  mouse.released = true;
-});
-canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-
-/** The point on the island-top plane under the mouse cursor. */
-function mouseWorld(): Vec {
-  return proj.unproject(mouse.x, mouse.y, ISLAND_TOP);
-}
-
-function inputDir(): Vec {
-  const x = +(keys.has("KeyD") || keys.has("ArrowRight")) - +(keys.has("KeyA") || keys.has("ArrowLeft"));
-  const y = +(keys.has("KeyS") || keys.has("ArrowDown")) - +(keys.has("KeyW") || keys.has("ArrowUp"));
-  const l = Math.hypot(x, y);
-  return l > 0 ? { x: x / l, y: y / l } : { x: 0, y: 0 };
+/** -1 for left, +1 for right, 0 for neither or both. */
+function steer(): number {
+  return +(keys.has("KeyD") || keys.has("ArrowRight")) - +(keys.has("KeyA") || keys.has("ArrowLeft"));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -126,8 +93,6 @@ const player = {
   vx: 0,
   vy: 0,
   vz: 0,
-  aiming: false,
-  aimTime: 0,
   launchIsland: -1,
   airTime: 0,
   lostTimer: 0,
@@ -161,66 +126,48 @@ function grab(islandIdx: number, s: number) {
   player.island = islandIdx;
   player.s = s;
   player.vx = player.vy = player.vz = 0;
-  player.aiming = false;
   player.safeIsland = islandIdx;
   player.safeS = s;
 }
 
 function update(dt: number) {
-  const dir = inputDir();
+  const turn = steer();
   const p = player;
 
   if (p.mode === "hang") {
     const isl = islands[p.island]!;
-    let e = isl.pointAt(p.s);
-    // Climb along the rim using whichever part of the input runs along it.
-    const along = dir.x * e.tx + dir.y * e.ty;
-    const slow = p.aiming ? 0.35 : 1;
-    p.s += along * CLIMB_SPEED * slow * dt;
-    e = isl.pointAt(p.s);
+    // Facing the island, "right" runs counter-clockwise on screen, which is decreasing s.
+    p.s -= turn * CLIMB_SPEED * dt;
+    const e = isl.pointAt(p.s);
     p.x = e.x + e.nx * 7;
     p.y = e.y + e.ny * 7;
     p.alt = HANG_ALT;
     p.facing = Math.atan2(-e.ny, -e.nx);
 
-    if (mouse.pressed) {
-      p.aiming = true;
-      p.aimTime = 0;
-    }
-    if (p.aiming) p.aimTime += dt;
-    if (p.aiming && mouse.released) {
-      const j = planJump(e, mouseWorld());
-      p.x = j.x;
-      p.y = j.y;
+    if (pressed.has("Space")) {
+      // Push straight out from the rim; ~45° arc that lands JUMP_RANGE away at island height.
+      const v = Math.sqrt((GRAVITY * JUMP_RANGE) / 2);
+      p.x = e.x + e.nx * 12;
+      p.y = e.y + e.ny * 12;
       p.alt = ISLAND_TOP;
-      p.vx = j.vx;
-      p.vy = j.vy;
-      p.vz = j.vz;
+      p.vx = e.nx * v;
+      p.vy = e.ny * v;
+      p.vz = v;
       p.mode = "air";
       p.airTime = 0;
       p.launchIsland = p.island;
-      p.aiming = false;
     }
   } else if (p.mode === "air") {
     p.airTime += dt;
-    // Slight steering while airborne: hold the mouse button to drift toward the cursor.
-    let sx = dir.x;
-    let sy = dir.y;
-    if (mouse.down) {
-      const m = mouseWorld();
-      const l = Math.hypot(m.x - p.x, m.y - p.y);
-      if (l > 4) {
-        sx += (m.x - p.x) / l;
-        sy += (m.y - p.y) / l;
-      }
+    // Steer by turning the flight direction; right turns clockwise on screen (the flyer's right).
+    if (turn) {
+      const a = turn * AIR_TURN * dt;
+      const c = Math.cos(a);
+      const sn = Math.sin(a);
+      const vx = p.vx;
+      p.vx = vx * c - p.vy * sn;
+      p.vy = vx * sn + p.vy * c;
     }
-    const sl = Math.hypot(sx, sy);
-    if (sl > 1) {
-      sx /= sl;
-      sy /= sl;
-    }
-    p.vx += sx * AIR_ACCEL * dt;
-    p.vy += sy * AIR_ACCEL * dt;
     p.vz -= GRAVITY * dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
@@ -276,43 +223,6 @@ function update(dt: number) {
   cam.h += (th - cam.h) * (1 - Math.exp(-1.5 * dt));
 
   pressed.clear();
-  released.clear();
-  mouse.pressed = mouse.released = false;
-}
-
-interface JumpPlan { x: number; y: number; vx: number; vy: number; vz: number; tx: number; ty: number }
-
-/**
- * Jump from a rim point toward a target on the island-top plane. Lands on the target if it is in
- * range (and outward from the rim); otherwise as far as possible in that direction.
- */
-function planJump(e: EdgePoint, target: Vec): JumpPlan {
-  const x = e.x + e.nx * 12;
-  const y = e.y + e.ny * 12;
-  let jx = target.x - x;
-  let jy = target.y - y;
-  let L = Math.hypot(jx, jy);
-  if (L < 1e-3) {
-    jx = e.nx;
-    jy = e.ny;
-  } else {
-    jx /= L;
-    jy /= L;
-  }
-  // Never jump back into the island we hang from.
-  const dot = jx * e.nx + jy * e.ny;
-  if (dot < 0.15) {
-    jx += e.nx * (0.15 - dot);
-    jy += e.ny * (0.15 - dot);
-    const l = Math.hypot(jx, jy);
-    jx /= l;
-    jy /= l;
-  }
-  L = Math.max(MIN_JUMP, Math.min(MAX_JUMP, L));
-  // Close to a 45° arc, but a minimum hop for short jumps; flight time T = 2·vz / g.
-  const vz = Math.max(200, Math.sqrt((GRAVITY * L) / 2));
-  const vh = L / ((2 * vz) / GRAVITY);
-  return { x, y, vx: jx * vh, vy: jy * vh, vz, tx: x + jx * L, ty: y + jy * L };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -612,9 +522,7 @@ function render(time: number) {
   ctx.arc(proj.cx, proj.cy, limb * 1.02, 0, Math.PI * 2);
   ctx.fill();
 
-  drawAim();
   drawHud();
-  drawCursor();
 }
 
 function drawPlayer(time: number) {
@@ -641,16 +549,13 @@ function drawPlayer(time: number) {
     ctx.strokeStyle = "#f2d7b5";
     ctx.lineCap = "round";
     ctx.lineWidth = 2.6 * k;
-    const pull = p.aiming ? Math.min(1, p.aimTime / 0.3) : 0;
-    const reach = 9 + pull * 3;
+    const reach = 9;
     for (const side of [-1, 1]) {
       ctx.beginPath();
       ctx.moveTo(1 * k, side * 4 * k);
       ctx.lineTo(reach * k, side * 5.5 * k);
       ctx.stroke();
     }
-    // Aiming pulls the body back from the edge, ready to push off.
-    ctx.translate(-pull * 4 * k, 0);
   } else {
     ctx.rotate(Math.sin(p.spin) * 0.25);
   }
@@ -681,46 +586,6 @@ function drawPlayer(time: number) {
 
   ctx.restore();
 
-}
-
-/** Dotted flight arc and landing ring while aiming. */
-function drawAim() {
-  const p = player;
-  if (p.mode !== "hang" || !p.aiming) return;
-  const j = planJump(islands[p.island]!.pointAt(p.s), mouseWorld());
-  const T = (2 * j.vz) / GRAVITY;
-  const n = 22;
-  ctx.fillStyle = "rgba(255,240,200,0.85)";
-  for (let i = 1; i < n; i++) {
-    const t = (i / n) * T;
-    const pr = proj.project(j.x + j.vx * t, j.y + j.vy * t, ISLAND_TOP + j.vz * t - 0.5 * GRAVITY * t * t);
-    if (!pr.visible) continue;
-    ctx.beginPath();
-    ctx.arc(pr.x, pr.y, Math.max(1, 1.6 * pr.kt), 0, Math.PI * 2);
-    ctx.fill();
-  }
-  const land = proj.project(j.tx, j.ty, ISLAND_TOP);
-  const pulse = 1 + 0.12 * Math.sin(performance.now() / 120);
-  flatEllipsePath(land, 12 * pulse);
-  ctx.strokeStyle = "rgba(255,240,200,0.9)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-}
-
-function drawCursor() {
-  ctx.strokeStyle = "rgba(235,228,255,0.85)";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(mouse.x, mouse.y, 6, 0, Math.PI * 2);
-  ctx.moveTo(mouse.x - 11, mouse.y);
-  ctx.lineTo(mouse.x - 3, mouse.y);
-  ctx.moveTo(mouse.x + 3, mouse.y);
-  ctx.lineTo(mouse.x + 11, mouse.y);
-  ctx.moveTo(mouse.x, mouse.y - 11);
-  ctx.lineTo(mouse.x, mouse.y - 3);
-  ctx.moveTo(mouse.x, mouse.y + 3);
-  ctx.lineTo(mouse.x, mouse.y + 11);
-  ctx.stroke();
 }
 
 function drawHud() {

@@ -84,30 +84,6 @@ export class Projector {
     };
   }
 
-  /**
-   * Inverse of `project` for a given altitude: the game-plane point under a screen position.
-   * Screen points beyond the visible edge of that altitude's sphere clamp to the edge.
-   */
-  unproject(sx: number, sy: number, alt: number): { x: number; y: number } {
-    const dx = sx - this.cx;
-    const dy = sy - this.cy;
-    const rho = Math.hypot(dx, dy);
-    if (rho < 1e-6) return { x: this.camX, y: this.camY };
-    const r = this.R + alt;
-    const D = this.camDist;
-    const rhoAt = (th: number) => (this.f * r * Math.sin(th)) / (D - r * Math.cos(th));
-    // ρ(θ) increases monotonically up to where the line of sight grazes the sphere.
-    let lo = 0;
-    let hi = Math.acos(Math.min(1, r / D));
-    for (let i = 0; i < 40; i++) {
-      const mid = (lo + hi) / 2;
-      if (rhoAt(mid) < rho) lo = mid;
-      else hi = mid;
-    }
-    const d = lo * this.R;
-    return { x: this.camX + (dx / rho) * d, y: this.camY + (dy / rho) * d };
-  }
-
   /** Distance (in the game plane) from the camera beyond which the haze surface is hidden. */
   get horizonDistance(): number {
     return this.horizonTheta * this.R;
