@@ -6,13 +6,13 @@
   <title>Planet Proto</title>
   <style>
     html, body { margin: 0; height: 100%; background: #05030c; overflow: hidden; }
-    canvas { display: block; width: 100vw; height: 100vh; }
+    canvas { display: block; width: 100vw; height: 100vh; cursor: none; touch-action: none; }
     #hud { position: fixed; left: 12px; bottom: 10px; color: #cfc6ff; font: 13px/1.5 system-ui, sans-serif; opacity: .75; pointer-events: none; }
   </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hud">WASD / arrows: climb along edge · hold Space: charge jump (aim with direction) · in air: steer slightly</div>
+  <div id="hud">WASD / arrows: climb along edge · hold mouse: aim, release: jump · in air: hold mouse (or WASD) to steer slightly</div>
   <script type="module" src="./src/main.ts"></script>
 </body>
 </html>

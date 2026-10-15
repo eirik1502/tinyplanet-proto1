@@ -29,7 +29,7 @@ export interface Slice { alt: number; pts: Vec[]; depth: number; cliff: boolean 
 
 /** Island top altitude above the haze surface. */
 export const ISLAND_TOP = 120;
-const ROOT_BOTTOM = 8;
+export const ROOT_BOTTOM = 8;
 const CLIFF = 34;
 const CLIFF_SLICES = 9;
 const ROOT_SLICES = 18;
@@ -43,7 +43,7 @@ export class Island {
   readonly trees: Tree[] = [];
   readonly inner: Vec[] = [];
 
-  constructor(readonly cx: number, readonly cy: number, radius: number, seed: number) {
+  constructor(readonly cx: number, readonly cy: number, readonly radius: number, seed: number) {
     const rand = mulberry32(seed);
     const n = 64;
     const harm = [2, 3, 5, 8].map((k, i) => ({ k, amp: [0.13, 0.09, 0.05, 0.025][i]!, ph: rand() * Math.PI * 2 }));
@@ -104,6 +104,24 @@ export class Island {
       if (this.trees.some((t) => Math.hypot(t.x - x, t.y - y) < t.r + r + 8)) continue;
       this.trees.push({ x, y, r, tint: rand() });
     }
+  }
+
+  /** Rough horizontal scale of the island body at an altitude (1 at the top, shrinking down the root). */
+  scaleAt(alt: number): number {
+    const cliffBottom = ISLAND_TOP - CLIFF;
+    if (alt >= cliffBottom) return 0.98;
+    const t = Math.min(1, (cliffBottom - alt) / (cliffBottom - ROOT_BOTTOM));
+    return Math.max(0.03, 0.96 * (1 - 0.92 * Math.pow(t, 1.1)) * (1 - 0.25 * t));
+  }
+
+  /** Does a ball of radius `r` at (px, py, alt) touch the island's body? */
+  intersects(px: number, py: number, alt: number, r: number): boolean {
+    if (alt > ISLAND_TOP + r * 0.5 || alt < ROOT_BOTTOM) return false;
+    const k = this.scaleAt(alt);
+    // Map into the top outline's frame, where the body at this altitude is the outline scaled by k.
+    const qx = this.cx + (px - this.cx) / k;
+    const qy = this.cy + (py - this.cy) / k;
+    return this.contains(qx, qy) || this.closest(qx, qy).d * k < r;
   }
 
   pointAt(s: number): EdgePoint {
