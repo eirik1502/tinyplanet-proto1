@@ -1,6 +1,7 @@
 # TinyPlanet Proto 1
 
 A small browser game prototype set on a procedurally generated tiny planet. Climb islands, jump between them, and kill the queen.
+![Ingame_screenshot_1.png](docs/Ingame_screenshot_1.png)
 
 ## Running
 
