@@ -1,5 +1,6 @@
 import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
+import { createTuningPanel, tune } from "./tuning";
 
 // ---------------------------------------------------------------------------------------------
 // Setup
@@ -47,13 +48,8 @@ function generateIslands(seed: number, count: number): Island[] {
   return out;
 }
 
-// Tuning
-const CAM_HEIGHT = 420; // camera height above the island tops
-const CLIMB_SPEED = 300;
-const GRAVITY = 720;
-const AIR_TURN = 2.2; // rad/s the flight direction can be turned
-const JUMP_RANGE = 300; // horizontal distance of a jump landing back at island-top height
-const BODY_RADIUS = 9;
+// Movement tuning lives in `tune` (see tuning.ts) and is editable live from the slider panel.
+createTuningPanel();
 const HANG_ALT = ISLAND_TOP - 9;
 
 // ---------------------------------------------------------------------------------------------
@@ -62,19 +58,25 @@ const HANG_ALT = ISLAND_TOP - 9;
 
 const keys = new Set<string>();
 const pressed = new Set<string>();
+const released = new Set<string>();
 window.addEventListener("keydown", (e) => {
+  if (e.target instanceof HTMLInputElement) return;
   if (!keys.has(e.code)) pressed.add(e.code);
   keys.add(e.code);
   if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
 });
 window.addEventListener("keyup", (e) => {
   keys.delete(e.code);
+  released.add(e.code);
 });
 window.addEventListener("blur", () => keys.clear());
 
-/** -1 for left, +1 for right, 0 for neither or both. */
-function steer(): number {
-  return +(keys.has("KeyD") || keys.has("ArrowRight")) - +(keys.has("KeyA") || keys.has("ArrowLeft"));
+/** Arrow keys / WASD as a screen-space unit vector (y down). */
+function inputDir(): Vec {
+  const x = +(keys.has("KeyD") || keys.has("ArrowRight")) - +(keys.has("KeyA") || keys.has("ArrowLeft"));
+  const y = +(keys.has("KeyS") || keys.has("ArrowDown")) - +(keys.has("KeyW") || keys.has("ArrowUp"));
+  const l = Math.hypot(x, y);
+  return l > 0 ? { x: x / l, y: y / l } : { x: 0, y: 0 };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -93,6 +95,8 @@ const player = {
   vx: 0,
   vy: 0,
   vz: 0,
+  charge: 0, // 0..1 while Space is held
+  slide: 0, // speed along the rim (per s) after a fast grab
   launchIsland: -1,
   airTime: 0,
   lostTimer: 0,
@@ -119,72 +123,103 @@ const player = {
   player.y = player.ry = e.y + e.ny * 7;
 }
 
-const cam = { x: player.x, y: player.y, h: CAM_HEIGHT };
+const cam = { x: player.x, y: player.y, h: tune.camHeight };
 
-function grab(islandIdx: number, s: number) {
+/** Grab a rim. Arriving fast turns the along-rim part of the velocity into a slide. */
+function grab(islandIdx: number, s: number, vx = 0, vy = 0) {
+  const e = islands[islandIdx]!.pointAt(s);
+  const along = vx * e.tx + vy * e.ty;
+  player.slide = Math.hypot(vx, vy) > tune.slideMinSpeed ? along * tune.slideKeep : 0;
   player.mode = "hang";
   player.island = islandIdx;
   player.s = s;
   player.vx = player.vy = player.vz = 0;
+  player.charge = 0;
   player.safeIsland = islandIdx;
   player.safeS = s;
 }
 
+interface Flight { x: number; y: number; alt: number; vx: number; vy: number; vz: number; t: number }
+
+/** Launch state for a jump straight out from rim parameter `s` with charge 0..1. */
+function launch(islandIdx: number, s: number, charge: number): Flight {
+  const e = islands[islandIdx]!.pointAt(s);
+  const range = tune.jumpMin + (tune.jumpMax - tune.jumpMin) * charge;
+  // 45° arc: horizontal and vertical speed equal, landing `range` away at launch height.
+  const v = Math.sqrt((tune.gravity * range) / 2);
+  return { x: e.x + e.nx * 12, y: e.y + e.ny * 12, alt: ISLAND_TOP, vx: e.nx * v, vy: e.ny * v, vz: v, t: 0 };
+}
+
+/**
+ * Advance a flight by dt. Returns the island and rim parameter if it hit one: either by crossing a
+ * rim (from above or level with it, so you can't jump over an island) or by touching the body below.
+ */
+function stepFlight(f: Flight, dt: number, fromIsland: number): { island: number; s: number } | null {
+  const ox = f.x;
+  const oy = f.y;
+  f.vz -= tune.gravity * dt;
+  f.x += f.vx * dt;
+  f.y += f.vy * dt;
+  f.alt += f.vz * dt;
+  f.t += dt;
+  for (let i = 0; i < islands.length; i++) {
+    if (i === fromIsland && f.t < 0.25) continue;
+    const isl = islands[i]!;
+    if (f.alt >= ISLAND_TOP - 4) {
+      const s = isl.segmentHit(ox, oy, f.x, f.y);
+      if (s !== null) return { island: i, s };
+    }
+    if (isl.intersects(f.x, f.y, f.alt, tune.bodyRadius)) return { island: i, s: isl.closest(f.x, f.y).s };
+  }
+  return null;
+}
+
+/** Flight below this altitude is lost in the haze. */
+const LOST_ALT = ISLAND_TOP - 80;
+
 function update(dt: number) {
-  const turn = steer();
+  const dir = inputDir();
   const p = player;
 
   if (p.mode === "hang") {
     const isl = islands[p.island]!;
-    // Facing the island, "right" runs counter-clockwise on screen, which is decreasing s.
-    p.s -= turn * CLIMB_SPEED * dt;
-    const e = isl.pointAt(p.s);
+    let e = isl.pointAt(p.s);
+    // Climb along the rim using whichever part of the input runs along it (slower while charging).
+    const along = dir.x * e.tx + dir.y * e.ty;
+    const climb = along * tune.climbSpeed * (keys.has("Space") ? tune.climbChargeFactor : 1);
+    p.s += (climb + p.slide) * dt;
+    p.slide *= Math.exp(-tune.slideFriction * dt);
+    if (Math.abs(p.slide) < 5) p.slide = 0;
+    e = isl.pointAt(p.s);
     p.x = e.x + e.nx * 7;
     p.y = e.y + e.ny * 7;
     p.alt = HANG_ALT;
     p.facing = Math.atan2(-e.ny, -e.nx);
 
-    if (pressed.has("Space")) {
-      // Push straight out from the rim; ~45° arc that lands JUMP_RANGE away at island height.
-      const v = Math.sqrt((GRAVITY * JUMP_RANGE) / 2);
-      p.x = e.x + e.nx * 12;
-      p.y = e.y + e.ny * 12;
-      p.alt = ISLAND_TOP;
-      p.vx = e.nx * v;
-      p.vy = e.ny * v;
-      p.vz = v;
+    if (p.slide) emitDust(e.x, e.y, Math.min(1, Math.abs(p.slide) / 300), dt);
+
+    if (keys.has("Space")) p.charge = Math.min(1, p.charge + dt / tune.chargeTime);
+    if (released.has("Space")) {
+      const f = launch(p.island, p.s, p.charge);
+      Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
       p.mode = "air";
       p.airTime = 0;
       p.launchIsland = p.island;
+      p.charge = 0;
+      p.slide = 0;
     }
   } else if (p.mode === "air") {
-    p.airTime += dt;
-    // Steer by turning the flight direction; right turns clockwise on screen (the flyer's right).
-    if (turn) {
-      const a = turn * AIR_TURN * dt;
-      const c = Math.cos(a);
-      const sn = Math.sin(a);
-      const vx = p.vx;
-      p.vx = vx * c - p.vy * sn;
-      p.vy = vx * sn + p.vy * c;
-    }
-    p.vz -= GRAVITY * dt;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    p.alt += p.vz * dt;
+    // Steer with the arrows.
+    p.vx += dir.x * tune.airAccel * dt;
+    p.vy += dir.y * tune.airAccel * dt;
+    const f: Flight = { x: p.x, y: p.y, alt: p.alt, vx: p.vx, vy: p.vy, vz: p.vz, t: p.airTime };
+    const hit = stepFlight(f, dt, p.launchIsland);
+    Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vz: f.vz, airTime: f.t });
     p.spin += dt * 3;
     if (Math.hypot(p.vx, p.vy) > 1) p.facing = Math.atan2(p.vy, p.vx);
 
-    // Touching any island's body stops the flight and grabs the nearest point of its rim.
-    for (let i = 0; i < islands.length; i++) {
-      if (i === p.launchIsland && p.airTime < 0.25) continue;
-      const isl = islands[i]!;
-      if (isl.intersects(p.x, p.y, p.alt, BODY_RADIUS)) {
-        grab(i, isl.closest(p.x, p.y).s);
-        break;
-      }
-    }
-    if (p.mode === "air" && p.alt < ISLAND_TOP - 80) {
+    if (hit) grab(hit.island, hit.s, p.vx, p.vy);
+    else if (p.alt < LOST_ALT) {
       p.mode = "lost";
       p.lostTimer = 0;
     }
@@ -193,7 +228,7 @@ function update(dt: number) {
     p.lostTimer += dt;
     p.vx *= Math.exp(-2 * dt);
     p.vy *= Math.exp(-2 * dt);
-    p.vz = Math.max(p.vz - GRAVITY * 0.3 * dt, -260);
+    p.vz = Math.max(p.vz - tune.gravity * 0.3 * dt, -260);
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.alt = Math.max(5, p.alt + p.vz * dt);
@@ -206,6 +241,8 @@ function update(dt: number) {
     }
   }
 
+  updateDust(dt);
+
   // Smoothed render position.
   const k = p.mode === "hang" ? 1 - Math.exp(-18 * dt) : 1;
   p.rx += (p.x - p.rx) * k;
@@ -213,16 +250,40 @@ function update(dt: number) {
   p.ralt += (p.alt - p.ralt) * (p.mode === "hang" ? 1 - Math.exp(-10 * dt) : 1);
 
   // Camera trails behind and slides in toward the player; it rises a bit with high jumps.
-  const lead = 0.25;
+  const lead = tune.camLead;
   const tx = p.rx + p.vx * lead;
   const ty = p.ry + p.vy * lead;
-  const ck = 1 - Math.exp(-2.4 * dt);
+  const ck = 1 - Math.exp(-tune.camFollow * dt);
   cam.x += (tx - cam.x) * ck;
   cam.y += (ty - cam.y) * ck;
-  const th = CAM_HEIGHT + Math.max(0, p.alt - ISLAND_TOP) * 0.8;
+  const th = tune.camHeight + Math.max(0, p.alt - ISLAND_TOP) * 0.8;
   cam.h += (th - cam.h) * (1 - Math.exp(-1.5 * dt));
 
   pressed.clear();
+  released.clear();
+}
+
+// Dust kicked up while sliding along a rim.
+const dust: { x: number; y: number; alt: number; vx: number; vy: number; life: number }[] = [];
+let dustAcc = 0;
+function emitDust(x: number, y: number, amount: number, dt: number) {
+  dustAcc += amount * 60 * dt;
+  while (dustAcc >= 1) {
+    dustAcc -= 1;
+    const a = Math.random() * Math.PI * 2;
+    const sp = 10 + Math.random() * 30;
+    dust.push({ x, y, alt: ISLAND_TOP - Math.random() * 6, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1 });
+  }
+}
+function updateDust(dt: number) {
+  for (let i = dust.length - 1; i >= 0; i--) {
+    const d = dust[i]!;
+    d.x += d.vx * dt;
+    d.y += d.vy * dt;
+    d.alt -= 25 * dt;
+    d.life -= dt * 1.6;
+    if (d.life <= 0) dust.splice(i, 1);
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -246,6 +307,7 @@ const hazeSprites = [
   makeBlob(128, [[0, "rgba(170,255,240,0.8)"], [0.5, "rgba(140,220,230,0.25)"], [1, "rgba(120,200,230,0)"]]),
 ];
 const glowSprite = makeBlob(64, [[0, "rgba(255,255,230,1)"], [0.25, "rgba(220,240,255,0.6)"], [1, "rgba(180,200,255,0)"]]);
+const dustSprite = makeBlob(32, [[0, "rgba(230,205,170,0.9)"], [1, "rgba(200,170,140,0)"]]);
 const shadowSprite = makeBlob(64, [[0, "rgba(10,0,30,0.55)"], [0.6, "rgba(10,0,30,0.25)"], [1, "rgba(10,0,30,0)"]]);
 
 /** Draws a sprite lying flat on the planet surface: squashed radially as the surface tilts away. */
@@ -508,6 +570,9 @@ function render(time: number) {
 
   // Player; while hanging, sort above the lip so the hands overlap the grass edge.
   list.push({ alt: p.mode === "hang" ? ISLAND_TOP + 0.8 : p.ralt, draw: () => drawPlayer(time) });
+  for (const d of dust) {
+    list.push({ alt: d.alt, draw: () => drawFlat(dustSprite, proj.project(d.x, d.y, d.alt), 5 * (1.6 - d.life), d.life * 0.8) });
+  }
 
   list.sort((a, b) => a.alt - b.alt);
   for (const d of list) d.draw();
@@ -522,6 +587,7 @@ function render(time: number) {
   ctx.arc(proj.cx, proj.cy, limb * 1.02, 0, Math.PI * 2);
   ctx.fill();
 
+  drawJumpPreview();
   drawHud();
 }
 
@@ -549,13 +615,15 @@ function drawPlayer(time: number) {
     ctx.strokeStyle = "#f2d7b5";
     ctx.lineCap = "round";
     ctx.lineWidth = 2.6 * k;
-    const reach = 9;
+    const reach = 9 + p.charge * 3;
     for (const side of [-1, 1]) {
       ctx.beginPath();
       ctx.moveTo(1 * k, side * 4 * k);
       ctx.lineTo(reach * k, side * 5.5 * k);
       ctx.stroke();
     }
+    // Charging pulls the body back from the edge, ready to push off.
+    ctx.translate(-p.charge * 5 * k, 0);
   } else {
     ctx.rotate(Math.sin(p.spin) * 0.25);
   }
@@ -586,6 +654,43 @@ function drawPlayer(time: number) {
 
   ctx.restore();
 
+}
+
+/**
+ * While charging, a dashed line traces where the jump will go. It turns green if the jump will
+ * catch an island, and stays pale if it ends in the haze.
+ */
+function drawJumpPreview() {
+  const p = player;
+  if (p.mode !== "hang" || !keys.has("Space")) return;
+  const f = launch(p.island, p.s, p.charge);
+  const pts: Projected[] = [proj.project(f.x, f.y, f.alt)];
+  let hit = false;
+  for (let i = 0; i < 240 && f.alt > LOST_ALT; i++) {
+    const h = stepFlight(f, 1 / 60, p.island);
+    if (h) {
+      // End where the flight meets the rim, at the flight's altitude (it may cross well above it).
+      const e = islands[h.island]!.pointAt(h.s);
+      pts.push(proj.project(e.x, e.y, Math.max(ISLAND_TOP, f.alt)));
+      hit = true;
+      break;
+    }
+    if (i % 2 === 1) pts.push(proj.project(f.x, f.y, f.alt));
+  }
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = "round";
+  ctx.setLineDash([7, 7]);
+  ctx.lineDashOffset = -performance.now() / 40;
+  ctx.strokeStyle = hit ? "rgba(140,255,170,0.95)" : "rgba(255,235,210,0.75)";
+  ctx.beginPath();
+  pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const end = pts[pts.length - 1]!;
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.beginPath();
+  ctx.arc(end.x, end.y, hit ? 5 : 3.5, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawHud() {

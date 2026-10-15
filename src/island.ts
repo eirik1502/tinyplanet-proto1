@@ -157,6 +157,30 @@ export class Island {
     return best;
   }
 
+  /** First crossing of the rim by the segment a→b, as its perimeter parameter, or null. */
+  segmentHit(ax: number, ay: number, bx: number, by: number): number | null {
+    const n = this.pts.length;
+    const dx = bx - ax;
+    const dy = by - ay;
+    let bestT = Infinity;
+    let bestS: number | null = null;
+    for (let i = 0; i < n; i++) {
+      const p = this.pts[i]!;
+      const q = this.pts[(i + 1) % n]!;
+      const ex = q.x - p.x;
+      const ey = q.y - p.y;
+      const den = dx * ey - dy * ex;
+      if (Math.abs(den) < 1e-9) continue;
+      const t = ((p.x - ax) * ey - (p.y - ay) * ex) / den;
+      const u = ((p.x - ax) * dy - (p.y - ay) * dx) / den;
+      if (t >= 0 && t <= 1 && u >= 0 && u <= 1 && t < bestT) {
+        bestT = t;
+        bestS = this.cum[i]! + u * Math.hypot(ex, ey);
+      }
+    }
+    return bestS;
+  }
+
   contains(px: number, py: number): boolean {
     let inside = false;
     const n = this.pts.length;
