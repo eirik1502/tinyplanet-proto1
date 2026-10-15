@@ -82,6 +82,7 @@ const player = {
   vz: 0,
   charge: 0, // 0..1 while Space is held
   jumpAim: null as number | null, // world angle of the jump being charged
+  jumpAimT: 0, // seconds the jump has been aimed
   slide: 0, // speed along the rim (per s) after a fast grab
   launchIsland: -1,
   airTime: 0,
@@ -252,9 +253,14 @@ function update(dt: number, dtReal: number) {
 
     if (playing && keys.has("Space")) {
       // Aim starts straight out from the rim and turns toward the input, slower as it charges.
-      if (p.jumpAim === null) p.jumpAim = Math.atan2(e.ny, e.nx);
+      if (p.jumpAim === null) {
+        p.jumpAim = Math.atan2(e.ny, e.nx);
+        p.jumpAimT = 0;
+      }
       p.charge = Math.min(1, p.charge + dt / params.move.jump.chargeTime);
-      p.jumpAim = clampAimToRim(turnAim(p.jumpAim, dir, p.charge, dt));
+      p.jumpAimT += dt;
+      const ja = params.move.jumpAim;
+      p.jumpAim = clampAimToRim(turnAim(p.jumpAim, dir, p.jumpAimT / ja.time, dt, ja.turnRate, ja.minTurnRate));
     }
     if (playing && released.has("Space") && p.jumpAim !== null) {
       const f = launch(p.island, p.s, p.charge, p.jumpAim);
@@ -349,13 +355,20 @@ function update(dt: number, dtReal: number) {
 }
 
 /**
- * Turn an aim angle toward the input direction. The turn rate starts high and falls off as the
- * charge (0..1) builds, leaving a small minimum so a full charge can still be fine-tuned.
+ * Turn an aim angle toward the input direction. The turn rate starts at `turnRate` and falls off
+ * as `progress` (0..1 over the aim time) builds, down to `minTurnRate` for fine-tuning.
  */
-function turnAim(angle: number, dir: Vec, charge: number, dt: number): number {
+function turnAim(
+  angle: number,
+  dir: Vec,
+  progress: number,
+  dt: number,
+  turnRate: number,
+  minTurnRate: number,
+): number {
   if (!dir.x && !dir.y) return angle;
-  const falloff = Math.pow(Math.max(0, 1 - charge), 2);
-  const rate = Math.max(params.player.aim.minTurnRate, params.player.aim.turnRate * falloff);
+  const falloff = Math.pow(Math.max(0, 1 - progress), 2);
+  const rate = Math.max(minTurnRate, turnRate * falloff);
   let diff = Math.atan2(dir.y, dir.x) - angle;
   diff = Math.atan2(Math.sin(diff), Math.cos(diff));
   return angle + Math.max(-rate * dt, Math.min(rate * dt, diff));
@@ -416,7 +429,8 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
   const aim = p.aim;
   // Aiming runs on real time so slow motion doesn't slow the charge or the turning.
   aim.t += dtReal;
-  aim.angle = clampAimToRim(turnAim(aim.angle, dir, aim.t / params.player.aim.chargeTime, dtReal));
+  const pa = params.player.aim;
+  aim.angle = clampAimToRim(turnAim(aim.angle, dir, aim.t / pa.chargeTime, dtReal, pa.turnRate, pa.minTurnRate));
 
   if (!held(aim.weapon)) {
     const power = aimPower();

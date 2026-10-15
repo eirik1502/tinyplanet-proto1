@@ -17,6 +17,11 @@ export const DEFAULTS = {
       chargeTime: 0.5, // Charge time (s)
       gravity: 1200, // Gravity
     },
+    jumpAim: {
+      time: 1, // Aim time (s)
+      turnRate: 7, // Aim turn rate (rad/s)
+      minTurnRate: 0.6, // Aim turn after aim time
+    },
     air: {
       turnRate: 2, // Air turn rate (rad/s)
       grabRadius: 18, // Grab radius
