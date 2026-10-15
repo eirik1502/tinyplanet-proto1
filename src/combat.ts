@@ -10,9 +10,14 @@ export const COMBAT = {
   playerRadius: 10,
   invulnTime: 0.35, // seconds of invulnerability after being hit
 
+  aimTime: 0.5, // seconds of holding an attack to reach full power (and lock the aim)
+  aimTurnRate: 14, // rad/s the aim turns toward the input at the start; slows to 0 by aimTime
+
   swordRange: 52,
+  swordMaxRange: 88, // reach at full power
   swordArc: 1.35, // half-angle (rad) of the swipe cone
   swordDamage: 2,
+  swordMaxDamage: 5,
   swordTime: 0.18, // seconds the swipe can hit
   swordFade: 0.12, // extra seconds the swipe stays visible while fading out
   swordCooldown: 0.28,
@@ -22,6 +27,9 @@ export const COMBAT = {
   spearRadius: 12, // extra hit radius around the tip
   spearLife: 0.7,
   spearDamage: 1,
+  spearMaxDamage: 3,
+  spearMaxSpeed: 1050,
+  spearMaxScale: 1.8, // size multiplier at full power
   spearCooldown: 0.45,
 
   meleeCount: 28,
@@ -80,6 +88,8 @@ export interface Shot {
   vz: number;
   life: number;
   fromPlayer: boolean;
+  damage: number;
+  scale: number; // visual / hit size multiplier
 }
 
 export interface Slash {
@@ -89,6 +99,9 @@ export interface Slash {
   dx: number;
   dy: number;
   age: number;
+  range: number;
+  damage: number;
+  power: number; // 0..1
   hits: Set<Boid>;
 }
 
@@ -115,6 +128,8 @@ export interface PlayerView {
 export type HitPlayer = (damage: number, fromX: number, fromY: number) => void;
 
 const CRUISE_ALT = ISLAND_TOP + 35;
+
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 export class Combat {
   boids: Boid[] = [];
@@ -199,20 +214,27 @@ export class Combat {
   // Player attacks
   // -------------------------------------------------------------------------------------------
 
-  swing(x: number, y: number, alt: number, dx: number, dy: number) {
-    this.slashes.push({ x, y, alt, dx, dy, age: 0, hits: new Set() });
+  /** Sword swipe; `power` 0..1 scales reach and damage. */
+  swing(x: number, y: number, alt: number, dx: number, dy: number, power: number) {
+    const range = lerp(COMBAT.swordRange, COMBAT.swordMaxRange, power);
+    const damage = lerp(COMBAT.swordDamage, COMBAT.swordMaxDamage, power);
+    this.slashes.push({ x, y, alt, dx, dy, age: 0, range, damage, power, hits: new Set() });
   }
 
-  throwSpear(x: number, y: number, alt: number, dx: number, dy: number) {
+  /** Spear throw; `power` 0..1 scales speed, damage and size. */
+  throwSpear(x: number, y: number, alt: number, dx: number, dy: number, power: number) {
+    const speed = lerp(COMBAT.spearSpeed, COMBAT.spearMaxSpeed, power);
     this.shots.push({
       x: x + dx * 10,
       y: y + dy * 10,
       alt,
-      vx: dx * COMBAT.spearSpeed,
-      vy: dy * COMBAT.spearSpeed,
+      vx: dx * speed,
+      vy: dy * speed,
       vz: 0,
       life: COMBAT.spearLife,
       fromPlayer: true,
+      damage: lerp(COMBAT.spearDamage, COMBAT.spearMaxDamage, power),
+      scale: lerp(1, COMBAT.spearMaxScale, power),
     });
   }
 
@@ -278,10 +300,10 @@ export class Combat {
         const ox = b.x - s.x;
         const oy = b.y - s.y;
         const d = Math.hypot(ox, oy);
-        if (d > COMBAT.swordRange + b.r || Math.abs(b.alt - s.alt) > 45 + b.r) continue;
+        if (d > s.range + b.r || Math.abs(b.alt - s.alt) > 45 + b.r) continue;
         if (d > 18 && (ox * s.dx + oy * s.dy) / d < cosArc) continue;
         s.hits.add(b);
-        this.damage(b, COMBAT.swordDamage, s.x, s.y);
+        this.damage(b, s.damage, s.x, s.y);
       }
       // The blade also blocks enemy projectiles passing through the swipe.
       for (const sh of this.shots) {
@@ -289,7 +311,7 @@ export class Combat {
         const ox = sh.x - s.x;
         const oy = sh.y - s.y;
         const d = Math.hypot(ox, oy);
-        if (d > COMBAT.swordRange + 8 || Math.abs(sh.alt - s.alt) > 50) continue;
+        if (d > s.range + 8 || Math.abs(sh.alt - s.alt) > 50) continue;
         if (d > 18 && (ox * s.dx + oy * s.dy) / d < cosArc) continue;
         sh.life = 0;
         this.burst(sh.x, sh.y, sh.alt, 8, "#f4ffd0");
@@ -307,8 +329,8 @@ export class Combat {
       if (s.fromPlayer) {
         for (const b of this.boids) {
           if (b.hp <= 0) continue;
-          if (Math.hypot(b.x - s.x, b.y - s.y) < b.r + COMBAT.spearRadius && Math.abs(b.alt - s.alt) < b.r + 26) {
-            this.damage(b, COMBAT.spearDamage, s.x - s.vx * 0.05, s.y - s.vy * 0.05);
+          if (Math.hypot(b.x - s.x, b.y - s.y) < b.r + COMBAT.spearRadius * s.scale && Math.abs(b.alt - s.alt) < b.r + 26) {
+            this.damage(b, s.damage, s.x - s.vx * 0.05, s.y - s.vy * 0.05);
             s.life = 0;
             break;
           }
@@ -316,7 +338,7 @@ export class Combat {
       } else if (player.targetable) {
         const d = Math.hypot(player.x - s.x, player.y - s.y, (player.alt - s.alt) * 0.7);
         if (d < COMBAT.playerRadius + 5) {
-          hitPlayer(COMBAT.hitDamage, s.x - s.vx, s.y - s.vy);
+          hitPlayer(s.damage, s.x - s.vx, s.y - s.vy);
           s.life = 0;
         }
       }
@@ -473,6 +495,8 @@ export class Combat {
             vz: (dz / d3) * COMBAT.orbSpeed,
             life: COMBAT.orbLife,
             fromPlayer: false,
+            damage: COMBAT.hitDamage,
+            scale: 1,
           });
           b.cooldown = COMBAT.orbCooldown + this.rand() * 0.8;
         }

@@ -85,6 +85,9 @@ function inputDir(): Vec {
 // ---------------------------------------------------------------------------------------------
 
 type Mode = "hang" | "air" | "lost";
+type Weapon = "sword" | "spear";
+
+const WEAPON_KEYS: Record<Weapon, string[]> = { sword: ["KeyZ", "KeyJ"], spear: ["KeyX", "KeyK"] };
 
 const player = {
   mode: "hang" as Mode,
@@ -114,8 +117,8 @@ const player = {
   invuln: 0,
   swordCd: 0,
   spearCd: 0,
-  swing: 0, // seconds since the last sword swing (drives the arm animation)
-  swingDir: 0, // world angle of the last swing
+  /** Attack being aimed (key held), or null. */
+  aim: null as null | { weapon: Weapon; t: number; angle: number },
 };
 
 /** Hang on the rim of the first island, facing its nearest neighbour, at full health. */
@@ -133,7 +136,7 @@ function resetPlayer() {
   player.hp = COMBAT.playerHp;
   player.invuln = 0;
   player.swordCd = player.spearCd = 0;
-  player.swing = 99;
+  player.aim = null;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -235,7 +238,8 @@ function update(dt: number) {
     const isl = islands[p.island]!;
     let e = isl.pointAt(p.s);
     // Climb along the rim using whichever part of the input runs along it (slower while charging).
-    const along = dir.x * e.tx + dir.y * e.ty;
+    // Aiming an attack takes over the input; an ongoing slide carries on.
+    const along = p.aim ? 0 : dir.x * e.tx + dir.y * e.ty;
     const climb = along * tune.climbSpeed * (keys.has("Space") ? tune.climbChargeFactor : 1);
     p.s += (climb + p.slide) * dt;
     p.slide *= Math.exp(-tune.slideFriction * dt);
@@ -261,7 +265,7 @@ function update(dt: number) {
   } else if (p.mode === "air") {
     // Arrows turn the flight toward the input direction without changing speed.
     const sp = Math.hypot(p.vx, p.vy);
-    if ((dir.x || dir.y) && sp > 1) {
+    if (!p.aim && (dir.x || dir.y) && sp > 1) {
       const cur = Math.atan2(p.vy, p.vx);
       let diff = Math.atan2(dir.y, dir.x) - cur;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -309,7 +313,6 @@ function update(dt: number) {
   updateDust(dt);
   if (playing) updateAttacks(dt, dir);
   p.invuln = Math.max(0, p.invuln - dt);
-  p.swing += dt;
   combat.update(dt, { x: p.x, y: p.y, alt: p.alt, targetable: playing && p.mode !== "lost" }, hitPlayer);
   game.shake = Math.max(0, game.shake - dt);
   if (game.state === "play" && combat.queenDead) {
@@ -341,43 +344,151 @@ function update(dt: number) {
   released.clear();
 }
 
+/** Power 0..1 of the attack being aimed. */
+function aimPower() {
+  return player.aim ? Math.min(1, player.aim.t / COMBAT.aimTime) : 0;
+}
+
+/** On a rim, attacks may not point back into the island: keep them in the outward half-plane. */
+function clampAimToRim(angle: number): number {
+  const p = player;
+  if (p.mode !== "hang") return angle;
+  const e = islands[p.island]!.pointAt(p.s);
+  let x = Math.cos(angle);
+  let y = Math.sin(angle);
+  const dot = x * e.nx + y * e.ny;
+  if (dot >= 0) return angle;
+  x -= e.nx * dot;
+  y -= e.ny * dot;
+  return Math.hypot(x, y) < 1e-3 ? Math.atan2(e.ny, e.nx) : Math.atan2(y, x);
+}
+
 /**
- * Sword (Z / J) and spear (X / K). From the rim both strike behind the player (outward, away
- * from the island); in the air they go in the input direction, or along the flight if none.
+ * Sword (Z / J) and spear (X / K): hold to aim and power up, release to strike.
+ * The aim starts behind the player on a rim (or along the flight / input in the air) and turns
+ * toward the input direction, quickly at first and slower and slower until it locks at full power.
  */
 function updateAttacks(dt: number, dir: Vec) {
   const p = player;
   p.swordCd -= dt;
   p.spearCd -= dt;
-  const wantSword = pressed.has("KeyZ") || pressed.has("KeyJ");
-  const wantSpear = pressed.has("KeyX") || pressed.has("KeyK");
-  if (!wantSword && !wantSpear) return;
-  if (p.mode === "lost") return;
+  if (p.mode === "lost") {
+    p.aim = null;
+    return;
+  }
+  const held = (w: Weapon) => WEAPON_KEYS[w].some((k) => keys.has(k));
+  const justPressed = (w: Weapon) => WEAPON_KEYS[w].some((k) => pressed.has(k));
 
-  let ax: number;
-  let ay: number;
-  if (p.mode === "hang") {
-    const e = islands[p.island]!.pointAt(p.s);
-    ax = e.nx;
-    ay = e.ny;
-  } else if (dir.x || dir.y) {
-    ax = dir.x;
-    ay = dir.y;
-  } else {
-    const l = Math.hypot(p.vx, p.vy) || 1;
-    ax = p.vx / l;
-    ay = p.vy / l;
+  if (!p.aim) {
+    const weapon: Weapon | null =
+      justPressed("sword") && p.swordCd <= 0 ? "sword" : justPressed("spear") && p.spearCd <= 0 ? "spear" : null;
+    if (!weapon) return;
+    let angle: number;
+    if (p.mode === "hang") {
+      const e = islands[p.island]!.pointAt(p.s);
+      angle = Math.atan2(e.ny, e.nx);
+    } else if (dir.x || dir.y) {
+      angle = Math.atan2(dir.y, dir.x);
+    } else {
+      angle = Math.atan2(p.vy, p.vx);
+    }
+    p.aim = { weapon, t: 0, angle };
+    return;
   }
-  const alt = p.mode === "hang" ? ISLAND_TOP + 2 : p.alt;
-  if (wantSword && p.swordCd <= 0) {
-    combat.swing(p.x, p.y, alt, ax, ay);
-    p.swordCd = COMBAT.swordCooldown;
-    p.swing = 0;
-    p.swingDir = Math.atan2(ay, ax);
+
+  const aim = p.aim;
+  aim.t += dt;
+  if (dir.x || dir.y) {
+    const rate = COMBAT.aimTurnRate * Math.pow(Math.max(0, 1 - aim.t / COMBAT.aimTime), 2);
+    let diff = Math.atan2(dir.y, dir.x) - aim.angle;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+    aim.angle += Math.max(-rate * dt, Math.min(rate * dt, diff));
   }
-  if (wantSpear && p.spearCd <= 0) {
-    combat.throwSpear(p.x, p.y, alt, ax, ay);
-    p.spearCd = COMBAT.spearCooldown;
+  aim.angle = clampAimToRim(aim.angle);
+
+  if (!held(aim.weapon)) {
+    const power = aimPower();
+    const ax = Math.cos(aim.angle);
+    const ay = Math.sin(aim.angle);
+    const alt = p.mode === "hang" ? ISLAND_TOP + 2 : p.alt;
+    if (aim.weapon === "sword") {
+      combat.swing(p.x, p.y, alt, ax, ay, power);
+      p.swordCd = COMBAT.swordCooldown;
+    } else {
+      combat.throwSpear(p.x, p.y, alt, ax, ay, power);
+      p.spearCd = COMBAT.spearCooldown;
+    }
+    p.aim = null;
+  }
+}
+
+/** Aim indicator: a fan showing the sword's reach, or an arrow for the spear; both grow with power. */
+function drawAimIndicator() {
+  const p = player;
+  if (!p.aim || p.mode === "lost") return;
+  const power = aimPower();
+  const full = power >= 1;
+  const pulse = full ? 0.75 + 0.25 * Math.sin(performance.now() / 60) : 1;
+  const alt = p.mode === "hang" ? ISLAND_TOP + 2 : p.ralt;
+  const a = p.aim.angle;
+  const at = (ang: number, r: number) => proj.project(p.rx + Math.cos(ang) * r, p.ry + Math.sin(ang) * r, alt);
+  const col = p.aim.weapon === "sword" ? "255,226,150" : "150,230,255";
+
+  ctx.lineJoin = "round";
+  if (p.aim.weapon === "sword") {
+    const R = COMBAT.swordRange + (COMBAT.swordMaxRange - COMBAT.swordRange) * power;
+    const n = 16;
+    ctx.beginPath();
+    const c = at(0, 0);
+    ctx.moveTo(c.x, c.y);
+    for (let i = 0; i <= n; i++) {
+      const q = at(a - COMBAT.swordArc + (2 * COMBAT.swordArc * i) / n, R);
+      ctx.lineTo(q.x, q.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = `rgba(${col},${(0.1 + 0.18 * power) * pulse})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${col},${(0.45 + 0.4 * power) * pulse})`;
+    ctx.lineWidth = 1.5 + 1.5 * power;
+    ctx.stroke();
+  }
+
+  // Arrow along the aim; longer and broader with power.
+  const len = p.aim.weapon === "sword" ? 30 + 40 * power : 40 + 80 * power;
+  const head = 8 + 10 * power;
+  const half = 4 + 6 * power;
+  const tip = at(a, len);
+  const base = at(a, len - head);
+  const tail = at(a, 14);
+  const k = tip.kt;
+  ctx.strokeStyle = `rgba(${col},${0.9 * pulse})`;
+  ctx.lineCap = "round";
+  ctx.lineWidth = (2 + 2.5 * power) * k;
+  ctx.beginPath();
+  ctx.moveTo(tail.x, tail.y);
+  ctx.lineTo(base.x, base.y);
+  ctx.stroke();
+  const l = at(a + Math.atan2(half, len - head), Math.hypot(half, len - head));
+  const r = at(a - Math.atan2(half, len - head), Math.hypot(half, len - head));
+  ctx.fillStyle = `rgba(${col},${0.95 * pulse})`;
+  ctx.beginPath();
+  ctx.moveTo(tip.x, tip.y);
+  ctx.lineTo(l.x, l.y);
+  ctx.lineTo(r.x, r.y);
+  ctx.closePath();
+  ctx.fill();
+
+  // Power ring around the player fills up while charging.
+  const ringR = 18;
+  const ring: Projected[] = [];
+  const segs = 32;
+  for (let i = 0; i <= Math.round(segs * power); i++) ring.push(at(a + (i / segs) * Math.PI * 2, ringR));
+  if (ring.length > 1) {
+    ctx.strokeStyle = `rgba(${col},${full ? 0.95 : 0.7})`;
+    ctx.lineWidth = full ? 3 : 2;
+    ctx.beginPath();
+    ring.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+    ctx.stroke();
   }
 }
 
@@ -710,6 +821,7 @@ function render(time: number) {
   ctx.fill();
 
   drawJumpPreview();
+  drawAimIndicator();
   drawQueenPointer();
   drawHud();
 }
@@ -844,12 +956,13 @@ function pushCombatDrawables(list: Drawable[], time: number) {
           const l = Math.hypot(sh.vx, sh.vy) || 1;
           const ux = sh.vx / l;
           const uy = sh.vy / l;
-          const L = COMBAT.spearLength;
+          const sc = sh.scale;
+          const L = COMBAT.spearLength * sc;
           const tail = proj.project(sh.x - ux * L, sh.y - uy * L, sh.alt);
-          const neck = proj.project(sh.x - ux * 12, sh.y - uy * 12, sh.alt);
-          const tip = proj.project(sh.x + ux * 4, sh.y + uy * 4, sh.alt);
+          const neck = proj.project(sh.x - ux * 12 * sc, sh.y - uy * 12 * sc, sh.alt);
+          const tip = proj.project(sh.x + ux * 4 * sc, sh.y + uy * 4 * sc, sh.alt);
           if (!tip.visible) return;
-          const k = tip.kt;
+          const k = tip.kt * sc;
           // Glow so it reads at speed
           ctx.globalCompositeOperation = "screen";
           ctx.drawImage(glowSprite, tip.x - 16 * k, tip.y - 16 * k, 32 * k, 32 * k);
@@ -904,7 +1017,7 @@ function pushCombatDrawables(list: Drawable[], time: number) {
   }
 }
 
-function drawSlash(sl: { x: number; y: number; alt: number; dx: number; dy: number; age: number }) {
+function drawSlash(sl: { x: number; y: number; alt: number; dx: number; dy: number; age: number; range: number; power: number }) {
   const t = sl.age / COMBAT.swordTime;
   const fade = 1 - Math.min(1, sl.age / (COMBAT.swordTime + COMBAT.swordFade));
   const base = Math.atan2(sl.dy, sl.dx);
@@ -917,15 +1030,15 @@ function drawSlash(sl: { x: number; y: number; alt: number; dx: number; dy: numb
     const a = a0 + ((a1 - a0) * i) / n;
     // Crescent: thick in the middle of the sweep, thin at the ends.
     const w = Math.sin((i / n) * Math.PI);
-    outer.push(proj.project(sl.x + Math.cos(a) * COMBAT.swordRange, sl.y + Math.sin(a) * COMBAT.swordRange, sl.alt));
-    const ri = COMBAT.swordRange * (1 - 0.45 * w);
+    outer.push(proj.project(sl.x + Math.cos(a) * sl.range, sl.y + Math.sin(a) * sl.range, sl.alt));
+    const ri = sl.range * (1 - (0.45 + 0.15 * sl.power) * w);
     inner.push(proj.project(sl.x + Math.cos(a) * ri, sl.y + Math.sin(a) * ri, sl.alt));
   }
   ctx.beginPath();
   outer.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
   for (let i = inner.length - 1; i >= 0; i--) ctx.lineTo(inner[i]!.x, inner[i]!.y);
   ctx.closePath();
-  ctx.fillStyle = `rgba(255,250,235,${0.9 * fade})`;
+  ctx.fillStyle = sl.power >= 1 ? `rgba(255,236,170,${0.95 * fade})` : `rgba(255,250,235,${0.9 * fade})`;
   ctx.fill();
 }
 
