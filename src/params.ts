@@ -18,7 +18,7 @@ export const DEFAULTS = {
       gravity: 1200, // Gravity
     },
     air: {
-      turnRate: 4, // Air turn rate (rad/s)
+      turnRate: 2, // Air turn rate (rad/s)
       grabRadius: 18, // Grab radius
     },
     slide: {
@@ -79,17 +79,17 @@ export const DEFAULTS = {
       rangedCount: 14, // Ranged boids
       meleeSpeed: 190, // Melee speed
       rangedSpeed: 160, // Ranged speed
-      aggroRange: 320, // Aggro range
-      disengageRange: 650, // Disengage range
+      aggroRange: 100, // Aggro range
+      disengageRange: 560, // Disengage range
     },
     flocking: {
-      neighborRadius: 110, // Neighbour radius
-      separationRadius: 30, // Separation radius
-      separation: 500, // Separation
-      alignment: 0.8, // Alignment
-      cohesion: 0.6, // Cohesion
+      neighborRadius: 90, // Neighbour radius
+      separationRadius: 50, // Separation radius
+      separation: 720, // Separation
+      alignment: 0.6, // Alignment
+      cohesion: 0.25, // Cohesion
       wander: 40, // Wander
-      queenAttraction: 25, // Pull toward queen
+      queenAttraction: 15, // Pull toward queen
     },
     islands: {
       margin: 26, // Rim clearance
