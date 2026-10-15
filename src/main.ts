@@ -130,18 +130,25 @@ function resetPlayer() {
 // ---------------------------------------------------------------------------------------------
 
 const combat = new Combat();
-const game = { state: "play" as "play" | "victory" | "defeat", timer: 0, round: 0, shake: 0 };
+const game = { state: "play" as "play" | "victory" | "defeat", timer: 0, level: 0, shake: 0 };
 
-/** Generate a new planet and start a round on it. */
-function restart() {
-  game.round++;
-  const w = params.world.planet;
-  planet = generatePlanet(Math.floor(Math.random() * 1e9), {
-    radius: w.radius,
-    islandCount: w.islandCount,
-    meleeCount: params.boids.swarm.meleeCount,
-    rangedCount: params.boids.swarm.rangedCount,
-  });
+/** Planet size and swarm for a level: level 1 values plus a per-level increase. */
+function levelSpec(level: number) {
+  const a = params.world.level1;
+  const d = params.world.perLevel;
+  const n = level - 1;
+  return {
+    radius: a.radius + d.radius * n,
+    islandCount: Math.max(1, Math.round(a.islands + d.islands * n)),
+    meleeCount: Math.round(a.melee + d.melee * n),
+    rangedCount: Math.round(a.ranged + d.ranged * n),
+  };
+}
+
+/** Generate a new planet for `level` and start playing it. */
+function restart(level: number) {
+  game.level = level;
+  planet = generatePlanet(Math.floor(Math.random() * 1e9), levelSpec(level));
   islands = planet.islands;
   combat.reset(planet);
   resetPlayer();
@@ -331,7 +338,10 @@ function update(dt: number, dtReal: number) {
   }
   if (game.state !== "play") {
     game.timer += dt;
-    if (game.timer > 4.5 || (game.timer > 1.2 && pressed.has("Enter"))) restart();
+    // Winning moves on to the next level; losing replays the same level on a fresh planet.
+    if (game.timer > 4.5 || (game.timer > 1.2 && pressed.has("Enter"))) {
+      restart(game.state === "victory" ? game.level + 1 : game.level);
+    }
   }
 
   // Smoothed render position.
@@ -1401,7 +1411,7 @@ function drawHud() {
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillStyle = "#f0dcff";
-  ctx.fillText(`♛ QUEEN · swarm ${combat.boids.length - 1} · planet ${planet.seed.toString(36)}`, W / 2, 32);
+  ctx.fillText(`♛ QUEEN · swarm ${combat.boids.length - 1} · level ${game.level} · planet ${planet.seed.toString(36)}`, W / 2, 32);
 
   if (game.state !== "play") {
     const a = Math.min(1, game.timer / 0.6);
@@ -1413,14 +1423,19 @@ function drawHud() {
     ctx.textBaseline = "middle";
     ctx.font = "800 64px system-ui, sans-serif";
     ctx.fillStyle = win ? "#ffd34d" : "#ff5a6e";
-    ctx.fillText(win ? "VICTORY" : "DEFEATED", W / 2, H / 2 - 20);
+    ctx.fillText(win ? `LEVEL ${game.level} CLEARED` : "DEFEATED", W / 2, H / 2 - 20);
     ctx.font = "500 18px system-ui, sans-serif";
     ctx.fillStyle = "#f0e8ff";
-    ctx.fillText(win ? "The queen has fallen." : "The swarm overwhelmed you.", W / 2, H / 2 + 30);
+    ctx.fillText(
+      win ? "The queen has fallen." : `The swarm overwhelmed you on level ${game.level}.`,
+      W / 2,
+      H / 2 + 30,
+    );
     ctx.font = "13px system-ui, sans-serif";
     ctx.fillStyle = "rgba(240,232,255,0.7)";
     const left = Math.max(0, Math.ceil(4.5 - game.timer));
-    ctx.fillText(`Restarting in ${left}…  (Enter to restart now)`, W / 2, H / 2 + 60);
+    const next = win ? `Level ${game.level + 1}` : `Retrying level ${game.level}`;
+    ctx.fillText(`${next} in ${left}…  (Enter to continue now)`, W / 2, H / 2 + 60);
     ctx.globalAlpha = 1;
   }
 }
@@ -1429,7 +1444,7 @@ function drawHud() {
 // Loop
 // ---------------------------------------------------------------------------------------------
 
-restart();
+restart(Math.max(1, Math.round(params.world.levels.start)));
 
 let last = performance.now();
 let worldTime = 0;
@@ -1444,6 +1459,7 @@ function frame(now: number) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
 
 
 

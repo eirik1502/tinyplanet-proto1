@@ -22,7 +22,9 @@ const TAB_TITLES: Record<keyof Params, string> = {
 };
 
 const GROUP_TITLES: Record<string, string> = {
-  "world.planet": "Planet",
+  "world.levels": "Levels",
+  "world.level1": "Level 1",
+  "world.perLevel": "Added per level",
   "move.climb": "Climbing",
   "move.jump": "Jumping",
   "move.jumpAim": "Jump aiming",
@@ -46,8 +48,15 @@ const GROUP_TITLES: Record<string, string> = {
 /** [label, min, max, step, appliesOnRestart?] per slider; values without an entry get no slider. */
 type Slider = [string, number, number, number, boolean?];
 const SLIDERS: Record<string, Slider> = {
-  "world.planet.radius": ["Boundary radius", 500, 2000, 10, true],
-  "world.planet.islandCount": ["Islands", 2, 40, 1, true],
+  "world.levels.start": ["Start level (on reload)", 1, 20, 1],
+  "world.level1.radius": ["Boundary radius", 300, 2000, 10, true],
+  "world.level1.islands": ["Islands", 1, 40, 1, true],
+  "world.level1.melee": ["Melee boids", 0, 100, 1, true],
+  "world.level1.ranged": ["Ranged boids", 0, 100, 1, true],
+  "world.perLevel.radius": ["Boundary radius", 0, 300, 5, true],
+  "world.perLevel.islands": ["Islands", 0, 6, 0.1, true],
+  "world.perLevel.melee": ["Melee boids", 0, 20, 0.1, true],
+  "world.perLevel.ranged": ["Ranged boids", 0, 20, 0.1, true],
 
   "move.climb.speed": ["Climb speed", 50, 800, 10],
   "move.jump.min": ["Min jump length", 20, 400, 10],
@@ -93,8 +102,6 @@ const SLIDERS: Record<string, Slider> = {
   "player.spear.maxScale": ["Size at full power", 1, 4, 0.1],
   "player.spear.cooldown": ["Cooldown (s)", 0, 2, 0.02],
 
-  "boids.swarm.meleeCount": ["Melee boids", 0, 150, 1, true],
-  "boids.swarm.rangedCount": ["Ranged boids", 0, 150, 1, true],
   "boids.swarm.meleeSpeed": ["Melee speed", 20, 600, 5],
   "boids.swarm.rangedSpeed": ["Ranged speed", 20, 600, 5],
   "boids.swarm.aggroRange": ["Aggro range", 0, 1200, 10],

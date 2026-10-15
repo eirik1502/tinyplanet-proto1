@@ -2,9 +2,20 @@
 // The panel's "Copy" button produces a drop-in replacement for this whole object.
 export const DEFAULTS = {
   world: {
-    planet: {
-      radius: 1000, // Boundary radius
-      islandCount: 12, // Islands
+    levels: {
+      start: 1, // Start level (on reload)
+    },
+    level1: {
+      radius: 600, // Boundary radius
+      islands: 4, // Islands
+      melee: 3, // Melee boids
+      ranged: 0, // Ranged boids
+    },
+    perLevel: {
+      radius: 80, // Boundary radius
+      islands: 1.6, // Islands
+      melee: 5, // Melee boids
+      ranged: 2.8, // Ranged boids
     },
   },
   move: {
@@ -80,11 +91,9 @@ export const DEFAULTS = {
   },
   boids: {
     swarm: {
-      meleeCount: 28, // Melee boids
-      rangedCount: 14, // Ranged boids
       meleeSpeed: 190, // Melee speed
       rangedSpeed: 160, // Ranged speed
-      aggroRange: 100, // Aggro range
+      aggroRange: 200, // Aggro range
       disengageRange: 560, // Disengage range
     },
     flocking: {
