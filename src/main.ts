@@ -233,7 +233,8 @@ function stepFlight(f: Flight, dt: number, fromIsland: number): { island: number
 /** Flight below this altitude is lost in the haze. */
 const LOST_ALT = ISLAND_TOP - 80;
 
-function update(dt: number) {
+/** `dt` is world time (slowed during slow motion); `dtReal` is wall-clock time, used for aiming. */
+function update(dt: number, dtReal: number) {
   const playing = game.state === "play";
   const dir = playing ? inputDir() : { x: 0, y: 0 };
   const p = player;
@@ -321,7 +322,7 @@ function update(dt: number) {
   }
 
   updateDust(dt);
-  if (playing) updateAttacks(dt, dir);
+  if (playing) updateAttacks(dt, dtReal, dir);
   p.invuln = Math.max(0, p.invuln - dt);
   combat.update(dt, { x: p.x, y: p.y, alt: p.alt, targetable: playing && p.mode !== "lost" }, hitPlayer);
   game.shake = Math.max(0, game.shake - dt);
@@ -391,7 +392,7 @@ function clampAimToRim(angle: number): number {
  * The aim starts behind the player on a rim (or along the flight / input in the air) and turns
  * toward the input direction, quickly at first and slower and slower until it locks at full power.
  */
-function updateAttacks(dt: number, dir: Vec) {
+function updateAttacks(dt: number, dtReal: number, dir: Vec) {
   const p = player;
   p.swordCd -= dt;
   p.spearCd -= dt;
@@ -420,8 +421,9 @@ function updateAttacks(dt: number, dir: Vec) {
   }
 
   const aim = p.aim;
-  aim.t += dt;
-  aim.angle = clampAimToRim(turnAim(aim.angle, dir, aim.t / COMBAT.aimTime, dt));
+  // Aiming runs on real time so slow motion doesn't slow the charge or the turning.
+  aim.t += dtReal;
+  aim.angle = clampAimToRim(turnAim(aim.angle, dir, aim.t / COMBAT.aimTime, dtReal));
 
   if (!held(aim.weapon)) {
     const power = aimPower();
@@ -837,6 +839,7 @@ function render(time: number) {
   ctx.arc(proj.cx, proj.cy, limb * 1.02, 0, Math.PI * 2);
   ctx.fill();
 
+  drawSlowMo();
   drawJumpPreview();
   drawAimIndicator();
   drawQueenPointer();
@@ -1180,6 +1183,100 @@ function drawBoid(b: Boid, time: number) {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------------------------------------
+// Slow motion
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Charging an attack in the air slows the world down until the attack is fully charged.
+ * `scale` eases between 1 and COMBAT.slowScale over the fade times (in real time).
+ */
+const slow = { scale: 1, intensity: 0, active: false, startedAt: 0 };
+
+function updateTimeScale(dtReal: number) {
+  const want = game.state === "play" && player.mode === "air" && player.aim !== null && aimPower() < 1;
+  if (want && !slow.active) slow.startedAt = performance.now();
+  slow.active = want;
+  const span = 1 - COMBAT.slowScale;
+  const target = want ? COMBAT.slowScale : 1;
+  const fade = want ? COMBAT.slowFadeIn : COMBAT.slowFadeOut;
+  const step = fade > 0 ? (span * dtReal) / fade : Infinity;
+  slow.scale = slow.scale > target ? Math.max(target, slow.scale - step) : Math.min(target, slow.scale + step);
+  slow.intensity = span > 0 ? Math.max(0, Math.min(1, (1 - slow.scale) / span)) : 0;
+}
+
+const canFilter = "filter" in ctx;
+
+/** Screen treatment while time is slowed: cool desaturation, zoom echo, vignette, shockwave, streaks. */
+function drawSlowMo() {
+  const I = slow.intensity;
+  if (I < 0.01) return;
+  const t = performance.now() / 1000;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const cw = canvas.width;
+  const ch = canvas.height;
+
+  // Drain colour toward a cold blue-violet.
+  if (canFilter) {
+    ctx.filter = `saturate(${1 - 0.8 * I}) hue-rotate(${-30 * I}deg) brightness(${1 - 0.15 * I}) contrast(${1 + 0.15 * I})`;
+    ctx.globalAlpha = I;
+    ctx.drawImage(canvas, 0, 0);
+    ctx.filter = "none";
+  }
+  // Zoom echo: a faint, slightly enlarged copy gives a stretched-time smear.
+  const z = 1 + 0.035 * I;
+  ctx.globalAlpha = 0.22 * I;
+  ctx.globalCompositeOperation = "screen";
+  ctx.drawImage(canvas, (cw - cw * z) / 2, (ch - ch * z) / 2, cw * z, ch * z);
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  // Vignette with a cyan rim.
+  const r = Math.hypot(W, H) / 2;
+  const vg = ctx.createRadialGradient(W / 2, H / 2, r * 0.35, W / 2, H / 2, r);
+  vg.addColorStop(0, "rgba(40,20,90,0)");
+  vg.addColorStop(0.7, `rgba(30,15,80,${0.45 * I})`);
+  vg.addColorStop(1, `rgba(120,230,255,${0.55 * I})`);
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Radial streaks drifting slowly around the player.
+  const pp = proj.project(player.rx, player.ry, player.ralt);
+  ctx.strokeStyle = `rgba(190,240,255,${0.32 * I})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let i = 0; i < 28; i++) {
+    const a = i * 2.39996 + t * 0.15;
+    const r0 = r * (0.55 + 0.25 * ((i * 0.618) % 1));
+    const r1 = r0 + r * 0.35 * I;
+    ctx.moveTo(pp.x + Math.cos(a) * r0, pp.y + Math.sin(a) * r0);
+    ctx.lineTo(pp.x + Math.cos(a) * r1, pp.y + Math.sin(a) * r1);
+  }
+  ctx.stroke();
+
+  // Shockwave ring from the player when the slowdown kicks in.
+  const age = (performance.now() - slow.startedAt) / 1000;
+  if (slow.active && age < 0.45) {
+    const k = age / 0.45;
+    ctx.strokeStyle = `rgba(170,240,255,${0.7 * (1 - k)})`;
+    ctx.lineWidth = 3 + 6 * (1 - k);
+    ctx.beginPath();
+    ctx.arc(pp.x, pp.y, 20 + k * r * 0.6, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Cinematic bars slide in from top and bottom.
+  const bar = H * 0.07 * I;
+  ctx.fillStyle = "rgba(4,2,12,0.92)";
+  ctx.fillRect(0, 0, W, bar);
+  ctx.fillRect(0, H - bar, W, bar);
+  ctx.fillStyle = `rgba(150,235,255,${0.6 * I})`;
+  ctx.fillRect(0, bar, W, 1);
+  ctx.fillRect(0, H - bar - 1, W, 1);
+}
+
 /** Arrow at the screen edge pointing toward the queen while she's off screen. */
 function drawQueenPointer() {
   const q = combat.queen;
@@ -1286,14 +1383,20 @@ function drawHud() {
 restart();
 
 let last = performance.now();
+let worldTime = 0;
 function frame(now: number) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const dtReal = Math.min(0.05, (now - last) / 1000);
   last = now;
-  update(dt);
-  render(now / 1000);
+  updateTimeScale(dtReal);
+  const dt = dtReal * slow.scale;
+  worldTime += dt;
+  update(dt, dtReal);
+  render(worldTime);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+
 
 
 

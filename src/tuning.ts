@@ -29,6 +29,11 @@ const combatDefaults = {
   aimTurnRate: 14, // rad/s the aim turns toward the input at the start of a charge...
   aimMinTurnRate: 0.6, // ... slowing down to this once fully charged
 
+  // Slow motion while charging an attack in the air
+  slowScale: 0.2, // world speed while slowed
+  slowFadeIn: 0.08, // seconds to ease into slow motion
+  slowFadeOut: 0.15, // seconds to ease back to normal speed
+
   swordRange: 52,
   swordMaxRange: 88, // reach at full power
   swordArc: 1.35, // half-angle (rad) of the swipe cone
@@ -159,6 +164,14 @@ const tabs: Tab[] = [
           { key: "aimTime", label: "Attack charge time (s)", min: 0.1, max: 2, step: 0.05 },
           { key: "aimTurnRate", label: "Aim turn rate (rad/s)", min: 0, max: 30, step: 0.5 },
           { key: "aimMinTurnRate", label: "Aim turn at full charge", min: 0, max: 5, step: 0.1 },
+        ],
+      },
+      {
+        title: "Slow motion (air attacks)",
+        specs: [
+          { key: "slowScale", label: "World speed", min: 0.02, max: 1, step: 0.01 },
+          { key: "slowFadeIn", label: "Fade in (s)", min: 0, max: 0.5, step: 0.01 },
+          { key: "slowFadeOut", label: "Fade out (s)", min: 0, max: 0.5, step: 0.01 },
         ],
       },
       {
