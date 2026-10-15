@@ -1,6 +1,7 @@
 import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
 import { createTuningPanel, tune } from "./tuning";
+import { COMBAT, Combat, type Boid } from "./combat";
 
 // ---------------------------------------------------------------------------------------------
 // Setup
@@ -109,21 +110,69 @@ const player = {
   ralt: HANG_ALT,
   facing: 0, // world angle pointing from the player to the rim (or flight direction)
   spin: 0,
+  hp: COMBAT.playerHp,
+  invuln: 0,
+  swordCd: 0,
+  spearCd: 0,
+  swing: 0, // seconds since the last sword swing (drives the arm animation)
+  swingDir: 0, // world angle of the last swing
 };
 
-{
-  // Start on the rim of the first island, facing its nearest neighbour.
+/** Hang on the rim of the first island, facing its nearest neighbour, at full health. */
+function resetPlayer() {
   const start = islands[0]!;
   const near = islands.slice(1).reduce((a, b) =>
     Math.hypot(a.cx - start.cx, a.cy - start.cy) < Math.hypot(b.cx - start.cx, b.cy - start.cy) ? a : b,
   );
-  player.s = start.closest(near.cx, near.cy).s;
+  grab(0, start.closest(near.cx, near.cy).s);
   const e = start.pointAt(player.s);
   player.x = player.rx = e.x + e.nx * 7;
   player.y = player.ry = e.y + e.ny * 7;
+  player.alt = player.ralt = HANG_ALT;
+  player.slide = 0;
+  player.hp = COMBAT.playerHp;
+  player.invuln = 0;
+  player.swordCd = player.spearCd = 0;
+  player.swing = 99;
 }
 
-const cam = { x: player.x, y: player.y, h: tune.camHeight };
+// ---------------------------------------------------------------------------------------------
+// Game state
+// ---------------------------------------------------------------------------------------------
+
+const combat = new Combat(islands);
+const game = { state: "play" as "play" | "victory" | "defeat", timer: 0, round: 0, shake: 0 };
+
+function restart() {
+  resetPlayer();
+  game.round++;
+  combat.reset(1000 + game.round * 7919 + Math.floor(Math.random() * 1e6), player.x, player.y);
+  game.state = "play";
+  game.timer = 0;
+  cam.x = player.x;
+  cam.y = player.y;
+}
+
+function hitPlayer(dmg: number, fromX: number, fromY: number) {
+  const p = player;
+  if (p.invuln > 0 || game.state !== "play") return;
+  p.hp -= dmg;
+  p.invuln = COMBAT.invulnTime;
+  game.shake = 0.35;
+  combat.burst(p.x, p.y, p.alt, 10, "#ffd0b0");
+  if (p.mode === "air") {
+    // Knock the flight sideways.
+    const l = Math.hypot(p.x - fromX, p.y - fromY) || 1;
+    p.vx += ((p.x - fromX) / l) * 160;
+    p.vy += ((p.y - fromY) / l) * 160;
+  }
+  if (p.hp <= 0) {
+    game.state = "defeat";
+    game.timer = 0;
+  }
+}
+
+const cam = { x: 0, y: 0, h: tune.camHeight };
 
 /** Grab a rim. Arriving fast turns the along-rim part of the velocity into a slide. */
 function grab(islandIdx: number, s: number, vx = 0, vy = 0) {
@@ -178,7 +227,8 @@ function stepFlight(f: Flight, dt: number, fromIsland: number): { island: number
 const LOST_ALT = ISLAND_TOP - 80;
 
 function update(dt: number) {
-  const dir = inputDir();
+  const playing = game.state === "play";
+  const dir = playing ? inputDir() : { x: 0, y: 0 };
   const p = player;
 
   if (p.mode === "hang") {
@@ -198,8 +248,8 @@ function update(dt: number) {
 
     if (p.slide) emitDust(e.x, e.y, Math.min(1, Math.abs(p.slide) / 300), dt);
 
-    if (keys.has("Space")) p.charge = Math.min(1, p.charge + dt / tune.chargeTime);
-    if (released.has("Space")) {
+    if (playing && keys.has("Space")) p.charge = Math.min(1, p.charge + dt / tune.chargeTime);
+    if (playing && released.has("Space")) {
       const f = launch(p.island, p.s, p.charge);
       Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
       p.mode = "air";
@@ -209,9 +259,16 @@ function update(dt: number) {
       p.slide = 0;
     }
   } else if (p.mode === "air") {
-    // Steer with the arrows.
-    p.vx += dir.x * tune.airAccel * dt;
-    p.vy += dir.y * tune.airAccel * dt;
+    // Arrows turn the flight toward the input direction without changing speed.
+    const sp = Math.hypot(p.vx, p.vy);
+    if ((dir.x || dir.y) && sp > 1) {
+      const cur = Math.atan2(p.vy, p.vx);
+      let diff = Math.atan2(dir.y, dir.x) - cur;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      const a = cur + Math.max(-tune.airTurn * dt, Math.min(tune.airTurn * dt, diff));
+      p.vx = Math.cos(a) * sp;
+      p.vy = Math.sin(a) * sp;
+    }
     const f: Flight = { x: p.x, y: p.y, alt: p.alt, vx: p.vx, vy: p.vy, vz: p.vz, t: p.airTime };
     const hit = stepFlight(f, dt, p.launchIsland);
     Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vz: f.vz, airTime: f.t });
@@ -233,7 +290,15 @@ function update(dt: number) {
     p.y += p.vy * dt;
     p.alt = Math.max(5, p.alt + p.vz * dt);
     if (p.lostTimer > 1.6) {
+      if (game.state === "play") {
+        p.hp -= 1;
+        if (p.hp <= 0) {
+          game.state = "defeat";
+          game.timer = 0;
+        }
+      }
       grab(p.safeIsland, p.safeS);
+      p.invuln = COMBAT.invulnTime;
       const e = islands[p.island]!.pointAt(p.s);
       p.x = p.rx = e.x + e.nx * 7;
       p.y = p.ry = e.y + e.ny * 7;
@@ -242,6 +307,19 @@ function update(dt: number) {
   }
 
   updateDust(dt);
+  if (playing) updateAttacks(dt, dir);
+  p.invuln = Math.max(0, p.invuln - dt);
+  p.swing += dt;
+  combat.update(dt, { x: p.x, y: p.y, alt: p.alt, targetable: playing && p.mode !== "lost" }, hitPlayer);
+  game.shake = Math.max(0, game.shake - dt);
+  if (game.state === "play" && combat.queenDead) {
+    game.state = "victory";
+    game.timer = 0;
+  }
+  if (game.state !== "play") {
+    game.timer += dt;
+    if (game.timer > 4.5 || (game.timer > 1.2 && pressed.has("Enter"))) restart();
+  }
 
   // Smoothed render position.
   const k = p.mode === "hang" ? 1 - Math.exp(-18 * dt) : 1;
@@ -261,6 +339,46 @@ function update(dt: number) {
 
   pressed.clear();
   released.clear();
+}
+
+/**
+ * Sword (Z / J) and spear (X / K). From the rim both strike behind the player (outward, away
+ * from the island); in the air they go in the input direction, or along the flight if none.
+ */
+function updateAttacks(dt: number, dir: Vec) {
+  const p = player;
+  p.swordCd -= dt;
+  p.spearCd -= dt;
+  const wantSword = pressed.has("KeyZ") || pressed.has("KeyJ");
+  const wantSpear = pressed.has("KeyX") || pressed.has("KeyK");
+  if (!wantSword && !wantSpear) return;
+  if (p.mode === "lost") return;
+
+  let ax: number;
+  let ay: number;
+  if (p.mode === "hang") {
+    const e = islands[p.island]!.pointAt(p.s);
+    ax = e.nx;
+    ay = e.ny;
+  } else if (dir.x || dir.y) {
+    ax = dir.x;
+    ay = dir.y;
+  } else {
+    const l = Math.hypot(p.vx, p.vy) || 1;
+    ax = p.vx / l;
+    ay = p.vy / l;
+  }
+  const alt = p.mode === "hang" ? ISLAND_TOP + 2 : p.alt;
+  if (wantSword && p.swordCd <= 0) {
+    combat.swing(p.x, p.y, alt, ax, ay);
+    p.swordCd = COMBAT.swordCooldown;
+    p.swing = 0;
+    p.swingDir = Math.atan2(ay, ax);
+  }
+  if (wantSpear && p.spearCd <= 0) {
+    combat.throwSpear(p.x, p.y, alt, ax, ay);
+    p.spearCd = COMBAT.spearCooldown;
+  }
 }
 
 // Dust kicked up while sliding along a rim.
@@ -308,6 +426,7 @@ const hazeSprites = [
 ];
 const glowSprite = makeBlob(64, [[0, "rgba(255,255,230,1)"], [0.25, "rgba(220,240,255,0.6)"], [1, "rgba(180,200,255,0)"]]);
 const dustSprite = makeBlob(32, [[0, "rgba(230,205,170,0.9)"], [1, "rgba(200,170,140,0)"]]);
+const orbSprite = makeBlob(32, [[0, "rgba(250,255,220,1)"], [0.35, "rgba(200,255,120,0.85)"], [1, "rgba(120,255,80,0)"]]);
 const shadowSprite = makeBlob(64, [[0, "rgba(10,0,30,0.55)"], [0.6, "rgba(10,0,30,0.25)"], [1, "rgba(10,0,30,0)"]]);
 
 /** Draws a sprite lying flat on the planet surface: squashed radially as the surface tilts away. */
@@ -391,7 +510,8 @@ function smoothstep(a: number, b: number, x: number) {
 
 function render(time: number) {
   const zoom = Math.min(W, H) / 640;
-  proj.setCamera(cam.x, cam.y, ISLAND_TOP, cam.h, zoom, W, H);
+  const shake = game.shake * 18;
+  proj.setCamera(cam.x + (Math.random() - 0.5) * shake, cam.y + (Math.random() - 0.5) * shake, ISLAND_TOP, cam.h, zoom, W, H);
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
@@ -574,6 +694,8 @@ function render(time: number) {
     list.push({ alt: d.alt, draw: () => drawFlat(dustSprite, proj.project(d.x, d.y, d.alt), 5 * (1.6 - d.life), d.life * 0.8) });
   }
 
+  pushCombatDrawables(list, time);
+
   list.sort((a, b) => a.alt - b.alt);
   for (const d of list) d.draw();
 
@@ -588,6 +710,7 @@ function render(time: number) {
   ctx.fill();
 
   drawJumpPreview();
+  drawQueenPointer();
   drawHud();
 }
 
@@ -598,6 +721,9 @@ function drawPlayer(time: number) {
   const k = pr.kt;
   const fade = p.mode === "lost" ? Math.max(0, 1 - p.lostTimer / 0.9) : 1;
   if (fade <= 0) return;
+
+  // Blink while invulnerable.
+  if (p.invuln > 0 && Math.floor(p.invuln * 14) % 2 === 0) return;
 
   ctx.save();
   ctx.translate(pr.x, pr.y);
@@ -693,6 +819,264 @@ function drawJumpPreview() {
   ctx.fill();
 }
 
+// ---------------------------------------------------------------------------------------------
+// Combat rendering
+// ---------------------------------------------------------------------------------------------
+
+function pushCombatDrawables(list: Drawable[], time: number) {
+  const reach = proj.horizonDistance * 1.2;
+  for (const b of combat.boids) {
+    if (b.hp <= 0 || Math.hypot(b.x - cam.x, b.y - cam.y) > reach) continue;
+    const over = islands.some((i) => Math.hypot(i.cx - b.x, i.cy - b.y) < i.radius * 1.4 && i.contains(b.x, b.y));
+    const sAlt = over ? ISLAND_TOP + 0.6 : 4;
+    list.push({
+      alt: sAlt + 0.2,
+      draw: () => drawFlat(shadowSprite, proj.project(b.x, b.y, sAlt), b.r * 1.5, over ? 0.6 : 0.3),
+    });
+    list.push({ alt: b.alt, draw: () => drawBoid(b, time) });
+  }
+  for (const sh of combat.shots) {
+    list.push({
+      alt: sh.alt,
+      draw: () => {
+        if (sh.fromPlayer) {
+          // Spear: shaft trailing behind a bright tip.
+          const l = Math.hypot(sh.vx, sh.vy) || 1;
+          const tail = proj.project(sh.x - (sh.vx / l) * 26, sh.y - (sh.vy / l) * 26, sh.alt);
+          const tip = proj.project(sh.x, sh.y, sh.alt);
+          if (!tip.visible) return;
+          ctx.lineCap = "round";
+          ctx.strokeStyle = "#d9c49a";
+          ctx.lineWidth = 2.4 * tip.kt;
+          ctx.beginPath();
+          ctx.moveTo(tail.x, tail.y);
+          ctx.lineTo(tip.x, tip.y);
+          ctx.stroke();
+          ctx.fillStyle = "#f6f2ff";
+          ctx.beginPath();
+          ctx.arc(tip.x, tip.y, 2.6 * tip.kt, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          const pr = proj.project(sh.x, sh.y, sh.alt);
+          if (!pr.visible) return;
+          const r = 9 * pr.kt;
+          ctx.globalCompositeOperation = "screen";
+          ctx.drawImage(orbSprite, pr.x - r, pr.y - r, r * 2, r * 2);
+          ctx.globalCompositeOperation = "source-over";
+        }
+      },
+    });
+  }
+  for (const sl of combat.slashes) list.push({ alt: sl.alt + 0.5, draw: () => drawSlash(sl) });
+  for (const sp of combat.sparks) {
+    list.push({
+      alt: sp.alt,
+      draw: () => {
+        const pr = proj.project(sp.x, sp.y, sp.alt);
+        if (!pr.visible) return;
+        ctx.globalAlpha = Math.min(1, sp.life * 2);
+        ctx.fillStyle = sp.color;
+        ctx.beginPath();
+        ctx.arc(pr.x, pr.y, Math.max(1, 2 * pr.kt), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      },
+    });
+  }
+}
+
+function drawSlash(sl: { x: number; y: number; alt: number; dx: number; dy: number; age: number }) {
+  const t = sl.age / COMBAT.swordTime;
+  const fade = 1 - Math.min(1, sl.age / (COMBAT.swordTime + COMBAT.swordFade));
+  const base = Math.atan2(sl.dy, sl.dx);
+  const a0 = base - COMBAT.swordArc;
+  const a1 = a0 + 2 * COMBAT.swordArc * Math.min(1, t * 1.8);
+  const outer: Projected[] = [];
+  const inner: Projected[] = [];
+  const n = 14;
+  for (let i = 0; i <= n; i++) {
+    const a = a0 + ((a1 - a0) * i) / n;
+    // Crescent: thick in the middle of the sweep, thin at the ends.
+    const w = Math.sin((i / n) * Math.PI);
+    outer.push(proj.project(sl.x + Math.cos(a) * COMBAT.swordRange, sl.y + Math.sin(a) * COMBAT.swordRange, sl.alt));
+    const ri = COMBAT.swordRange * (1 - 0.45 * w);
+    inner.push(proj.project(sl.x + Math.cos(a) * ri, sl.y + Math.sin(a) * ri, sl.alt));
+  }
+  ctx.beginPath();
+  outer.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+  for (let i = inner.length - 1; i >= 0; i--) ctx.lineTo(inner[i]!.x, inner[i]!.y);
+  ctx.closePath();
+  ctx.fillStyle = `rgba(255,250,235,${0.9 * fade})`;
+  ctx.fill();
+}
+
+function drawBoid(b: Boid, time: number) {
+  const pr = proj.project(b.x, b.y, b.alt);
+  if (!pr.visible) return;
+  const k = pr.kt;
+  const heading = Math.atan2(b.vy, b.vx);
+  ctx.save();
+  ctx.translate(pr.x, pr.y);
+
+  if (b.kind === "queen") {
+    const pulse = 0.5 + 0.5 * Math.sin(time * 3);
+    const aura = ctx.createRadialGradient(0, 0, 0, 0, 0, 55 * k);
+    aura.addColorStop(0, `rgba(230,120,255,${0.35 + 0.15 * pulse})`);
+    aura.addColorStop(1, "rgba(230,120,255,0)");
+    ctx.fillStyle = aura;
+    ctx.beginPath();
+    ctx.arc(0, 0, 55 * k, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.rotate(heading);
+    const flap = Math.abs(Math.sin(time * 7));
+    ctx.fillStyle = "rgba(240,200,255,0.4)";
+    for (const side of [-1, 1]) {
+      for (const [ox, w] of [[-2, 1], [-14, 0.75]] as const) {
+        ctx.beginPath();
+        ctx.ellipse(ox * k, side * 20 * k, 20 * w * k, (4 + 10 * flap) * w * k, side * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    // Abdomen with stripes, thorax, head
+    ctx.fillStyle = "#6d1f9e";
+    ctx.beginPath();
+    ctx.ellipse(-16 * k, 0, 16 * k, 11 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#e3a6ff";
+    ctx.lineWidth = 1.6 * k;
+    for (const sx of [-22, -15, -8]) {
+      ctx.beginPath();
+      ctx.moveTo(sx * k, -9 * k);
+      ctx.quadraticCurveTo((sx + 3) * k, 0, sx * k, 9 * k);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#9b2fd6";
+    ctx.beginPath();
+    ctx.ellipse(2 * k, 0, 11 * k, 10 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#d58cff";
+    ctx.beginPath();
+    ctx.arc(14 * k, 0, 7 * k, 0, Math.PI * 2);
+    ctx.fill();
+    // Crown: gold spikes around the head
+    ctx.fillStyle = "#ffd34d";
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI * 0.6 + (i / 4) * Math.PI * 1.2;
+      ctx.beginPath();
+      ctx.moveTo((14 + Math.cos(a - 0.25) * 6) * k, Math.sin(a - 0.25) * 6 * k);
+      ctx.lineTo((14 + Math.cos(a) * 12) * k, Math.sin(a) * 12 * k);
+      ctx.lineTo((14 + Math.cos(a + 0.25) * 6) * k, Math.sin(a + 0.25) * 6 * k);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#1a0526";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(17 * k, side * 3 * k, 1.6 * k, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    if (b.lunge > 0) {
+      ctx.fillStyle = "rgba(255,70,90,0.35)";
+      ctx.beginPath();
+      ctx.arc(0, 0, 15 * k, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.rotate(heading);
+    const flap = Math.abs(Math.sin(time * 26 + b.id));
+    ctx.fillStyle = b.kind === "melee" ? "rgba(255,190,210,0.45)" : "rgba(170,255,240,0.45)";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(-2 * k, side * 7 * k, 7 * k, (1 + 4 * flap) * k, side * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (b.kind === "melee") {
+      ctx.fillStyle = "#e23a5a";
+      ctx.strokeStyle = "#5a0f22";
+      ctx.lineWidth = 1.2 * k;
+      ctx.beginPath();
+      ctx.moveTo(11 * k, 0);
+      ctx.lineTo(-7 * k, -6 * k);
+      ctx.lineTo(-3 * k, 0);
+      ctx.lineTo(-7 * k, 6 * k);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "#ffe066";
+      ctx.beginPath();
+      ctx.arc(4 * k, 0, 1.6 * k, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // Ranged: round body whose core brightens as the next shot charges.
+      const ready = 1 - Math.max(0, Math.min(1, b.cooldown / COMBAT.orbCooldown));
+      ctx.fillStyle = "#1f8f86";
+      ctx.strokeStyle = "#0b3b38";
+      ctx.lineWidth = 1.2 * k;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7 * k, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = `rgba(210,255,130,${0.3 + 0.7 * ready})`;
+      ctx.beginPath();
+      ctx.arc(1.5 * k, 0, (2.5 + 1.5 * ready) * k, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  if (b.flash > 0) {
+    ctx.fillStyle = `rgba(255,255,255,${(b.flash / 0.15) * 0.85})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, b.r * 1.2 * k, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Arrow at the screen edge pointing toward the queen while she's off screen. */
+function drawQueenPointer() {
+  const q = combat.queen;
+  if (!q || q.hp <= 0 || game.state !== "play") return;
+  const pr = proj.project(q.x, q.y, q.alt);
+  const m = 40;
+  if (pr.visible && pr.x > m && pr.x < W - m && pr.y > m && pr.y < H - m) return;
+  // The projection is radial around the screen centre, so the world direction is the screen direction.
+  const a = Math.atan2(q.y - cam.y, q.x - cam.x);
+  const c = Math.cos(a);
+  const sn = Math.sin(a);
+  const t = Math.min((W / 2 - m) / Math.abs(c || 1e-6), (H / 2 - m) / Math.abs(sn || 1e-6));
+  const x = W / 2 + c * t;
+  const y = H / 2 + sn * t;
+  const pulse = 1 + 0.12 * Math.sin(performance.now() / 150);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = "rgba(60,10,80,0.6)";
+  ctx.beginPath();
+  ctx.arc(0, 0, 17 * pulse, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#ffd34d";
+  ctx.font = "bold 18px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("♛", 0, 1);
+  ctx.rotate(a);
+  ctx.fillStyle = "#e48cff";
+  ctx.beginPath();
+  ctx.moveTo(27 * pulse, 0);
+  ctx.lineTo(19 * pulse, -7);
+  ctx.lineTo(19 * pulse, 7);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function heartPath(x: number, y: number, s: number) {
+  ctx.beginPath();
+  ctx.moveTo(x, y + s * 0.3);
+  ctx.bezierCurveTo(x, y, x - s * 0.5, y, x - s * 0.5, y + s * 0.3);
+  ctx.bezierCurveTo(x - s * 0.5, y + s * 0.6, x, y + s * 0.75, x, y + s);
+  ctx.bezierCurveTo(x, y + s * 0.75, x + s * 0.5, y + s * 0.6, x + s * 0.5, y + s * 0.3);
+  ctx.bezierCurveTo(x + s * 0.5, y, x, y, x, y + s * 0.3);
+}
+
 function drawHud() {
   if (player.mode === "lost") {
     const t = player.lostTimer;
@@ -700,11 +1084,60 @@ function drawHud() {
     ctx.fillStyle = `rgba(200,190,255,${a * 0.6})`;
     ctx.fillRect(0, 0, W, H);
   }
+
+  // Hearts
+  for (let i = 0; i < COMBAT.playerHp; i++) {
+    heartPath(26 + i * 26, 16, 20);
+    if (i < player.hp) {
+      ctx.fillStyle = "#ff5a6e";
+      ctx.fill();
+    }
+    ctx.strokeStyle = "rgba(255,220,230,0.8)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // Queen health
+  const q = combat.queen;
+  const bw = Math.min(320, W * 0.4);
+  const bx = (W - bw) / 2;
+  ctx.fillStyle = "rgba(20,8,35,0.7)";
+  ctx.fillRect(bx - 2, 14, bw + 4, 14);
+  ctx.fillStyle = "#c84cff";
+  ctx.fillRect(bx, 16, bw * Math.max(0, q.hp / q.maxHp), 10);
+  ctx.font = "600 12px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = "#f0dcff";
+  ctx.fillText(`♛ QUEEN · swarm ${combat.boids.length - 1}`, W / 2, 32);
+
+  if (game.state !== "play") {
+    const a = Math.min(1, game.timer / 0.6);
+    const win = game.state === "victory";
+    ctx.fillStyle = win ? `rgba(40,20,60,${0.55 * a})` : `rgba(40,5,15,${0.6 * a})`;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = a;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.font = "800 64px system-ui, sans-serif";
+    ctx.fillStyle = win ? "#ffd34d" : "#ff5a6e";
+    ctx.fillText(win ? "VICTORY" : "DEFEATED", W / 2, H / 2 - 20);
+    ctx.font = "500 18px system-ui, sans-serif";
+    ctx.fillStyle = "#f0e8ff";
+    ctx.fillText(win ? "The queen has fallen." : "The swarm overwhelmed you.", W / 2, H / 2 + 30);
+    ctx.font = "13px system-ui, sans-serif";
+    ctx.fillStyle = "rgba(240,232,255,0.7)";
+    const left = Math.max(0, Math.ceil(4.5 - game.timer));
+    ctx.fillText(`Restarting in ${left}…  (Enter to restart now)`, W / 2, H / 2 + 60);
+    ctx.globalAlpha = 1;
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
 // Loop
 // ---------------------------------------------------------------------------------------------
+
+restart();
 
 let last = performance.now();
 function frame(now: number) {
@@ -715,3 +1148,4 @@ function frame(now: number) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+

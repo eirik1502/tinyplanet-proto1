@@ -8,7 +8,7 @@ const defaults = {
   jumpMin: 110, // horizontal range of a tapped jump (landing back at island-top height)
   jumpMax: 420, // ... and of a fully charged one
   chargeTime: 0.5, // seconds of holding Space to reach jumpMax
-  airAccel: 750, // steering acceleration while airborne
+  airTurn: 4, // rad/s the flight direction turns toward the input direction
   bodyRadius: 18, // how close to an island body counts as touching it
   slideMinSpeed: 100, // grabbing faster than this slides along the rim
   slideKeep: 1.0, // fraction of the along-rim velocity kept when sliding starts
@@ -43,7 +43,7 @@ const groups: { title: string; specs: Spec[] }[] = [
   {
     title: "Air",
     specs: [
-      { key: "airAccel", label: "Air steering", min: 0, max: 1200, step: 10 },
+      { key: "airTurn", label: "Air turn rate (rad/s)", min: 0, max: 15, step: 0.1 },
       { key: "bodyRadius", label: "Grab radius", min: 1, max: 40, step: 1 },
     ],
   },
@@ -128,8 +128,19 @@ export function createTuningPanel() {
   const setCollapsed = (c: boolean) => {
     panel.classList.toggle("collapsed", c);
     toggle.textContent = c ? "Show" : "Hide";
+    try {
+      localStorage.setItem(STORAGE_KEY + ".open", c ? "0" : "1");
+    } catch {
+      // Ignore: persistence is a convenience.
+    }
   };
-  setCollapsed(false);
+  let open = false;
+  try {
+    open = localStorage.getItem(STORAGE_KEY + ".open") === "1";
+  } catch {
+    // Default to collapsed.
+  }
+  setCollapsed(!open);
   header.addEventListener("click", (e) => {
     if (e.target !== reset) setCollapsed(!panel.classList.contains("collapsed"));
   });
