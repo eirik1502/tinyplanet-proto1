@@ -1,7 +1,7 @@
 import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
 import { createTuningPanel, params } from "./tuning";
-import { Combat, type Boid } from "./combat";
+import { Combat, hitStop, type Boid } from "./combat";
 import { generatePlanet, type Planet } from "./planet";
 
 // ---------------------------------------------------------------------------------------------
@@ -84,6 +84,9 @@ const player = {
   airJumps: 0, // double jumps left (0 or 1): one per flight, refilled by hits in the air
   netUsed: false, // the safety bounce below the rim is spent until the next grab
   focus: 1, // 0..1 slow-motion budget
+  freeze: 0, // hit-stop left (s, real time): a frozen player doesn't move
+  redirect: false, // after this hit-stop, turn the flight toward the input (sword hits)
+  anim: 0, // animation clock (s); stops during hit-stop
   slide: 0, // speed along the rim (per s) after a fast grab
   launchIsland: -1,
   airTime: 0,
@@ -159,10 +162,11 @@ function restart(level: number) {
   cam.y = player.y;
 }
 
-function hitPlayer(dmg: number, fromX: number, fromY: number) {
+function hitPlayer(dmg: number, fromX: number, fromY: number): boolean {
   const p = player;
-  if (p.invuln > 0 || game.state !== "play") return;
+  if (p.invuln > 0 || game.state !== "play") return false;
   p.hp = Math.max(0, p.hp - dmg);
+  p.freeze = Math.max(p.freeze, params.player.hitStop.enemy);
   p.invuln = params.player.health.invulnTime;
   game.shake = 0.35;
   combat.burst(p.x, p.y, p.alt, 10, "#ffd0b0");
@@ -176,6 +180,7 @@ function hitPlayer(dmg: number, fromX: number, fromY: number) {
     game.state = "defeat";
     game.timer = 0;
   }
+  return true;
 }
 
 const cam = { x: 0, y: 0, h: params.camera.view.height };
@@ -389,7 +394,20 @@ function update(dt: number, dtReal: number) {
   const dir = playing ? inputDir() : { x: 0, y: 0 };
   const p = player;
 
-  if (p.mode === "hang") {
+  const frozen = p.freeze > 0;
+  if (frozen) {
+    // Hit-stop: no moving, attacking or animating. After a sword hit in the air, the flight then
+    // turns toward the input.
+    p.freeze -= dtReal;
+    if (p.freeze <= 0 && p.redirect) {
+      p.redirect = false;
+      if (p.mode === "air" && (dir.x || dir.y)) {
+        const sp = Math.hypot(p.vx, p.vy);
+        p.vx = dir.x * sp;
+        p.vy = dir.y * sp;
+      }
+    }
+  } else if (p.mode === "hang") {
     const isl = islands[p.island]!;
     let e = isl.pointAt(p.s);
     // Climb toward the rim point that faces the input direction. Aiming an attack takes over
@@ -485,11 +503,17 @@ function update(dt: number, dtReal: number) {
   }
 
   updateDust(dt);
-  if (playing) updateAttacks(dt, dtReal, dir);
+  if (!frozen) p.anim += dt;
+  if (playing && !frozen) updateAttacks(dt, dtReal, dir);
   p.invuln = Math.max(0, p.invuln - dt);
-  combat.update(dt, { x: p.x, y: p.y, alt: p.alt, targetable: playing && p.mode !== "lost" }, hitPlayer);
+  combat.update(dt, dtReal, { x: p.x, y: p.y, alt: p.alt, targetable: playing && p.mode !== "lost" }, hitPlayer);
   // Hits in the air refill the double jump and some focus; sword hits also bounce you up.
-  for (const weapon of combat.takePlayerHits()) {
+  // Sword hits freeze the player too, scaled by power (the target freezes in Combat).
+  for (const { weapon, power } of combat.takePlayerHits()) {
+    if (weapon === "sword" && p.mode !== "lost") {
+      p.freeze = Math.max(p.freeze, hitStop(power));
+      p.redirect = p.mode === "air";
+    }
     if (p.mode !== "air") continue;
     p.airJumps = 1;
     p.focus = Math.min(1, p.focus + params.player.focus.perHit);
@@ -511,11 +535,13 @@ function update(dt: number, dtReal: number) {
     }
   }
 
-  // Smoothed render position.
-  const k = p.mode === "hang" ? 1 - Math.exp(-18 * dt) : 1;
-  p.rx += (p.x - p.rx) * k;
-  p.ry += (p.y - p.ry) * k;
-  p.ralt += (p.alt - p.ralt) * (p.mode === "hang" ? 1 - Math.exp(-10 * dt) : 1);
+  // Smoothed render position (held during hit-stop, like everything else about the player).
+  if (!frozen) {
+    const k = p.mode === "hang" ? 1 - Math.exp(-18 * dt) : 1;
+    p.rx += (p.x - p.rx) * k;
+    p.ry += (p.y - p.ry) * k;
+    p.ralt += (p.alt - p.ralt) * (p.mode === "hang" ? 1 - Math.exp(-10 * dt) : 1);
+  }
 
   // Camera trails behind and slides in toward the player; it rises a bit with high jumps.
   const lead = params.camera.view.lookAhead;
@@ -1063,7 +1089,7 @@ function render(time: number) {
   }
 
   // Player; while hanging, sort above the lip so the hands overlap the grass edge.
-  list.push({ alt: p.mode === "hang" ? ISLAND_TOP + 0.8 : p.ralt, draw: () => drawPlayer(time) });
+  list.push({ alt: p.mode === "hang" ? ISLAND_TOP + 0.8 : p.ralt, draw: () => drawPlayer() });
   for (const d of dust) {
     list.push({ alt: d.alt, draw: () => drawFlat(dustSprite, proj.project(d.x, d.y, d.alt), 5 * (1.6 - d.life), d.life * 0.8) });
   }
@@ -1090,7 +1116,7 @@ function render(time: number) {
   drawHud();
 }
 
-function drawPlayer(time: number) {
+function drawPlayer() {
   const p = player;
   const pr = proj.project(p.rx, p.ry, p.ralt);
   if (!pr.visible) return;
@@ -1112,7 +1138,7 @@ function drawPlayer(time: number) {
 
   // An unused double jump shows as a ring around the player.
   if (p.airJumps > 0) {
-    ctx.strokeStyle = `rgba(190,244,255,${0.55 + 0.25 * Math.sin(time * 8)})`;
+    ctx.strokeStyle = `rgba(190,244,255,${0.55 + 0.25 * Math.sin(p.anim * 8)})`;
     ctx.lineWidth = 2 * k;
     ctx.beginPath();
     ctx.arc(0, 0, 15 * k, 0, Math.PI * 2);
@@ -1138,7 +1164,7 @@ function drawPlayer(time: number) {
   }
 
   // Cloak
-  const sway = Math.sin(time * 4) * 1.2;
+  const sway = Math.sin(p.anim * 4) * 1.2;
   ctx.fillStyle = "#d9584a";
   ctx.beginPath();
   ctx.moveTo(2 * k, -6 * k);
@@ -1268,7 +1294,7 @@ function pushCombatDrawables(list: Drawable[], time: number) {
       alt: sAlt + 0.2,
       draw: () => drawFlat(shadowSprite, proj.project(b.x, b.y, sAlt), b.r * 1.5, over ? 0.6 : 0.3),
     });
-    list.push({ alt: b.alt, draw: () => drawBoid(b, time) });
+    list.push({ alt: b.alt, draw: () => drawBoid(b) });
   }
   for (const sh of combat.shots) {
     list.push({
@@ -1365,16 +1391,17 @@ function drawSlash(sl: { x: number; y: number; alt: number; dx: number; dy: numb
   ctx.fill();
 }
 
-function drawBoid(b: Boid, time: number) {
+/** Animation runs on `b.phase`, which stops while the boid is frozen by a hit. */
+function drawBoid(b: Boid) {
   const pr = proj.project(b.x, b.y, b.alt);
   if (!pr.visible) return;
   const k = pr.kt;
-  const heading = Math.atan2(b.vy, b.vx);
+  const heading = b.heading;
   ctx.save();
   ctx.translate(pr.x, pr.y);
 
   if (b.kind === "queen") {
-    const pulse = 0.5 + 0.5 * Math.sin(time * 3);
+    const pulse = 0.5 + 0.5 * Math.sin(b.phase * 3);
     const aura = ctx.createRadialGradient(0, 0, 0, 0, 0, 55 * k);
     aura.addColorStop(0, `rgba(230,120,255,${0.35 + 0.15 * pulse})`);
     aura.addColorStop(1, "rgba(230,120,255,0)");
@@ -1383,7 +1410,7 @@ function drawBoid(b: Boid, time: number) {
     ctx.arc(0, 0, 55 * k, 0, Math.PI * 2);
     ctx.fill();
     ctx.rotate(heading);
-    const flap = Math.abs(Math.sin(time * 7));
+    const flap = Math.abs(Math.sin(b.phase * 7));
     ctx.fillStyle = "rgba(240,200,255,0.4)";
     for (const side of [-1, 1]) {
       for (const [ox, w] of [[-2, 1], [-14, 0.75]] as const) {
@@ -1437,7 +1464,7 @@ function drawBoid(b: Boid, time: number) {
       ctx.fill();
     }
     ctx.rotate(heading);
-    const flap = Math.abs(Math.sin(time * 26 + b.id));
+    const flap = Math.abs(Math.sin(b.phase * 26 + b.id));
     ctx.fillStyle = b.kind === "melee" ? "rgba(255,190,210,0.45)" : "rgba(170,255,240,0.45)";
     for (const side of [-1, 1]) {
       ctx.beginPath();
@@ -1500,7 +1527,7 @@ const slow = { scale: 1, intensity: 0, active: false, startedAt: 0 };
 
 function updateTimeScale(dtReal: number) {
   const want = game.state === "play" && player.mode === "air" && player.aim !== null && player.focus > 0;
-  if (want) player.focus = Math.max(0, player.focus - params.player.focus.drain * dtReal);
+  if (want && player.freeze <= 0) player.focus = Math.max(0, player.focus - params.player.focus.drain * dtReal);
   if (want && !slow.active) slow.startedAt = performance.now();
   slow.active = want;
   const span = 1 - params.player.slowMo.scale;

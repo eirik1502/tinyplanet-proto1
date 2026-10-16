@@ -21,6 +21,8 @@ export interface Boid {
   cooldown: number;
   lunge: number; // seconds of lunge left (melee)
   flash: number; // hit flash timer
+  freeze: number; // hit-stop left (s, real time): frozen boids don't move, act or animate
+  heading: number; // facing for drawing; held while frozen (knockback changes vx/vy at once)
   phase: number; // wander / wing-flap phase
   engaged: boolean;
   homeX: number;
@@ -38,6 +40,7 @@ export interface Shot {
   fromPlayer: boolean;
   damage: number;
   scale: number; // visual / hit size multiplier
+  power: number; // 0..1 charge of a player attack (sets the hit-stop)
 }
 
 export interface Slash {
@@ -73,7 +76,18 @@ export interface PlayerView {
   targetable: boolean;
 }
 
-export type HitPlayer = (damage: number, fromX: number, fromY: number) => void;
+/** Hurt the player; false if the hit didn't land (invulnerable, or the round is over). */
+export type HitPlayer = (damage: number, fromX: number, fromY: number) => boolean;
+
+/** A player attack's hit-stop (s), longer for more charged attacks. */
+export function hitStop(power: number) {
+  return lerp(params.player.hitStop.min, params.player.hitStop.max, power);
+}
+
+export interface PlayerHit {
+  weapon: "sword" | "spear";
+  power: number;
+}
 
 const CRUISE_ALT = ISLAND_TOP + 35;
 
@@ -90,7 +104,7 @@ export class Combat {
   private nextId = 0;
   private rand = Math.random;
   /** Player hits since the last `takePlayerHits()`, by weapon. */
-  private playerHits: ("sword" | "spear")[] = [];
+  private playerHits: PlayerHit[] = [];
 
   get queenDead() {
     return this.queen.hp <= 0;
@@ -126,6 +140,8 @@ export class Combat {
       r: kind === "queen" ? 26 : kind === "ranged" ? 9 : 8,
       cooldown: this.rand() * 1.5,
       lunge: 0,
+      freeze: 0,
+      heading: 0,
       flash: 0,
       phase: this.rand() * 100,
       engaged: false,
@@ -161,19 +177,21 @@ export class Combat {
       fromPlayer: true,
       damage: lerp(params.player.spear.damage, params.player.spear.maxDamage, power),
       scale: lerp(1, params.player.spear.maxScale, power),
+      power,
     });
   }
 
-  /** The player's hits since the last call, by weapon (one entry per enemy hit). */
+  /** The player's hits since the last call (one entry per enemy hit). */
   takePlayerHits() {
     const hits = this.playerHits;
     this.playerHits = [];
     return hits;
   }
 
-  private damage(b: Boid, dmg: number, fromX: number, fromY: number, weapon: "sword" | "spear") {
+  private damage(b: Boid, dmg: number, fromX: number, fromY: number, hit: PlayerHit) {
     if (b.hp <= 0) return;
-    this.playerHits.push(weapon);
+    this.playerHits.push(hit);
+    b.freeze = Math.max(b.freeze, hitStop(hit.power));
     b.hp -= dmg;
     b.flash = 0.15;
     const l = Math.hypot(b.x - fromX, b.y - fromY) || 1;
@@ -206,8 +224,9 @@ export class Combat {
   // Update
   // -------------------------------------------------------------------------------------------
 
-  update(dt: number, player: PlayerView, hitPlayer: HitPlayer) {
-    this.updateBoids(dt, player, hitPlayer);
+  /** `dt` is world time; `dtReal` is wall-clock time, which hit-stop runs on. */
+  update(dt: number, dtReal: number, player: PlayerView, hitPlayer: HitPlayer) {
+    this.updateBoids(dt, dtReal, player, hitPlayer);
     this.updateSlashes(dt);
     this.updateShots(dt, player, hitPlayer);
     for (let i = this.sparks.length - 1; i >= 0; i--) {
@@ -237,7 +256,7 @@ export class Combat {
         if (d > s.range + b.r || Math.abs(b.alt - s.alt) > 45 + b.r) continue;
         if (d > 18 && (ox * s.dx + oy * s.dy) / d < cosArc) continue;
         s.hits.add(b);
-        this.damage(b, s.damage, s.x, s.y, "sword");
+        this.damage(b, s.damage, s.x, s.y, { weapon: "sword", power: s.power });
       }
       // The blade also blocks enemy projectiles passing through the swipe.
       for (const sh of this.shots) {
@@ -264,7 +283,7 @@ export class Combat {
         for (const b of this.boids) {
           if (b.hp <= 0) continue;
           if (Math.hypot(b.x - s.x, b.y - s.y) < b.r + params.player.spear.hitRadius * s.scale && Math.abs(b.alt - s.alt) < b.r + 26) {
-            this.damage(b, s.damage, s.x - s.vx * 0.05, s.y - s.vy * 0.05, "spear");
+            this.damage(b, s.damage, s.x - s.vx * 0.05, s.y - s.vy * 0.05, { weapon: "spear", power: s.power });
             s.life = 0;
             break;
           }
@@ -285,7 +304,7 @@ export class Combat {
     this.shots = this.shots.filter((s) => s.life > 0);
   }
 
-  private updateBoids(dt: number, player: PlayerView, hitPlayer: HitPlayer) {
+  private updateBoids(dt: number, dtReal: number, player: PlayerView, hitPlayer: HitPlayer) {
     const q = this.queen;
     const queenAlive = q.hp > 0;
     const playerToQueen = Math.hypot(player.x - q.x, player.y - q.y);
@@ -293,6 +312,11 @@ export class Combat {
 
     for (const b of this.boids) {
       if (b.hp <= 0) continue;
+      if (b.freeze > 0) {
+        b.freeze -= dtReal;
+        continue;
+      }
+      b.heading = Math.atan2(b.vy, b.vx);
       b.phase += dt;
       b.flash = Math.max(0, b.flash - dt);
       b.cooldown -= dt;
@@ -320,7 +344,8 @@ export class Combat {
         this.keepOffIslands(b);
         this.keepInBounds(b);
         if (player.targetable && Math.hypot(px, py, (player.alt - b.alt) * 0.7) < b.r + params.player.health.hitRadius) {
-          hitPlayer(params.enemyAttacks.hit.damage, b.x, b.y);
+          // A landed melee hit freezes the attacker along with the player.
+          if (hitPlayer(params.enemyAttacks.hit.damage, b.x, b.y)) b.freeze = params.player.hitStop.enemy;
           b.lunge = 0;
           b.vx = (-px / dP) * 160;
           b.vy = (-py / dP) * 160;
@@ -434,6 +459,7 @@ export class Combat {
             fromPlayer: false,
             damage: params.enemyAttacks.hit.damage,
             scale: 1,
+            power: 0,
           });
           b.cooldown = params.enemyAttacks.ranged.cooldown + this.rand() * 0.8;
         }

@@ -69,6 +69,11 @@ export const DEFAULTS = {
       fadeIn: 0.08, // Fade in (s)
       fadeOut: 0.15, // Fade out (s)
     },
+    hitStop: {
+      min: 0.04, // Freeze, uncharged hit (s)
+      max: 0.14, // Freeze, full-power hit (s)
+      enemy: 0.08, // Freeze, enemy hit (s)
+    },
     focus: {
       drain: 0.5, // Focus drain while slowed (per s)
       perHit: 0.35, // Focus regained per hit
