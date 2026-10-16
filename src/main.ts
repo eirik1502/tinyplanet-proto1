@@ -4,6 +4,7 @@ import { createTuningPanel, params } from "./tuning";
 import { BLAST_TIME, Combat, hitStop, type Blast, type Boid } from "./combat";
 import { generatePlanet, type Planet } from "./planet";
 import { applyVolumes, music, sfx, toggleMute, unlockAudio } from "./audio";
+import { Avatar, type AvatarView } from "./avatar";
 
 // ---------------------------------------------------------------------------------------------
 // Setup
@@ -133,6 +134,24 @@ function resetPlayer() {
   player.aim = null;
 }
 
+/** The player's look and animation. */
+const avatar = new Avatar();
+
+function avatarView(): AvatarView {
+  const p = player;
+  return {
+    mode: p.mode,
+    x: p.rx,
+    y: p.ry,
+    alt: p.ralt,
+    facing: p.facing,
+    vz: p.vz,
+    aim: p.aim ? { weapon: p.aim.weapon, angle: p.aim.angle, power: aimPower() } : null,
+    spearReady: p.spearCd <= 0,
+    frozen: p.freeze > 0,
+  };
+}
+
 // ---------------------------------------------------------------------------------------------
 // Game state
 // ---------------------------------------------------------------------------------------------
@@ -178,6 +197,7 @@ function hitPlayer(dmg: number, fromX: number, fromY: number): boolean {
   p.invuln = params.player.health.invulnTime;
   game.shake = 0.35;
   sfx.playerHurt();
+  avatar.hurt(fromX, fromY, p.x, p.y);
   combat.burst(p.x, p.y, p.alt, 10, "#ffd0b0");
   if (p.mode === "air") {
     // Knock the flight sideways.
@@ -474,6 +494,8 @@ function update(dt: number, dtReal: number) {
       p.airJumps = 1;
       p.slide = 0;
       sfx.jump();
+      avatar.jump();
+      emitDust(e.x, e.y, 6, 1 / 60);
     }
   } else if (p.mode === "air") {
     // Releasing Space while still rising cuts the jump short.
@@ -498,6 +520,7 @@ function update(dt: number, dtReal: number) {
       }
       combat.burst(p.x, p.y, p.alt - 6, 10, "#bff4ff");
       sfx.doubleJump();
+      avatar.doubleJump();
     }
 
     if (!p.aim) steerAir(dir, dt);
@@ -508,13 +531,18 @@ function update(dt: number, dtReal: number) {
     if (Math.hypot(p.vx, p.vy) > 1) p.facing = Math.atan2(p.vy, p.vx);
 
     if (hit) {
-      sfx.grab(Math.hypot(p.vx, p.vy, p.vz));
+      const speed = Math.hypot(p.vx, p.vy, p.vz);
+      sfx.grab(speed);
+      avatar.land(speed);
       grab(hit.island, hit.s, p.vx, p.vy);
+      const e = islands[hit.island]!.pointAt(hit.s);
+      emitDust(e.x, e.y, 4 + Math.min(10, speed / 80), 1 / 60);
     } else if (netBounce(p, p.netUsed)) {
       p.netUsed = true;
       p.jumpHeld = false;
       combat.burst(p.x, p.y, p.alt, 14, "#9fe8ff");
       sfx.netBounce();
+      avatar.bounce();
     } else if (p.alt < LOST_ALT) {
       p.mode = "lost";
       p.lostTimer = 0;
@@ -565,6 +593,7 @@ function update(dt: number, dtReal: number) {
     if (weapon === "sword") {
       p.vz = Math.max(p.vz, params.move.airJump.bounce);
       p.jumpHeld = false;
+      avatar.bounce();
     }
   }
   playCombatSounds();
@@ -585,6 +614,8 @@ function update(dt: number, dtReal: number) {
     p.ry += (p.y - p.ry) * k;
     p.ralt += (p.alt - p.ralt) * (p.mode === "hang" ? 1 - Math.exp(-10 * dt) : 1);
   }
+
+  avatar.update(dt, avatarView());
 
   // Camera trails behind and slides in toward the player; it rises a bit with high jumps.
   const lead = params.camera.view.lookAhead;
@@ -757,10 +788,12 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
     if (aim.weapon === "sword") {
       combat.swing(p.x, p.y, alt, ax, ay, power);
       sfx.swing(power);
+      avatar.strike("sword", aim.angle, power);
       p.swordCd = params.player.sword.cooldown;
     } else {
       combat.throwSpear(p.x, p.y, alt, ax, ay, power);
       sfx.throwSpear(power);
+      avatar.strike("spear", aim.angle, power);
       p.spearCd = params.player.spear.cooldown;
     }
     p.aim = null;
@@ -1192,59 +1225,26 @@ function drawPlayer() {
   ctx.drawImage(glowSprite, -26 * k, -26 * k, 52 * k, 52 * k);
   ctx.globalCompositeOperation = "source-over";
 
-  // An unused double jump shows as a ring around the player.
+  // An unused double jump shows as a faint ring with sparks circling the player.
   if (p.airJumps > 0) {
-    ctx.strokeStyle = `rgba(190,244,255,${0.55 + 0.25 * Math.sin(p.anim * 8)})`;
-    ctx.lineWidth = 2 * k;
+    ctx.strokeStyle = `rgba(190,244,255,${0.3 + 0.15 * Math.sin(p.anim * 8)})`;
+    ctx.lineWidth = 1.5 * k;
     ctx.beginPath();
-    ctx.arc(0, 0, 15 * k, 0, Math.PI * 2);
+    ctx.arc(0, 0, 17 * k, 0, Math.PI * 2);
     ctx.stroke();
-  }
-
-  ctx.rotate(p.facing);
-  // In this local frame +x points toward the rim (hanging) or along the flight path.
-  if (p.mode === "hang") {
-    // Arms reaching onto the rim.
-    ctx.strokeStyle = "#f2d7b5";
-    ctx.lineCap = "round";
-    ctx.lineWidth = 2.6 * k;
-    const reach = 9;
-    for (const side of [-1, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(1 * k, side * 4 * k);
-      ctx.lineTo(reach * k, side * 5.5 * k);
-      ctx.stroke();
+    ctx.globalCompositeOperation = "screen";
+    for (let i = 0; i < 3; i++) {
+      const a = p.anim * 5 + (i * Math.PI * 2) / 3;
+      ctx.drawImage(glowSprite, Math.cos(a) * 17 * k - 5 * k, Math.sin(a) * 17 * k - 5 * k, 10 * k, 10 * k);
     }
-  } else {
-    ctx.rotate(Math.sin(p.spin) * 0.25);
+    ctx.globalCompositeOperation = "source-over";
   }
-
-  // Cloak
-  const sway = Math.sin(p.anim * 4) * 1.2;
-  ctx.fillStyle = "#d9584a";
-  ctx.beginPath();
-  ctx.moveTo(2 * k, -6 * k);
-  ctx.quadraticCurveTo(-12 * k, -9 * k + sway * k, -15 * k, sway * k);
-  ctx.quadraticCurveTo(-12 * k, 9 * k + sway * k, 2 * k, 6 * k);
-  ctx.closePath();
-  ctx.fill();
-  // Shoulders
-  ctx.fillStyle = "#3b3170";
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 4.5 * k, 6.5 * k, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Head
-  ctx.fillStyle = "#f2d7b5";
-  ctx.beginPath();
-  ctx.arc(0.5 * k, 0, 3.6 * k, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#2a1a14";
-  ctx.beginPath();
-  ctx.arc(-0.6 * k, 0, 3.4 * k, Math.PI * 0.55, Math.PI * 1.45);
-  ctx.fill();
-
   ctx.restore();
 
+  ctx.save();
+  ctx.globalAlpha = fade;
+  avatar.draw(ctx, avatarView(), (x, y, alt) => proj.project(x, y, alt));
+  ctx.restore();
 }
 
 /**
