@@ -22,6 +22,7 @@ bun run typecheck
 | Space | Jump at once (hold for full height); press again in the air to double jump |
 | Z / J | Sword |
 | X / K | Spear |
+| M | Mute / unmute sound |
 
 Every flight has one double jump. Hitting an enemy while airborne refills it (max one) and regains
 focus; a sword hit also bounces you up. Slow motion while winding up an air attack drains focus; grabbing a rim refills

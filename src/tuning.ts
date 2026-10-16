@@ -19,6 +19,7 @@ const TAB_TITLES: Record<keyof Params, string> = {
   player: "Player",
   boids: "Boids",
   enemyAttacks: "Attacks",
+  audio: "Audio",
 };
 
 const GROUP_TITLES: Record<string, string> = {
@@ -47,6 +48,7 @@ const GROUP_TITLES: Record<string, string> = {
   "enemyAttacks.melee": "Melee boids",
   "enemyAttacks.ranged": "Ranged boids",
   "enemyAttacks.bomber": "Bomber boids",
+  "audio.volume": "Volume (M mutes)",
 };
 
 /** [label, min, max, step, appliesOnRestart?] per slider; values without an entry get no slider. */
@@ -164,6 +166,11 @@ const SLIDERS: Record<string, Slider> = {
   "enemyAttacks.bomber.playerPush": ["Push on the player", 0, 1500, 10],
   "enemyAttacks.bomber.playerLift": ["Lift on the player", 0, 1200, 10],
   "enemyAttacks.bomber.boidPush": ["Push on other boids", 0, 1500, 10],
+
+  "audio.volume.master": ["Master", 0, 1, 0.05],
+  "audio.volume.music": ["Music", 0, 1, 0.05],
+  "audio.volume.sfx": ["Sound effects", 0, 1, 0.05],
+  "audio.volume.hearing": ["Enemies heard within", 100, 3000, 50],
 };
 
 // ---------------------------------------------------------------------------------------------

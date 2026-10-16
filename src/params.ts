@@ -172,5 +172,13 @@ export const DEFAULTS = {
       boidPush: 520, // Push on other boids
     },
   },
+  audio: {
+    volume: {
+      master: 0.7, // Master
+      music: 0.45, // Music
+      sfx: 0.8, // Sound effects
+      hearing: 900, // Enemies heard within
+    },
+  },
 };
 

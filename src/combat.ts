@@ -119,6 +119,17 @@ export function hitStop(damage: number) {
   return lerp(h.min, h.max, Math.max(0, Math.min(1, t)));
 }
 
+/** Something that happened in combat, for sound. */
+export interface CombatEvent {
+  type: "hit" | "shot" | "lunge" | "explode" | "block" | "thud";
+  x: number;
+  y: number;
+  alt: number;
+  /** For hits: who was hit, and whether it died. */
+  kind?: BoidKind;
+  killed?: boolean;
+}
+
 export interface PlayerHit {
   weapon: "sword" | "spear";
   damage: number;
@@ -159,6 +170,8 @@ export class Combat {
   private rand = Math.random;
   /** Player hits since the last `takePlayerHits()`, by weapon. */
   private playerHits: PlayerHit[] = [];
+  /** Combat events since the last `takeEvents()`. */
+  private events: CombatEvent[] = [];
   /** The player as of this update, for blasts set off by the player's own hits. */
   private player: PlayerView = { x: 0, y: 0, alt: 0, targetable: false };
   private hooks: PlayerHooks = { hit: () => false, push: () => {} };
@@ -176,6 +189,7 @@ export class Combat {
     this.shots = [];
     this.slashes = [];
     this.playerHits = [];
+    this.events = [];
     this.sparks = [];
     this.blasts = [];
     this.flocks = [];
@@ -266,12 +280,24 @@ export class Combat {
     return hits;
   }
 
+  /** Combat events since the last call. */
+  takeEvents() {
+    const events = this.events;
+    this.events = [];
+    return events;
+  }
+
+  private event(type: CombatEvent["type"], x: number, y: number, alt: number, extra: Partial<CombatEvent> = {}) {
+    this.events.push({ type, x, y, alt, ...extra });
+  }
+
   private damage(b: Boid, dmg: number, fromX: number, fromY: number, weapon: PlayerHit["weapon"]) {
     if (b.hp <= 0) return;
     this.playerHits.push({ weapon, damage: dmg });
     b.freeze = Math.max(b.freeze, hitStop(dmg));
     b.hp -= dmg;
     b.flash = 0.15;
+    this.event("hit", b.x, b.y, b.alt, { kind: b.kind, killed: b.hp <= 0 });
     const l = Math.hypot(b.x - fromX, b.y - fromY) || 1;
     const push = b.kind === "queen" ? 60 : 260;
     b.vx += ((b.x - fromX) / l) * push;
@@ -291,6 +317,7 @@ export class Combat {
     const bp = params.enemyAttacks.bomber;
     const R = bp.blastRadius;
     b.hp = 0;
+    this.event("explode", b.x, b.y, b.alt);
     this.blasts.push({ x: b.x, y: b.y, alt: b.alt, age: 0, radius: R });
     this.burst(b.x, b.y, b.alt, 36, "#ffa040");
     this.burst(b.x, b.y, b.alt, 18, "#fff1a8");
@@ -387,6 +414,7 @@ export class Combat {
         if (d > s.range + 8 || Math.abs(sh.alt - s.alt) > 50) continue;
         if (d > 18 && (ox * s.dx + oy * s.dy) / d < cosArc) continue;
         sh.life = 0;
+        this.event("block", sh.x, sh.y, sh.alt);
         this.burst(sh.x, sh.y, sh.alt, 8, "#f4ffd0");
       }
     }
@@ -417,6 +445,7 @@ export class Combat {
       }
       // Islands block projectiles.
       if (s.life > 0 && this.islands.some((i) => i.intersects(s.x, s.y, s.alt, 2))) {
+        this.event("thud", s.x, s.y, s.alt);
         this.burst(s.x, s.y, s.alt, 4, s.fromPlayer ? "#f4e3c0" : "#c9ff7a");
         s.life = 0;
       }
@@ -707,6 +736,7 @@ export class Combat {
           b.vx = (px / dP) * params.enemyAttacks.melee.lungeSpeed;
           b.vy = (py / dP) * params.enemyAttacks.melee.lungeSpeed;
           b.cooldown = params.enemyAttacks.melee.cooldown + this.rand() * 0.5;
+          this.event("lunge", b.x, b.y, b.alt);
           continue;
         }
         if (b.kind === "ranged" && dP < params.enemyAttacks.ranged.range) {
@@ -725,6 +755,7 @@ export class Combat {
             scale: 1,
           });
           b.cooldown = params.enemyAttacks.ranged.cooldown + this.rand() * 0.8;
+          this.event("shot", b.x, b.y, b.alt);
         }
       }
 

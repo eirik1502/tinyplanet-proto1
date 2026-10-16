@@ -3,6 +3,7 @@ import { Projector, type Projected } from "./projection";
 import { createTuningPanel, params } from "./tuning";
 import { BLAST_TIME, Combat, hitStop, type Blast, type Boid } from "./combat";
 import { generatePlanet, type Planet } from "./planet";
+import { applyVolumes, music, sfx, toggleMute, unlockAudio } from "./audio";
 
 // ---------------------------------------------------------------------------------------------
 // Setup
@@ -43,6 +44,8 @@ const pressed = new Set<string>();
 const released = new Set<string>();
 window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement) return;
+  unlockAudio();
+  if (e.code === "KeyM" && !e.repeat) toggleMute();
   if (!keys.has(e.code)) pressed.add(e.code);
   keys.add(e.code);
   if (e.code.startsWith("Arrow") || e.code === "Space") e.preventDefault();
@@ -52,6 +55,7 @@ window.addEventListener("keyup", (e) => {
   released.add(e.code);
 });
 window.addEventListener("blur", () => keys.clear());
+window.addEventListener("pointerdown", unlockAudio);
 
 /** Arrow keys / WASD as a screen-space unit vector (y down). */
 function inputDir(): Vec {
@@ -158,6 +162,7 @@ function restart(level: number) {
   planet = generatePlanet(Math.floor(Math.random() * 1e9), levelSpec(level));
   islands = planet.islands;
   combat.reset(planet);
+  music.setSeed(planet.seed);
   resetPlayer();
   game.state = "play";
   game.timer = 0;
@@ -172,6 +177,7 @@ function hitPlayer(dmg: number, fromX: number, fromY: number): boolean {
   p.freeze = Math.max(p.freeze, hitStop(dmg));
   p.invuln = params.player.health.invulnTime;
   game.shake = 0.35;
+  sfx.playerHurt();
   combat.burst(p.x, p.y, p.alt, 10, "#ffd0b0");
   if (p.mode === "air") {
     // Knock the flight sideways.
@@ -179,10 +185,7 @@ function hitPlayer(dmg: number, fromX: number, fromY: number): boolean {
     p.vx += ((p.x - fromX) / l) * 160;
     p.vy += ((p.y - fromY) / l) * 160;
   }
-  if (p.hp <= 0) {
-    game.state = "defeat";
-    game.timer = 0;
-  }
+  if (p.hp <= 0) endRound("defeat");
   return true;
 }
 
@@ -470,6 +473,7 @@ function update(dt: number, dtReal: number) {
       p.jumpHeld = true;
       p.airJumps = 1;
       p.slide = 0;
+      sfx.jump();
     }
   } else if (p.mode === "air") {
     // Releasing Space while still rising cuts the jump short.
@@ -493,6 +497,7 @@ function update(dt: number, dtReal: number) {
         p.vy = aim.y * sp;
       }
       combat.burst(p.x, p.y, p.alt - 6, 10, "#bff4ff");
+      sfx.doubleJump();
     }
 
     if (!p.aim) steerAir(dir, dt);
@@ -502,14 +507,18 @@ function update(dt: number, dtReal: number) {
     p.spin += dt * 3;
     if (Math.hypot(p.vx, p.vy) > 1) p.facing = Math.atan2(p.vy, p.vx);
 
-    if (hit) grab(hit.island, hit.s, p.vx, p.vy);
-    else if (netBounce(p, p.netUsed)) {
+    if (hit) {
+      sfx.grab(Math.hypot(p.vx, p.vy, p.vz));
+      grab(hit.island, hit.s, p.vx, p.vy);
+    } else if (netBounce(p, p.netUsed)) {
       p.netUsed = true;
       p.jumpHeld = false;
       combat.burst(p.x, p.y, p.alt, 14, "#9fe8ff");
+      sfx.netBounce();
     } else if (p.alt < LOST_ALT) {
       p.mode = "lost";
       p.lostTimer = 0;
+      sfx.lost();
     }
   } else {
     // Sinking into the haze, then reappear on the last rim we held.
@@ -523,12 +532,10 @@ function update(dt: number, dtReal: number) {
     if (p.lostTimer > 1.6) {
       if (game.state === "play") {
         p.hp = Math.max(0, p.hp - params.player.health.fallDamage);
-        if (p.hp <= 0) {
-          game.state = "defeat";
-          game.timer = 0;
-        }
+        if (p.hp <= 0) endRound("defeat");
       }
       grab(p.safeIsland, p.safeS);
+      sfx.respawn();
       p.invuln = params.player.health.invulnTime;
       const e = islands[p.island]!.pointAt(p.s);
       p.x = p.rx = e.x + e.nx * 7;
@@ -560,11 +567,9 @@ function update(dt: number, dtReal: number) {
       p.jumpHeld = false;
     }
   }
+  playCombatSounds();
   game.shake = Math.max(0, game.shake - dt);
-  if (game.state === "play" && combat.queenDead) {
-    game.state = "victory";
-    game.timer = 0;
-  }
+  if (game.state === "play" && combat.queenDead) endRound("victory");
   if (game.state !== "play") {
     game.timer += dt;
     // Winning moves on to the next level; losing replays the same level on a fresh planet.
@@ -591,8 +596,16 @@ function update(dt: number, dtReal: number) {
   const th = params.camera.view.height + Math.max(0, p.alt - ISLAND_TOP) * 0.8;
   cam.h += (th - cam.h) * (1 - Math.exp(-1.5 * dt));
 
+  updateSound();
   pressed.clear();
   released.clear();
+}
+
+function endRound(state: "victory" | "defeat") {
+  game.state = state;
+  game.timer = 0;
+  if (state === "victory") sfx.victory();
+  else sfx.defeat();
 }
 
 /**
@@ -724,12 +737,15 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
       angle = Math.atan2(p.vy, p.vx);
     }
     p.aim = { weapon, t: 0, angle };
+    sfx.aim(weapon);
     return;
   }
 
   const aim = p.aim;
   // Aiming runs on real time so slow motion doesn't slow the charge or the turning.
+  const wasCharged = aimPower() >= 1;
   aim.t += dtReal;
+  if (!wasCharged && aimPower() >= 1) sfx.charged();
   const pa = params.player.aim;
   aim.angle = clampAimToRim(turnAim(aim.angle, dir, aim.t / pa.chargeTime, dtReal, pa.turnRate, pa.minTurnRate));
 
@@ -740,9 +756,11 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
     const alt = p.mode === "hang" ? ISLAND_TOP + 2 : p.alt;
     if (aim.weapon === "sword") {
       combat.swing(p.x, p.y, alt, ax, ay, power);
+      sfx.swing(power);
       p.swordCd = params.player.sword.cooldown;
     } else {
       combat.throwSpear(p.x, p.y, alt, ax, ay, power);
+      sfx.throwSpear(power);
       p.spearCd = params.player.spear.cooldown;
     }
     p.aim = null;
@@ -1319,6 +1337,57 @@ function pushBoundsDrawables(list: Drawable[], time: number) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Sound
+// ---------------------------------------------------------------------------------------------
+
+/** Loudness and stereo position of a sound at a world position, heard from the player. */
+function heardAt(x: number, y: number, alt: number) {
+  const d = Math.hypot(x - player.x, y - player.y);
+  const gain = Math.max(0, 1 - d / params.audio.volume.hearing) ** 1.5;
+  const pr = proj.project(x, y, alt);
+  const pan = pr.visible ? Math.max(-1, Math.min(1, (pr.x - W / 2) / (W / 2))) * 0.8 : 0;
+  return { gain, pan };
+}
+
+function playCombatSounds() {
+  for (const ev of combat.takeEvents()) {
+    const at = heardAt(ev.x, ev.y, ev.alt);
+    if (ev.type === "hit") {
+      // The player's own hits are always heard at full volume.
+      sfx.hitEnemy(ev.kind!, ev.killed!, { pan: at.pan });
+      if (ev.kind === "queen" && ev.killed) sfx.queenDeath();
+      continue;
+    }
+    if (at.gain <= 0.01) continue;
+    if (ev.type === "shot") sfx.orbShot(at);
+    else if (ev.type === "lunge") sfx.lunge(at);
+    else if (ev.type === "explode") sfx.explosion({ pan: at.pan, gain: Math.max(0.35, at.gain) });
+    else if (ev.type === "block") sfx.block(at);
+    else sfx.thud(at);
+  }
+}
+
+/** Held sounds and the music's mood, every frame. */
+function updateSound() {
+  const p = player;
+  const playing = game.state === "play";
+  const slide = p.mode === "hang" && p.freeze <= 0 ? Math.min(1, Math.abs(p.slide) / 400) : 0;
+  const wind = p.mode === "air" ? Math.min(1, Math.hypot(p.vx, p.vy, p.vz) / (launchSpeed() * 1.8)) : 0;
+  sfx.loops(slide, wind);
+
+  // The fight heats up with the number of engaged boids nearby, and when the queen is close.
+  let near = 0;
+  for (const b of combat.boids) {
+    if (b.hp > 0 && b.kind !== "queen" && b.flock.engaged && Math.hypot(b.x - p.x, b.y - p.y) < 700) near++;
+  }
+  const q = combat.queen;
+  const queenNear = q.hp > 0 && Math.hypot(q.x - p.x, q.y - p.y) < params.boids.queen.threatRadius ? 0.5 : 0;
+  const intensity = playing ? Math.min(1, near / 6 + queenNear) : 0;
+  music.update(intensity, slow.intensity, playing ? 1 : 0.25);
+  applyVolumes();
+}
+
+// ---------------------------------------------------------------------------------------------
 // Combat rendering
 // ---------------------------------------------------------------------------------------------
 
@@ -1613,7 +1682,11 @@ const slow = { scale: 1, intensity: 0, active: false, startedAt: 0 };
 function updateTimeScale(dtReal: number) {
   const want = game.state === "play" && player.mode === "air" && player.aim !== null && player.focus > 0;
   if (want && player.freeze <= 0) player.focus = Math.max(0, player.focus - params.player.focus.drain * dtReal);
-  if (want && !slow.active) slow.startedAt = performance.now();
+  if (want && !slow.active) {
+    slow.startedAt = performance.now();
+    sfx.slowMoIn();
+  }
+  if (!want && slow.active) sfx.slowMoOut();
   slow.active = want;
   const span = 1 - params.player.slowMo.scale;
   const target = want ? params.player.slowMo.scale : 1;
