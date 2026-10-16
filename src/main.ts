@@ -219,14 +219,39 @@ function launch(islandIdx: number, s: number, angle: number): Flight {
 /** Most a jump can lean away from straight out of the rim, so it clears the island it leaves. */
 const MAX_JUMP_LEAN = 1.13;
 
-/** Jump direction from a rim: toward the input, within MAX_JUMP_LEAN of straight out. */
+/**
+ * Jump direction from a rim: toward the input, or without input the way the player is sliding,
+ * within MAX_JUMP_LEAN of straight out. Straight out when neither.
+ */
 function jumpAngle(dir: Vec): number {
   const e = islands[player.island]!.pointAt(player.s);
   const out = Math.atan2(e.ny, e.nx);
-  if (!dir.x && !dir.y) return out;
+  if (!dir.x && !dir.y) {
+    if (!player.slide) return out;
+    const side = Math.sign(player.slide);
+    dir = { x: e.tx * side, y: e.ty * side };
+  }
   let diff = Math.atan2(dir.y, dir.x) - out;
   diff = Math.atan2(Math.sin(diff), Math.cos(diff));
   return out + Math.max(-MAX_JUMP_LEAN, Math.min(MAX_JUMP_LEAN, diff));
+}
+
+/**
+ * A jump from a slide keeps some of the slide's momentum: its velocity along the rim adds to the
+ * launch, turning and speeding the jump, still within MAX_JUMP_LEAN of straight out.
+ */
+function carrySlide(f: Flight, e: { nx: number; ny: number; tx: number; ty: number }) {
+  const carry = player.slide * params.move.slide.jumpCarry;
+  if (!carry) return;
+  const vx = f.vx + e.tx * carry;
+  const vy = f.vy + e.ty * carry;
+  const sp = Math.hypot(vx, vy);
+  const out = Math.atan2(e.ny, e.nx);
+  let diff = Math.atan2(vy, vx) - out;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+  const a = out + Math.max(-MAX_JUMP_LEAN, Math.min(MAX_JUMP_LEAN, diff));
+  f.vx = Math.cos(a) * sp;
+  f.vy = Math.sin(a) * sp;
 }
 
 /** Gravity at vertical speed `vz`: weaker near the apex, so jumps hang there a moment. */
@@ -335,6 +360,7 @@ function update(dt: number, dtReal: number) {
     // Space jumps at once; holding it keeps the jump going full height (see the air section).
     if (playing && pressed.has("Space")) {
       const f = launch(p.island, p.s, jumpAngle(dir));
+      carrySlide(f, e);
       Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
       p.mode = "air";
       p.airTime = 0;

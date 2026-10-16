@@ -76,6 +76,7 @@ const SLIDERS: Record<string, Slider> = {
   "move.slide.minSpeed": ["Slide min speed", 0, 600, 10],
   "move.slide.keep": ["Slide speed kept", 0, 1.5, 0.05],
   "move.slide.friction": ["Slide friction", 0.1, 10, 0.1],
+  "move.slide.jumpCarry": ["Slide speed carried into a jump", 0, 1.5, 0.05],
 
   "camera.view.height": ["Height", 150, 1500, 10],
   "camera.view.followSpeed": ["Follow speed", 0.2, 15, 0.1],

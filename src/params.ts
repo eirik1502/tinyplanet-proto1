@@ -45,6 +45,7 @@ export const DEFAULTS = {
       minSpeed: 100, // Slide min speed
       keep: 1, // Slide speed kept
       friction: 2.2, // Slide friction
+      jumpCarry: 0.6, // Slide speed carried into a jump
     },
   },
   camera: {
