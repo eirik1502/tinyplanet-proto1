@@ -19,12 +19,12 @@ bun run typecheck
 | Key | Action |
 | --- | --- |
 | Arrows / WASD | Climb; steer, speed up and brake while airborne |
-| Space | Jump at once (hold for full height); in the air, use a banked extra jump |
+| Space | Jump at once (hold for full height); press again in the air to double jump |
 | Z / J | Sword |
 | X / K | Spear |
 
-Hitting an enemy banks one extra jump (max one) and regains focus. A sword hit in the air also
-bounces you up. Slow motion while winding up an air attack drains focus; grabbing a rim refills
+Every flight has one double jump. Hitting an enemy while airborne refills it (max one) and regains
+focus; a sword hit also bounces you up. Slow motion while winding up an air attack drains focus; grabbing a rim refills
 it. The first dip below the rim in a flight springs you back up once.
 
 Game parameters can be tweaked live from the in-game slider panel (defaults in `src/params.ts`).

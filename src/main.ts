@@ -81,7 +81,7 @@ const player = {
   vy: 0,
   vz: 0,
   jumpHeld: false, // Space still held since the last jump: releasing early cuts it short
-  airJumps: 0, // extra jumps in the bank (0 or 1), earned by hitting enemies
+  airJumps: 0, // double jumps left (0 or 1): one per flight, refilled by hits in the air
   netUsed: false, // the safety bounce below the rim is spent until the next grab
   focus: 1, // 0..1 slow-motion budget
   slide: 0, // speed along the rim (per s) after a fast grab
@@ -124,7 +124,6 @@ function resetPlayer() {
   player.invuln = 0;
   player.swordCd = player.spearCd = 0;
   player.aim = null;
-  player.airJumps = 0;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -191,6 +190,7 @@ function grab(islandIdx: number, s: number, vx = 0, vy = 0) {
   player.s = s;
   player.vx = player.vy = player.vz = 0;
   player.jumpHeld = false;
+  player.airJumps = 0;
   player.netUsed = false;
   player.focus = 1;
   player.safeIsland = islandIdx;
@@ -300,6 +300,7 @@ function update(dt: number, dtReal: number) {
       p.airTime = 0;
       p.launchIsland = p.island;
       p.jumpHeld = true;
+      p.airJumps = 1;
       p.slide = 0;
     }
   } else if (p.mode === "air") {
@@ -310,7 +311,7 @@ function update(dt: number, dtReal: number) {
     }
     if (p.jumpHeld && p.vz <= 0) p.jumpHeld = false;
 
-    // Extra jump, earned by hitting enemies: a fresh rise, turned toward the input.
+    // Double jump: a fresh rise, turned toward the input.
     if (playing && pressed.has("Space") && p.airJumps > 0) {
       p.airJumps = 0;
       p.vz = Math.max(p.vz, launchSpeed() * params.move.airJump.strength);
@@ -369,12 +370,12 @@ function update(dt: number, dtReal: number) {
   if (playing) updateAttacks(dt, dtReal, dir);
   p.invuln = Math.max(0, p.invuln - dt);
   combat.update(dt, { x: p.x, y: p.y, alt: p.alt, targetable: playing && p.mode !== "lost" }, hitPlayer);
-  // Hits earn an extra jump and focus; a sword hit in the air also bounces you up.
+  // Hits in the air refill the double jump and some focus; sword hits also bounce you up.
   for (const weapon of combat.takePlayerHits()) {
-    if (p.mode === "lost") continue;
+    if (p.mode !== "air") continue;
     p.airJumps = 1;
     p.focus = Math.min(1, p.focus + params.player.focus.perHit);
-    if (weapon === "sword" && p.mode === "air") {
+    if (weapon === "sword") {
       p.vz = Math.max(p.vz, params.move.airJump.bounce);
       p.jumpHeld = false;
     }
@@ -965,7 +966,7 @@ function drawPlayer(time: number) {
   ctx.drawImage(glowSprite, -26 * k, -26 * k, 52 * k, 52 * k);
   ctx.globalCompositeOperation = "source-over";
 
-  // A banked extra jump shows as a ring around the player.
+  // An unused double jump shows as a ring around the player.
   if (p.airJumps > 0) {
     ctx.strokeStyle = `rgba(190,244,255,${0.55 + 0.25 * Math.sin(time * 8)})`;
     ctx.lineWidth = 2 * k;
@@ -1516,7 +1517,7 @@ function drawHud() {
   ctx.fillStyle = player.focus > 0 ? "#8fe3ff" : "rgba(143,227,255,0.3)";
   ctx.fillRect(16, 52, fw * player.focus, 4);
   ctx.fillStyle = "#d8f6ff";
-  ctx.fillText(`◷ focus${player.airJumps > 0 ? "  ·  ⤒ extra jump" : ""}`, 16, 62);
+  ctx.fillText(`◷ focus${player.airJumps > 0 ? "  ·  ⤒ double jump" : ""}`, 16, 62);
 
   // Queen health
   const q = combat.queen;

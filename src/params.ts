@@ -36,7 +36,7 @@ export const DEFAULTS = {
       grabRadius: 18, // Grab radius
     },
     airJump: {
-      strength: 0.85, // Extra jump height (× launch)
+      strength: 0.85, // Double jump height (× launch)
       bounce: 520, // Sword-hit bounce (up speed)
       netDepth: 45, // Safety bounce depth below rim
       netBounce: 480, // Safety bounce (up speed)
