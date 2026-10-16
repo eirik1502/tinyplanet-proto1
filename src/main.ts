@@ -235,6 +235,46 @@ function gravityAt(vz: number) {
   return Math.abs(vz) < j.apexBand ? j.gravity * j.apexGravity : j.gravity;
 }
 
+/**
+ * Double-jump direction: toward the closest island, at the rim point that needs the least turn
+ * from the current heading (without a heading: the nearest point).
+ */
+function doubleJumpDir(): Vec | null {
+  const p = player;
+  let isl: Island | null = null;
+  let bestD = Infinity;
+  for (const i of islands) {
+    const d = i.closest(p.x, p.y).d;
+    if (d < bestD) {
+      isl = i;
+      bestD = d;
+    }
+  }
+  if (!isl) return null;
+
+  const sp = Math.hypot(p.vx, p.vy);
+  const heading = Math.atan2(p.vy, p.vx);
+  let tx = 0;
+  let ty = 0;
+  let best = Infinity;
+  for (let s = 0; s < isl.perimeter; s += 6) {
+    const e = isl.pointAt(s);
+    let score: number;
+    if (sp > 1) {
+      const diff = Math.atan2(e.y - p.y, e.x - p.x) - heading;
+      score = Math.abs(Math.atan2(Math.sin(diff), Math.cos(diff)));
+    } else score = Math.hypot(e.x - p.x, e.y - p.y);
+    if (score < best) {
+      best = score;
+      tx = e.x;
+      ty = e.y;
+    }
+  }
+
+  const d = Math.hypot(tx - p.x, ty - p.y) || 1;
+  return { x: (tx - p.x) / d, y: (ty - p.y) / d };
+}
+
 /** The safety bounce: the first dip below the rim in a flight springs back up. */
 function netBounce(f: { alt: number; vz: number }, used: boolean): boolean {
   if (used || f.vz >= 0 || f.alt > ISLAND_TOP - params.move.airJump.netDepth) return false;
@@ -311,15 +351,18 @@ function update(dt: number, dtReal: number) {
     }
     if (p.jumpHeld && p.vz <= 0) p.jumpHeld = false;
 
-    // Double jump: a fresh rise, turned toward the input.
+    // Double jump: a fresh rise, heading for the closest island. The jump speed adds to whatever
+    // of the current velocity already points that way, so jumping along the flight speeds it up.
     if (playing && pressed.has("Space") && p.airJumps > 0) {
       p.airJumps = 0;
-      p.vz = Math.max(p.vz, launchSpeed() * params.move.airJump.strength);
+      const jump = launchSpeed() * params.move.airJump.strength;
+      p.vz = Math.max(p.vz, jump);
       p.jumpHeld = true;
-      if (dir.x || dir.y) {
-        const sp = Math.hypot(p.vx, p.vy);
-        p.vx = dir.x * sp;
-        p.vy = dir.y * sp;
+      const aim = doubleJumpDir();
+      if (aim) {
+        const sp = Math.max(0, p.vx * aim.x + p.vy * aim.y) + jump;
+        p.vx = aim.x * sp;
+        p.vy = aim.y * sp;
       }
       combat.burst(p.x, p.y, p.alt - 6, 10, "#bff4ff");
     }
