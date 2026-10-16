@@ -39,12 +39,14 @@ const GROUP_TITLES: Record<string, string> = {
   "player.sword": "Sword",
   "player.spear": "Spear",
   "boids.swarm": "Swarm",
-  "boids.flocking": "Flocking",
+  "boids.flocking": "Flocking (within a flock)",
+  "boids.flocks": "Flocks",
   "boids.islands": "Islands",
   "boids.queen": "Queen",
   "enemyAttacks.hit": "Damage",
   "enemyAttacks.melee": "Melee boids",
   "enemyAttacks.ranged": "Ranged boids",
+  "enemyAttacks.bomber": "Bomber boids",
 };
 
 /** [label, min, max, step, appliesOnRestart?] per slider; values without an entry get no slider. */
@@ -55,10 +57,12 @@ const SLIDERS: Record<string, Slider> = {
   "world.level1.islands": ["Islands", 1, 40, 1, true],
   "world.level1.melee": ["Melee boids", 0, 100, 1, true],
   "world.level1.ranged": ["Ranged boids", 0, 100, 1, true],
+  "world.level1.bombers": ["Bomber boids", 0, 100, 1, true],
   "world.perLevel.radius": ["Boundary radius", 0, 300, 5, true],
   "world.perLevel.islands": ["Islands", 0, 6, 0.1, true],
   "world.perLevel.melee": ["Melee boids", 0, 20, 0.1, true],
   "world.perLevel.ranged": ["Ranged boids", 0, 20, 0.1, true],
+  "world.perLevel.bombers": ["Bomber boids", 0, 20, 0.1, true],
 
   "move.climb.speed": ["Climb speed", 50, 800, 10],
   "move.jump.length": ["Full jump length (Space held)", 100, 1000, 10],
@@ -120,6 +124,7 @@ const SLIDERS: Record<string, Slider> = {
 
   "boids.swarm.meleeSpeed": ["Melee speed", 20, 600, 5],
   "boids.swarm.rangedSpeed": ["Ranged speed", 20, 600, 5],
+  "boids.swarm.bomberSpeed": ["Bomber speed", 20, 600, 5],
   "boids.swarm.aggroRange": ["Aggro range", 0, 1200, 10],
   "boids.swarm.disengageRange": ["Disengage range", 0, 2000, 10],
   "boids.flocking.neighborRadius": ["Neighbour radius", 10, 400, 5],
@@ -128,14 +133,19 @@ const SLIDERS: Record<string, Slider> = {
   "boids.flocking.alignment": ["Alignment", 0, 5, 0.05],
   "boids.flocking.cohesion": ["Cohesion", 0, 5, 0.05],
   "boids.flocking.wander": ["Wander", 0, 300, 5],
-  "boids.flocking.queenAttraction": ["Pull toward queen", 0, 200, 5],
+  "boids.flocks.startSize": ["Starting flock size", 1, 20, 1, true],
+  "boids.flocks.maxSize": ["Largest flock from joining", 1, 40, 1],
+  "boids.flocks.roamSpeed": ["Roam speed", 0, 300, 5],
+  "boids.flocks.joinChance": ["Chance to join another flock (per s)", 0, 1, 0.01],
+  "boids.flocks.joinRange": ["Looks for flocks to join within", 0, 2000, 10],
+  "boids.flocks.leaveChance": ["Chance some members leave (per s)", 0, 1, 0.01],
   "boids.islands.margin": ["Rim clearance", 0, 120, 1],
   "boids.islands.avoid": ["Avoid strength", 0, 200, 1],
   "boids.queen.hp": ["Health", 1, 200, 1, true],
   "boids.queen.speed": ["Speed", 0, 400, 5],
   "boids.queen.fleeRange": ["Flee range", 0, 1000, 10],
   "boids.queen.tether": ["Stays near home", 50, 1000, 10],
-  "boids.queen.guardRadius": ["Guard radius", 0, 1500, 10],
+  "boids.queen.escort": ["Escort flock size (at start)", 0, 20, 1, true],
   "boids.queen.threatRadius": ["Threat radius", 0, 1500, 10],
 
   "enemyAttacks.hit.damage": ["Damage per hit (%)", 0, 50, 0.5],
@@ -148,6 +158,12 @@ const SLIDERS: Record<string, Slider> = {
   "enemyAttacks.ranged.orbSpeed": ["Orb speed", 20, 1500, 10],
   "enemyAttacks.ranged.orbLife": ["Orb life (s)", 0.2, 6, 0.1],
   "enemyAttacks.ranged.cooldown": ["Cooldown (s)", 0.1, 6, 0.05],
+  "enemyAttacks.bomber.triggerRange": ["Trigger range", 5, 100, 1],
+  "enemyAttacks.bomber.blastRadius": ["Blast radius", 20, 500, 5],
+  "enemyAttacks.bomber.damage": ["Damage (%)", 0, 50, 0.5],
+  "enemyAttacks.bomber.playerPush": ["Push on the player", 0, 1500, 10],
+  "enemyAttacks.bomber.playerLift": ["Lift on the player", 0, 1200, 10],
+  "enemyAttacks.bomber.boidPush": ["Push on other boids", 0, 1500, 10],
 };
 
 // ---------------------------------------------------------------------------------------------

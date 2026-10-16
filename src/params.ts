@@ -8,14 +8,16 @@ export const DEFAULTS = {
     level1: {
       radius: 600, // Boundary radius
       islands: 4, // Islands
-      melee: 3, // Melee boids
+      melee: 6, // Melee boids
       ranged: 0, // Ranged boids
+      bombers: 1, // Bomber boids
     },
     perLevel: {
       radius: 80, // Boundary radius
       islands: 1.6, // Islands
-      melee: 5, // Melee boids
-      ranged: 2.8, // Ranged boids
+      melee: 4, // Melee boids
+      ranged: 2.4, // Ranged boids
+      bombers: 1.2, // Bomber boids
     },
   },
   move: {
@@ -111,6 +113,7 @@ export const DEFAULTS = {
     swarm: {
       meleeSpeed: 190, // Melee speed
       rangedSpeed: 160, // Ranged speed
+      bomberSpeed: 215, // Bomber speed
       aggroRange: 200, // Aggro range
       disengageRange: 560, // Disengage range
     },
@@ -121,7 +124,14 @@ export const DEFAULTS = {
       alignment: 0.55, // Alignment
       cohesion: 0.2, // Cohesion
       wander: 40, // Wander
-      queenAttraction: 10, // Pull toward queen
+    },
+    flocks: {
+      startSize: 4, // Starting flock size
+      maxSize: 10, // Largest flock from joining
+      roamSpeed: 75, // Roam speed
+      joinChance: 0.08, // Chance to join another flock (per s)
+      joinRange: 700, // Looks for flocks to join within
+      leaveChance: 0.05, // Chance some members leave (per s)
     },
     islands: {
       margin: 26, // Rim clearance
@@ -132,7 +142,7 @@ export const DEFAULTS = {
       speed: 85, // Speed
       fleeRange: 320, // Flee range
       tether: 1000, // Stays near home
-      guardRadius: 210, // Guard radius
+      escort: 4, // Escort flock size (at start)
       threatRadius: 410, // Threat radius
     },
   },
@@ -152,6 +162,14 @@ export const DEFAULTS = {
       orbSpeed: 280, // Orb speed
       orbLife: 2.2, // Orb life (s)
       cooldown: 1.7, // Cooldown (s)
+    },
+    bomber: {
+      triggerRange: 22, // Trigger range
+      blastRadius: 150, // Blast radius
+      damage: 6, // Damage (%)
+      playerPush: 560, // Push on the player
+      playerLift: 420, // Lift on the player
+      boidPush: 520, // Push on other boids
     },
   },
 };

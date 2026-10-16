@@ -1,7 +1,8 @@
 import { Island, mulberry32 } from "./island";
 
 // Procedural planet: islands inside a circular boundary, where the player starts, where the queen
-// lives, where the swarm spawns, and a colour theme for the islands. Everything follows from a seed.
+// lives, where the swarm's flocks spawn, and a colour theme for the islands. Everything follows
+// from a seed.
 
 export type RGB = number[];
 
@@ -25,15 +26,25 @@ export interface Planet {
   bounds: { x: number; y: number; r: number };
   startIsland: number;
   queenHome: { x: number; y: number };
-  spawns: { kind: "melee" | "ranged"; x: number; y: number }[];
+  /** The queen's escort: they spawn around her and share her flock. */
+  escort: SpawnKind[];
+  /** The other flocks: where each spawns and who is in it. */
+  flocks: { x: number; y: number; kinds: SpawnKind[] }[];
   theme: Theme;
 }
+
+export type SpawnKind = "melee" | "ranged" | "bomber";
 
 export interface PlanetOptions {
   radius: number;
   islandCount: number;
   meleeCount: number;
   rangedCount: number;
+  bomberCount: number;
+  /** Members per flock at the start (the last flock may be smaller). */
+  flockSize: number;
+  /** How many of the swarm escort the queen. */
+  escortCount: number;
 }
 
 export function generatePlanet(seed: number, opt: PlanetOptions): Planet {
@@ -52,19 +63,29 @@ export function generatePlanet(seed: number, opt: PlanetOptions): Planet {
   const clearOfIslands = (x: number, y: number) =>
     islands.every((i) => Math.hypot(i.cx - x, i.cy - y) > i.radius * 1.35 + 20);
 
-  const spawns: Planet["spawns"] = [];
-  const total = opt.meleeCount + opt.rangedCount;
-  for (let n = 0, tries = 0; n < total && tries < total * 200; tries++) {
+  // Shuffle the swarm, give the queen her escort, and split the rest into flocks.
+  const kinds: SpawnKind[] = [
+    ...Array<SpawnKind>(opt.meleeCount).fill("melee"),
+    ...Array<SpawnKind>(opt.rangedCount).fill("ranged"),
+    ...Array<SpawnKind>(opt.bomberCount).fill("bomber"),
+  ];
+  for (let i = kinds.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [kinds[i], kinds[j]] = [kinds[j]!, kinds[i]!];
+  }
+  const escort = kinds.splice(0, opt.escortCount);
+  const size = Math.max(1, Math.round(opt.flockSize));
+  const flocks: Planet["flocks"] = [];
+  for (let tries = 0; kinds.length && tries < 4000; tries++) {
     const a = rand() * Math.PI * 2;
     const d = Math.sqrt(rand()) * R * 0.92;
     const x = Math.cos(a) * d;
     const y = Math.sin(a) * d;
     if (Math.hypot(x - start.cx, y - start.cy) < 520 || !clearOfIslands(x, y)) continue;
-    spawns.push({ kind: n < opt.meleeCount ? "melee" : "ranged", x, y });
-    n++;
+    flocks.push({ x, y, kinds: kinds.splice(0, size) });
   }
 
-  return { seed, islands, bounds: { x: 0, y: 0, r: R }, startIsland, queenHome, spawns, theme: generateTheme(rand) };
+  return { seed, islands, bounds: { x: 0, y: 0, r: R }, startIsland, queenHome, escort, flocks, theme: generateTheme(rand) };
 }
 
 /**

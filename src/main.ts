@@ -1,7 +1,7 @@
 import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
 import { createTuningPanel, params } from "./tuning";
-import { Combat, hitStop, type Boid } from "./combat";
+import { BLAST_TIME, Combat, hitStop, type Blast, type Boid } from "./combat";
 import { generatePlanet, type Planet } from "./planet";
 
 // ---------------------------------------------------------------------------------------------
@@ -146,6 +146,9 @@ function levelSpec(level: number) {
     islandCount: Math.max(1, Math.round(a.islands + d.islands * n)),
     meleeCount: Math.round(a.melee + d.melee * n),
     rangedCount: Math.round(a.ranged + d.ranged * n),
+    bomberCount: Math.round(a.bombers + d.bombers * n),
+    flockSize: params.boids.flocks.startSize,
+    escortCount: params.boids.queen.escort,
   };
 }
 
@@ -181,6 +184,38 @@ function hitPlayer(dmg: number, fromX: number, fromY: number): boolean {
     game.timer = 0;
   }
   return true;
+}
+
+/**
+ * Shove the player (a bomber's blast). In the air it adds to the flight; on a rim it blows them
+ * off it: outward, keeping the push's sideways part, as if they had jumped.
+ */
+function pushPlayer(vx: number, vy: number, vz: number) {
+  const p = player;
+  if (game.state !== "play" || p.mode === "lost") return;
+  game.shake = Math.max(game.shake, 0.5);
+  if (p.mode === "air") {
+    p.vx += vx;
+    p.vy += vy;
+    p.vz = Math.max(p.vz, vz);
+    p.jumpHeld = false;
+    return;
+  }
+  const e = islands[p.island]!.pointAt(p.s);
+  const along = vx * e.tx + vy * e.ty;
+  const out = Math.max(Math.abs(vx * e.nx + vy * e.ny), Math.hypot(vx, vy) * 0.6);
+  p.x = e.x + e.nx * 12;
+  p.y = e.y + e.ny * 12;
+  p.alt = ISLAND_TOP;
+  p.vx = e.nx * out + e.tx * along;
+  p.vy = e.ny * out + e.ty * along;
+  p.vz = vz;
+  p.mode = "air";
+  p.airTime = 0;
+  p.launchIsland = p.island;
+  p.jumpHeld = false;
+  p.airJumps = 1;
+  p.slide = 0;
 }
 
 const cam = { x: 0, y: 0, h: params.camera.view.height };
@@ -506,7 +541,10 @@ function update(dt: number, dtReal: number) {
   if (!frozen) p.anim += dt;
   if (playing && !frozen) updateAttacks(dt, dtReal, dir);
   p.invuln = Math.max(0, p.invuln - dt);
-  combat.update(dt, dtReal, { x: p.x, y: p.y, alt: p.alt, targetable: playing && p.mode !== "lost" }, hitPlayer);
+  combat.update(dt, dtReal, { x: p.x, y: p.y, alt: p.alt, targetable: playing && p.mode !== "lost" }, {
+    hit: hitPlayer,
+    push: pushPlayer,
+  });
   // Hits in the air refill the double jump and some focus; sword hits also bounce you up.
   // Sword hits freeze the player too, by damage dealt (the target freezes in Combat).
   for (const { weapon, damage } of combat.takePlayerHits()) {
@@ -1349,6 +1387,7 @@ function pushCombatDrawables(list: Drawable[], time: number) {
     });
   }
   for (const sl of combat.slashes) list.push({ alt: sl.alt + 0.5, draw: () => drawSlash(sl) });
+  for (const bl of combat.blasts) list.push({ alt: bl.alt, draw: () => drawBlast(bl) });
   for (const sp of combat.sparks) {
     list.push({
       alt: sp.alt,
@@ -1389,6 +1428,34 @@ function drawSlash(sl: { x: number; y: number; alt: number; dx: number; dy: numb
   ctx.closePath();
   ctx.fillStyle = sl.power >= 1 ? `rgba(255,236,170,${0.95 * fade})` : `rgba(255,250,235,${0.9 * fade})`;
   ctx.fill();
+}
+
+/** A bomber's blast: a flash, then a shock ring racing out to the blast radius. */
+function drawBlast(bl: Blast) {
+  const t = bl.age / BLAST_TIME;
+  const fade = 1 - t;
+  const n = 28;
+  const r = bl.radius * (1 - (1 - t) ** 3);
+  ctx.beginPath();
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const q = proj.project(bl.x + Math.cos(a) * r, bl.y + Math.sin(a) * r, bl.alt);
+    if (i) ctx.lineTo(q.x, q.y);
+    else ctx.moveTo(q.x, q.y);
+  }
+  const c = proj.project(bl.x, bl.y, bl.alt);
+  if (!c.visible) return;
+  ctx.strokeStyle = `rgba(255,200,120,${0.9 * fade})`;
+  ctx.lineWidth = Math.max(1, 6 * fade * c.kt);
+  ctx.stroke();
+  if (t < 0.35) {
+    const fr = (20 + 50 * t) * c.kt;
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = 1 - t / 0.35;
+    ctx.drawImage(glowSprite, c.x - fr * 2, c.y - fr * 2, fr * 4, fr * 4);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+  }
 }
 
 /** Animation runs on `b.phase`, which stops while the boid is frozen by a hit. */
@@ -1465,7 +1532,8 @@ function drawBoid(b: Boid) {
     }
     ctx.rotate(heading);
     const flap = Math.abs(Math.sin(b.phase * 26 + b.id));
-    ctx.fillStyle = b.kind === "melee" ? "rgba(255,190,210,0.45)" : "rgba(170,255,240,0.45)";
+    ctx.fillStyle =
+      b.kind === "melee" ? "rgba(255,190,210,0.45)" : b.kind === "bomber" ? "rgba(255,215,160,0.45)" : "rgba(170,255,240,0.45)";
     for (const side of [-1, 1]) {
       ctx.beginPath();
       ctx.ellipse(-2 * k, side * 7 * k, 7 * k, (1 + 4 * flap) * k, side * 0.4, 0, Math.PI * 2);
@@ -1487,6 +1555,23 @@ function drawBoid(b: Boid) {
       ctx.beginPath();
       ctx.arc(4 * k, 0, 1.6 * k, 0, Math.PI * 2);
       ctx.fill();
+    } else if (b.kind === "bomber") {
+      // Bomber: a dark bulb with a fuse that sparks faster once its flock has found the player.
+      const rate = b.flock.engaged ? 18 : 5;
+      const blink = 0.5 + 0.5 * Math.sin(b.phase * rate);
+      ctx.fillStyle = "#3a2a24";
+      ctx.strokeStyle = "#ff9a3c";
+      ctx.lineWidth = 1.4 * k;
+      ctx.beginPath();
+      ctx.arc(0, 0, 8 * k, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = `rgba(255,${150 + 90 * blink},60,${0.5 + 0.5 * blink})`;
+      for (const [ox, r] of [[-3, 2.5 + 1.5 * blink], [3, 1.5 + blink]] as const) {
+        ctx.beginPath();
+        ctx.arc(ox * k, 0, r * k, 0, Math.PI * 2);
+        ctx.fill();
+      }
     } else {
       // Ranged: round body whose core brightens as the next shot charges.
       const ready = 1 - Math.max(0, Math.min(1, b.cooldown / params.enemyAttacks.ranged.cooldown));
@@ -1694,7 +1779,7 @@ function drawHud() {
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillStyle = "#f0dcff";
-  ctx.fillText(`♛ QUEEN · swarm ${combat.boids.length - 1} · level ${game.level} · planet ${planet.seed.toString(36)}`, W / 2, 32);
+  ctx.fillText(`♛ QUEEN · swarm ${combat.boids.length - 1} in ${combat.flocks.length} flocks · level ${game.level} · planet ${planet.seed.toString(36)}`, W / 2, 32);
 
   if (game.state !== "play") {
     const a = Math.min(1, game.timer / 0.6);
