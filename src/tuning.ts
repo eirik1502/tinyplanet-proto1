@@ -70,6 +70,7 @@ const SLIDERS: Record<string, Slider> = {
   "move.air.maxSpeed": ["Max speed (× launch speed)", 1, 3, 0.05],
   "move.air.grabRadius": ["Grab radius", 1, 40, 1],
   "move.airJump.strength": ["Double jump height (× launch)", 0.2, 1.5, 0.05],
+  "move.airJump.cone": ["Target cone ahead (degrees)", 0, 180, 5],
   "move.airJump.bounce": ["Sword-hit bounce (up speed)", 0, 1200, 10],
   "move.airJump.netDepth": ["Safety bounce depth below rim", 0, 75, 1],
   "move.airJump.netBounce": ["Safety bounce (up speed)", 0, 1200, 10],

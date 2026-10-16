@@ -37,6 +37,7 @@ export const DEFAULTS = {
     },
     airJump: {
       strength: 0.85, // Double jump height (× launch)
+      cone: 60, // Target cone ahead (degrees)
       bounce: 520, // Sword-hit bounce (up speed)
       netDepth: 45, // Safety bounce depth below rim
       netBounce: 480, // Safety bounce (up speed)

@@ -260,24 +260,73 @@ function gravityAt(vz: number) {
   return Math.abs(vz) < j.apexBand ? j.gravity * j.apexGravity : j.gravity;
 }
 
-/**
- * Double-jump direction: toward the closest island, at the rim point that needs the least turn
- * from the current heading (without a heading: the nearest point).
- */
-function doubleJumpDir(): Vec | null {
-  const p = player;
+/** The island whose rim is closest to the player. */
+function closestIsland(): Island | null {
   let isl: Island | null = null;
   let bestD = Infinity;
   for (const i of islands) {
-    const d = i.closest(p.x, p.y).d;
+    const d = i.closest(player.x, player.y).d;
     if (d < bestD) {
       isl = i;
       bestD = d;
     }
   }
+  return isl;
+}
+
+/**
+ * The island with the nearest rim point inside the double-jump cone that a double jump of
+ * `jump` speed can reach: heading there at the jump's speed before falling back to rim height.
+ */
+function islandAhead(jump: number): Island | null {
+  const p = player;
+  const heading = Math.atan2(p.vy, p.vx);
+  const half = (params.move.airJump.cone * Math.PI) / 360;
+
+  // Time until the flight falls back to rim height.
+  let alt = p.alt;
+  let vz = p.vz;
+  let t = 0;
+  const step = 1 / 60;
+  while (t < 5 && (vz > 0 || alt > ISLAND_TOP)) {
+    vz -= gravityAt(vz) * step;
+    alt += vz * step;
+    t += step;
+  }
+
+  let isl: Island | null = null;
+  let bestD = Infinity;
+  for (const i of islands) {
+    for (let s = 0; s < i.perimeter; s += 6) {
+      const e = i.pointAt(s);
+      const dx = e.x - p.x;
+      const dy = e.y - p.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d >= bestD) continue;
+      let diff = Math.atan2(dy, dx) - heading;
+      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+      if (Math.abs(diff) > half) continue;
+      const speed = Math.max(0, (p.vx * dx + p.vy * dy) / d) + jump;
+      if (d > speed * t) continue;
+      isl = i;
+      bestD = d;
+    }
+  }
+  return isl;
+}
+
+/**
+ * Double-jump direction. The target island is the nearest one the jump can reach inside a cone
+ * around the heading; failing that, the closest island all around. On it, aim at the rim point
+ * that needs the least turn from the heading (without a heading: the nearest point).
+ * Call after the jump's rise is set: `p.vz` decides how long the jump stays up.
+ */
+function doubleJumpDir(jump: number): Vec | null {
+  const p = player;
+  const sp = Math.hypot(p.vx, p.vy);
+  const isl = (sp > 1 && islandAhead(jump)) || closestIsland();
   if (!isl) return null;
 
-  const sp = Math.hypot(p.vx, p.vy);
   const heading = Math.atan2(p.vy, p.vx);
   let tx = 0;
   let ty = 0;
@@ -384,7 +433,7 @@ function update(dt: number, dtReal: number) {
       const jump = launchSpeed() * params.move.airJump.strength;
       p.vz = Math.max(p.vz, jump);
       p.jumpHeld = true;
-      const aim = doubleJumpDir();
+      const aim = doubleJumpDir(jump);
       if (aim) {
         const sp = Math.max(0, p.vx * aim.x + p.vy * aim.y) + jump;
         p.vx = aim.x * sp;
