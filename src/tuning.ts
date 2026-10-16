@@ -84,6 +84,7 @@ const SLIDERS: Record<string, Slider> = {
   "player.aim.chargeTime": ["Attack charge time (s)", 0.1, 2, 0.05],
   "player.aim.turnRate": ["Aim turn rate (rad/s)", 0, 30, 0.5],
   "player.aim.minTurnRate": ["Aim turn at full charge", 0, 5, 0.1],
+  "player.aim.assistRange": ["Aim assist range", 0, 1000, 10],
   "player.slowMo.scale": ["World speed", 0.02, 1, 0.01],
   "player.slowMo.fadeIn": ["Fade in (s)", 0, 0.5, 0.01],
   "player.slowMo.fadeOut": ["Fade out (s)", 0, 0.5, 0.01],

@@ -467,6 +467,29 @@ function turnAim(
   return angle + Math.max(-rate * dt, Math.min(rate * dt, diff));
 }
 
+/**
+ * Aim assist: the closest live enemy within `aim.assistRange`. On a rim, only enemies on the
+ * outward side count, since attacks can't point into the island.
+ */
+function closestEnemy(): Boid | null {
+  const p = player;
+  const e = p.mode === "hang" ? islands[p.island]!.pointAt(p.s) : null;
+  let best: Boid | null = null;
+  let bestD = params.player.aim.assistRange;
+  for (const b of combat.boids) {
+    if (b.hp <= 0) continue;
+    const dx = b.x - p.x;
+    const dy = b.y - p.y;
+    if (e && dx * e.nx + dy * e.ny <= 0) continue;
+    const d = Math.hypot(dx, dy, b.alt - p.alt);
+    if (d < bestD) {
+      best = b;
+      bestD = d;
+    }
+  }
+  return best;
+}
+
 /** Power 0..1 of the attack being aimed. */
 function aimPower() {
   return player.aim ? Math.min(1, player.aim.t / params.player.aim.chargeTime) : 0;
@@ -488,8 +511,8 @@ function clampAimToRim(angle: number): number {
 
 /**
  * Sword (Z / J) and spear (X / K): hold to aim and power up, release to strike.
- * The aim starts behind the player on a rim (or along the flight / input in the air) and turns
- * toward the input direction, quickly at first and slower and slower until it locks at full power.
+ * The aim starts at the closest enemy in range (else straight out from the rim, or along the
+ * input / flight in the air) and turns toward the input direction, quickly at first and slower and slower until it locks at full power.
  */
 function updateAttacks(dt: number, dtReal: number, dir: Vec) {
   const p = player;
@@ -506,8 +529,11 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
     const weapon: Weapon | null =
       justPressed("sword") && p.swordCd <= 0 ? "sword" : justPressed("spear") && p.spearCd <= 0 ? "spear" : null;
     if (!weapon) return;
+    const target = closestEnemy();
     let angle: number;
-    if (p.mode === "hang") {
+    if (target) {
+      angle = Math.atan2(target.y - p.y, target.x - p.x);
+    } else if (p.mode === "hang") {
       const e = islands[p.island]!.pointAt(p.s);
       angle = Math.atan2(e.ny, e.nx);
     } else if (dir.x || dir.y) {
@@ -1022,23 +1048,15 @@ function drawPlayer(time: number) {
 }
 
 /**
- * A dashed line traces where the flight goes: from a rim, where Space would take you right now
- * (faint); in the air, the rest of the current flight. It turns green if it ends on an island,
+ * In the air, a dashed line traces the rest of the flight. It turns green if it ends on an island,
  * and stays pale if it ends in the haze.
  */
 function drawJumpPreview() {
   const p = player;
-  if (game.state !== "play") return;
-  let f: Flight;
-  let from: number;
+  if (game.state !== "play" || p.mode !== "air") return;
+  const f: Flight = { x: p.x, y: p.y, alt: p.alt, vx: p.vx, vy: p.vy, vz: p.vz, t: p.airTime };
+  const from = p.launchIsland;
   let netUsed = p.netUsed;
-  if (p.mode === "hang") {
-    f = launch(p.island, p.s, jumpAngle(inputDir()));
-    from = p.island;
-  } else if (p.mode === "air") {
-    f = { x: p.x, y: p.y, alt: p.alt, vx: p.vx, vy: p.vy, vz: p.vz, t: p.airTime };
-    from = p.launchIsland;
-  } else return;
   const pts: Projected[] = [proj.project(f.x, f.y, f.alt)];
   let hit = false;
   for (let i = 0; i < 300 && f.alt > LOST_ALT; i++) {
@@ -1053,8 +1071,8 @@ function drawJumpPreview() {
     if (netBounce(f, netUsed)) netUsed = true;
     if (i % 2 === 1) pts.push(proj.project(f.x, f.y, f.alt));
   }
-  const a = p.mode === "hang" ? 0.4 : 0.8;
-  ctx.lineWidth = p.mode === "hang" ? 2 : 2.5;
+  const a = 0.8;
+  ctx.lineWidth = 2.5;
   ctx.lineCap = "round";
   ctx.setLineDash([7, 7]);
   ctx.lineDashOffset = -performance.now() / 40;
@@ -1068,7 +1086,7 @@ function drawJumpPreview() {
   ctx.beginPath();
   ctx.arc(end.x, end.y, hit ? 5 : 3.5, 0, Math.PI * 2);
   ctx.fill();
-  if (hit && p.mode === "air") {
+  if (hit) {
     // Landing ring, so the target reads at a glance.
     ctx.lineWidth = 2;
     ctx.beginPath();

@@ -59,6 +59,7 @@ export const DEFAULTS = {
       chargeTime: 0.5, // Attack charge time (s)
       turnRate: 14, // Aim turn rate (rad/s)
       minTurnRate: 3.6, // Aim turn at full charge
+      assistRange: 350, // Aim assist range
     },
     slowMo: {
       scale: 0.2, // World speed
