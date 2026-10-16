@@ -80,9 +80,10 @@ const player = {
   vx: 0,
   vy: 0,
   vz: 0,
-  charge: 0, // 0..1 while Space is held
-  jumpAim: null as number | null, // world angle of the jump being charged
-  jumpAimT: 0, // seconds the jump has been aimed
+  jumpHeld: false, // Space still held since the last jump: releasing early cuts it short
+  airJumps: 0, // extra jumps in the bank (0 or 1), earned by hitting enemies
+  netUsed: false, // the safety bounce below the rim is spent until the next grab
+  focus: 1, // 0..1 slow-motion budget
   slide: 0, // speed along the rim (per s) after a fast grab
   launchIsland: -1,
   airTime: 0,
@@ -123,6 +124,7 @@ function resetPlayer() {
   player.invuln = 0;
   player.swordCd = player.spearCd = 0;
   player.aim = null;
+  player.airJumps = 0;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -188,23 +190,56 @@ function grab(islandIdx: number, s: number, vx = 0, vy = 0) {
   player.island = islandIdx;
   player.s = s;
   player.vx = player.vy = player.vz = 0;
-  player.charge = 0;
-  player.jumpAim = null;
+  player.jumpHeld = false;
+  player.netUsed = false;
+  player.focus = 1;
   player.safeIsland = islandIdx;
   player.safeS = s;
 }
 
 interface Flight { x: number; y: number; alt: number; vx: number; vy: number; vz: number; t: number }
 
-/** Launch state for a jump from rim parameter `s` in direction `angle` with charge 0..1. */
-function launch(islandIdx: number, s: number, charge: number, angle: number): Flight {
+/**
+ * Launch speed (horizontal and vertical alike) of a full jump: a 45° arc that would land
+ * `jump.length` away at launch height under plain gravity (the apex float carries it a bit further).
+ */
+function launchSpeed() {
+  return Math.sqrt((params.move.jump.gravity * params.move.jump.length) / 2);
+}
+
+/** Launch state for a jump from rim parameter `s` in direction `angle`. */
+function launch(islandIdx: number, s: number, angle: number): Flight {
   const e = islands[islandIdx]!.pointAt(s);
-  const range = params.move.jump.min + (params.move.jump.max - params.move.jump.min) * charge;
-  // 45° arc: horizontal and vertical speed equal, landing `range` away at launch height.
-  const v = Math.sqrt((params.move.jump.gravity * range) / 2);
+  const v = launchSpeed();
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
   return { x: e.x + e.nx * 12, y: e.y + e.ny * 12, alt: ISLAND_TOP, vx: dx * v, vy: dy * v, vz: v, t: 0 };
+}
+
+/** Most a jump can lean away from straight out of the rim, so it clears the island it leaves. */
+const MAX_JUMP_LEAN = 1.13;
+
+/** Jump direction from a rim: toward the input, within MAX_JUMP_LEAN of straight out. */
+function jumpAngle(dir: Vec): number {
+  const e = islands[player.island]!.pointAt(player.s);
+  const out = Math.atan2(e.ny, e.nx);
+  if (!dir.x && !dir.y) return out;
+  let diff = Math.atan2(dir.y, dir.x) - out;
+  diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+  return out + Math.max(-MAX_JUMP_LEAN, Math.min(MAX_JUMP_LEAN, diff));
+}
+
+/** Gravity at vertical speed `vz`: weaker near the apex, so jumps hang there a moment. */
+function gravityAt(vz: number) {
+  const j = params.move.jump;
+  return Math.abs(vz) < j.apexBand ? j.gravity * j.apexGravity : j.gravity;
+}
+
+/** The safety bounce: the first dip below the rim in a flight springs back up. */
+function netBounce(f: { alt: number; vz: number }, used: boolean): boolean {
+  if (used || f.vz >= 0 || f.alt > ISLAND_TOP - params.move.airJump.netDepth) return false;
+  f.vz = params.move.airJump.netBounce;
+  return true;
 }
 
 /**
@@ -214,7 +249,7 @@ function launch(islandIdx: number, s: number, charge: number, angle: number): Fl
 function stepFlight(f: Flight, dt: number, fromIsland: number): { island: number; s: number } | null {
   const ox = f.x;
   const oy = f.y;
-  f.vz -= params.move.jump.gravity * dt;
+  f.vz -= gravityAt(f.vz) * dt;
   f.x += f.vx * dt;
   f.y += f.vy * dt;
   f.alt += f.vz * dt;
@@ -243,10 +278,9 @@ function update(dt: number, dtReal: number) {
   if (p.mode === "hang") {
     const isl = islands[p.island]!;
     let e = isl.pointAt(p.s);
-    // Climb along the rim using whichever part of the input runs along it. Aiming a jump or an
-    // attack takes over the input; an ongoing slide carries on.
-    const along = p.aim || p.jumpAim !== null ? 0 : dir.x * e.tx + dir.y * e.ty;
-    const climb = along * params.move.climb.speed;
+    // Climb toward the rim point that faces the input direction. Aiming an attack takes over
+    // the input; an ongoing slide carries on.
+    const climb = p.aim ? 0 : climbInput(e, dir) * params.move.climb.speed;
     p.s += (climb + p.slide) * dt;
     p.slide *= Math.exp(-params.move.slide.friction * dt);
     if (Math.abs(p.slide) < 5) p.slide = 0;
@@ -258,38 +292,38 @@ function update(dt: number, dtReal: number) {
 
     if (p.slide) emitDust(e.x, e.y, Math.min(1, Math.abs(p.slide) / 300), dt);
 
-    if (playing && keys.has("Space")) {
-      // Aim starts straight out from the rim and turns toward the input, slower as it charges.
-      if (p.jumpAim === null) {
-        p.jumpAim = Math.atan2(e.ny, e.nx);
-        p.jumpAimT = 0;
-      }
-      p.charge = Math.min(1, p.charge + dt / params.move.jump.chargeTime);
-      p.jumpAimT += dt;
-      const ja = params.move.jumpAim;
-      p.jumpAim = clampAimToRim(turnAim(p.jumpAim, dir, p.jumpAimT / ja.time, dt, ja.turnRate, ja.minTurnRate));
-    }
-    if (playing && released.has("Space") && p.jumpAim !== null) {
-      const f = launch(p.island, p.s, p.charge, p.jumpAim);
-      p.jumpAim = null;
+    // Space jumps at once; holding it keeps the jump going full height (see the air section).
+    if (playing && pressed.has("Space")) {
+      const f = launch(p.island, p.s, jumpAngle(dir));
       Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
       p.mode = "air";
       p.airTime = 0;
       p.launchIsland = p.island;
-      p.charge = 0;
+      p.jumpHeld = true;
       p.slide = 0;
     }
   } else if (p.mode === "air") {
-    // Arrows turn the flight toward the input direction without changing speed.
-    const sp = Math.hypot(p.vx, p.vy);
-    if (!p.aim && (dir.x || dir.y) && sp > 1) {
-      const cur = Math.atan2(p.vy, p.vx);
-      let diff = Math.atan2(dir.y, dir.x) - cur;
-      diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-      const a = cur + Math.max(-params.move.air.turnRate * dt, Math.min(params.move.air.turnRate * dt, diff));
-      p.vx = Math.cos(a) * sp;
-      p.vy = Math.sin(a) * sp;
+    // Releasing Space while still rising cuts the jump short.
+    if (p.jumpHeld && !keys.has("Space")) {
+      if (p.vz > 0) p.vz *= params.move.jump.cut;
+      p.jumpHeld = false;
     }
+    if (p.jumpHeld && p.vz <= 0) p.jumpHeld = false;
+
+    // Extra jump, earned by hitting enemies: a fresh rise, turned toward the input.
+    if (playing && pressed.has("Space") && p.airJumps > 0) {
+      p.airJumps = 0;
+      p.vz = Math.max(p.vz, launchSpeed() * params.move.airJump.strength);
+      p.jumpHeld = true;
+      if (dir.x || dir.y) {
+        const sp = Math.hypot(p.vx, p.vy);
+        p.vx = dir.x * sp;
+        p.vy = dir.y * sp;
+      }
+      combat.burst(p.x, p.y, p.alt - 6, 10, "#bff4ff");
+    }
+
+    if (!p.aim) steerAir(dir, dt);
     const f: Flight = { x: p.x, y: p.y, alt: p.alt, vx: p.vx, vy: p.vy, vz: p.vz, t: p.airTime };
     const hit = stepFlight(f, dt, p.launchIsland);
     Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vz: f.vz, airTime: f.t });
@@ -297,7 +331,11 @@ function update(dt: number, dtReal: number) {
     if (Math.hypot(p.vx, p.vy) > 1) p.facing = Math.atan2(p.vy, p.vx);
 
     if (hit) grab(hit.island, hit.s, p.vx, p.vy);
-    else if (p.alt < LOST_ALT) {
+    else if (netBounce(p, p.netUsed)) {
+      p.netUsed = true;
+      p.jumpHeld = false;
+      combat.burst(p.x, p.y, p.alt, 14, "#9fe8ff");
+    } else if (p.alt < LOST_ALT) {
       p.mode = "lost";
       p.lostTimer = 0;
     }
@@ -331,6 +369,16 @@ function update(dt: number, dtReal: number) {
   if (playing) updateAttacks(dt, dtReal, dir);
   p.invuln = Math.max(0, p.invuln - dt);
   combat.update(dt, { x: p.x, y: p.y, alt: p.alt, targetable: playing && p.mode !== "lost" }, hitPlayer);
+  // Hits earn an extra jump and focus; a sword hit in the air also bounces you up.
+  for (const weapon of combat.takePlayerHits()) {
+    if (p.mode === "lost") continue;
+    p.airJumps = 1;
+    p.focus = Math.min(1, p.focus + params.player.focus.perHit);
+    if (weapon === "sword" && p.mode === "air") {
+      p.vz = Math.max(p.vz, params.move.airJump.bounce);
+      p.jumpHeld = false;
+    }
+  }
   game.shake = Math.max(0, game.shake - dt);
   if (game.state === "play" && combat.queenDead) {
     game.state = "victory";
@@ -362,6 +410,40 @@ function update(dt: number, dtReal: number) {
 
   pressed.clear();
   released.clear();
+}
+
+/**
+ * Climb input along the rim, -1..1: toward the rim point whose outward normal faces the input
+ * direction, at full speed until it nearly does. Pointing into the island still climbs.
+ */
+function climbInput(e: { nx: number; ny: number; tx: number; ty: number }, dir: Vec): number {
+  if (!dir.x && !dir.y) return 0;
+  const off = Math.acos(Math.max(-1, Math.min(1, dir.x * e.nx + dir.y * e.ny)));
+  const side = dir.x * e.tx + dir.y * e.ty;
+  return (side >= 0 ? 1 : -1) * Math.min(1, off / 0.35);
+}
+
+/**
+ * Air control: arrows turn the flight toward the input, and speed it up along it or brake
+ * against it. Pulling straight back only brakes.
+ */
+function steerAir(dir: Vec, dt: number) {
+  const p = player;
+  if (!dir.x && !dir.y) return;
+  const air = params.move.air;
+  let sp = Math.hypot(p.vx, p.vy);
+  let a = sp > 1 ? Math.atan2(p.vy, p.vx) : Math.atan2(dir.y, dir.x);
+  const fwd = dir.x * Math.cos(a) + dir.y * Math.sin(a);
+  if (sp > 1 && fwd > -0.7) {
+    let diff = Math.atan2(dir.y, dir.x) - a;
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+    a += Math.max(-air.turnRate * dt, Math.min(air.turnRate * dt, diff));
+  }
+  const next = sp + fwd * air.accel * dt;
+  // Speeding up stops at the cap, but never slows a faster flight (from a hit or bounce).
+  sp = Math.max(0, fwd > 0 ? Math.min(next, Math.max(sp, launchSpeed() * air.maxSpeed)) : next);
+  p.vx = Math.cos(a) * sp;
+  p.vy = Math.sin(a) * sp;
 }
 
 /**
@@ -883,6 +965,15 @@ function drawPlayer(time: number) {
   ctx.drawImage(glowSprite, -26 * k, -26 * k, 52 * k, 52 * k);
   ctx.globalCompositeOperation = "source-over";
 
+  // A banked extra jump shows as a ring around the player.
+  if (p.airJumps > 0) {
+    ctx.strokeStyle = `rgba(190,244,255,${0.55 + 0.25 * Math.sin(time * 8)})`;
+    ctx.lineWidth = 2 * k;
+    ctx.beginPath();
+    ctx.arc(0, 0, 15 * k, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   ctx.rotate(p.facing);
   // In this local frame +x points toward the rim (hanging) or along the flight path.
   if (p.mode === "hang") {
@@ -890,15 +981,13 @@ function drawPlayer(time: number) {
     ctx.strokeStyle = "#f2d7b5";
     ctx.lineCap = "round";
     ctx.lineWidth = 2.6 * k;
-    const reach = 9 + p.charge * 3;
+    const reach = 9;
     for (const side of [-1, 1]) {
       ctx.beginPath();
       ctx.moveTo(1 * k, side * 4 * k);
       ctx.lineTo(reach * k, side * 5.5 * k);
       ctx.stroke();
     }
-    // Charging pulls the body back from the edge, ready to push off.
-    ctx.translate(-p.charge * 5 * k, 0);
   } else {
     ctx.rotate(Math.sin(p.spin) * 0.25);
   }
@@ -932,17 +1021,27 @@ function drawPlayer(time: number) {
 }
 
 /**
- * While charging, a dashed line traces where the jump will go. It turns green if the jump will
- * catch an island, and stays pale if it ends in the haze.
+ * A dashed line traces where the flight goes: from a rim, where Space would take you right now
+ * (faint); in the air, the rest of the current flight. It turns green if it ends on an island,
+ * and stays pale if it ends in the haze.
  */
 function drawJumpPreview() {
   const p = player;
-  if (p.mode !== "hang" || p.jumpAim === null) return;
-  const f = launch(p.island, p.s, p.charge, p.jumpAim);
+  if (game.state !== "play") return;
+  let f: Flight;
+  let from: number;
+  let netUsed = p.netUsed;
+  if (p.mode === "hang") {
+    f = launch(p.island, p.s, jumpAngle(inputDir()));
+    from = p.island;
+  } else if (p.mode === "air") {
+    f = { x: p.x, y: p.y, alt: p.alt, vx: p.vx, vy: p.vy, vz: p.vz, t: p.airTime };
+    from = p.launchIsland;
+  } else return;
   const pts: Projected[] = [proj.project(f.x, f.y, f.alt)];
   let hit = false;
-  for (let i = 0; i < 240 && f.alt > LOST_ALT; i++) {
-    const h = stepFlight(f, 1 / 60, p.island);
+  for (let i = 0; i < 300 && f.alt > LOST_ALT; i++) {
+    const h = stepFlight(f, 1 / 60, from);
     if (h) {
       // End where the flight meets the rim, at the flight's altitude (it may cross well above it).
       const e = islands[h.island]!.pointAt(h.s);
@@ -950,13 +1049,15 @@ function drawJumpPreview() {
       hit = true;
       break;
     }
+    if (netBounce(f, netUsed)) netUsed = true;
     if (i % 2 === 1) pts.push(proj.project(f.x, f.y, f.alt));
   }
-  ctx.lineWidth = 2.5;
+  const a = p.mode === "hang" ? 0.4 : 0.8;
+  ctx.lineWidth = p.mode === "hang" ? 2 : 2.5;
   ctx.lineCap = "round";
   ctx.setLineDash([7, 7]);
   ctx.lineDashOffset = -performance.now() / 40;
-  ctx.strokeStyle = hit ? "rgba(140,255,170,0.95)" : "rgba(255,235,210,0.75)";
+  ctx.strokeStyle = hit ? `rgba(140,255,170,${a})` : `rgba(255,235,210,${a * 0.8})`;
   ctx.beginPath();
   pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
   ctx.stroke();
@@ -966,6 +1067,13 @@ function drawJumpPreview() {
   ctx.beginPath();
   ctx.arc(end.x, end.y, hit ? 5 : 3.5, 0, Math.PI * 2);
   ctx.fill();
+  if (hit && p.mode === "air") {
+    // Landing ring, so the target reads at a glance.
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(end.x, end.y, 10 + Math.sin(performance.now() / 120) * 2, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 }
 
 /**
@@ -1246,14 +1354,16 @@ function drawBoid(b: Boid, time: number) {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Charging an attack in the air slows the world down until the attack is released or the player
- * grabs an island (or falls into the haze).
+ * Charging an attack in the air slows the world down until the attack is released, the player
+ * grabs an island (or falls into the haze), or focus runs out. Slow motion drains focus; hits
+ * regain some and grabbing a rim refills it.
  * `scale` eases between 1 and params.player.slowMo.scale over the fade times (in real time).
  */
 const slow = { scale: 1, intensity: 0, active: false, startedAt: 0 };
 
 function updateTimeScale(dtReal: number) {
-  const want = game.state === "play" && player.mode === "air" && player.aim !== null;
+  const want = game.state === "play" && player.mode === "air" && player.aim !== null && player.focus > 0;
+  if (want) player.focus = Math.max(0, player.focus - params.player.focus.drain * dtReal);
   if (want && !slow.active) slow.startedAt = performance.now();
   slow.active = want;
   const span = 1 - params.player.slowMo.scale;
@@ -1398,6 +1508,15 @@ function drawHud() {
   ctx.textBaseline = "top";
   ctx.fillStyle = "#ffe0e6";
   ctx.fillText(`♥ ${Math.ceil(player.hp)}%`, 16, 32);
+
+  // Focus (slow-motion budget) and the banked extra jump.
+  const fw = hw * 0.6;
+  ctx.fillStyle = "rgba(20,8,35,0.7)";
+  ctx.fillRect(14, 50, fw + 4, 8);
+  ctx.fillStyle = player.focus > 0 ? "#8fe3ff" : "rgba(143,227,255,0.3)";
+  ctx.fillRect(16, 52, fw * player.focus, 4);
+  ctx.fillStyle = "#d8f6ff";
+  ctx.fillText(`◷ focus${player.airJumps > 0 ? "  ·  ⤒ extra jump" : ""}`, 16, 62);
 
   // Queen health
   const q = combat.queen;

@@ -20,22 +20,26 @@ export const DEFAULTS = {
   },
   move: {
     climb: {
-      speed: 300, // Climb speed
+      speed: 360, // Climb speed
     },
     jump: {
-      min: 110, // Min jump length
-      max: 420, // Max jump length
-      chargeTime: 0.5, // Charge time (s)
+      length: 400, // Full jump length (Space held)
+      cut: 0.35, // Upward speed kept on early release
       gravity: 1200, // Gravity
-    },
-    jumpAim: {
-      time: 1, // Aim time (s)
-      turnRate: 7, // Aim turn rate (rad/s)
-      minTurnRate: 2.3, // Aim turn after aim time
+      apexGravity: 0.5, // Gravity near the apex (×)
+      apexBand: 140, // Apex band (vertical speed)
     },
     air: {
-      turnRate: 2, // Air turn rate (rad/s)
+      turnRate: 2.5, // Air turn rate (rad/s)
+      accel: 420, // Speed up / brake (per s)
+      maxSpeed: 1.4, // Max speed (× launch speed)
       grabRadius: 18, // Grab radius
+    },
+    airJump: {
+      strength: 0.85, // Extra jump height (× launch)
+      bounce: 520, // Sword-hit bounce (up speed)
+      netDepth: 45, // Safety bounce depth below rim
+      netBounce: 480, // Safety bounce (up speed)
     },
     slide: {
       minSpeed: 100, // Slide min speed
@@ -60,6 +64,10 @@ export const DEFAULTS = {
       scale: 0.2, // World speed
       fadeIn: 0.08, // Fade in (s)
       fadeOut: 0.15, // Fade out (s)
+    },
+    focus: {
+      drain: 0.5, // Focus drain while slowed (per s)
+      perHit: 0.35, // Focus regained per hit
     },
     health: {
       max: 100, // Max health

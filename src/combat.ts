@@ -89,6 +89,8 @@ export class Combat {
   private islands: Island[] = [];
   private nextId = 0;
   private rand = Math.random;
+  /** Player hits since the last `takePlayerHits()`, by weapon. */
+  private playerHits: ("sword" | "spear")[] = [];
 
   get queenDead() {
     return this.queen.hp <= 0;
@@ -102,6 +104,7 @@ export class Combat {
     this.boids = [];
     this.shots = [];
     this.slashes = [];
+    this.playerHits = [];
     this.sparks = [];
     this.queen = this.spawn("queen", planet.queenHome.x, planet.queenHome.y);
     for (const s of planet.spawns) this.spawn(s.kind, s.x, s.y);
@@ -161,8 +164,16 @@ export class Combat {
     });
   }
 
-  private damage(b: Boid, dmg: number, fromX: number, fromY: number) {
+  /** The player's hits since the last call, by weapon (one entry per enemy hit). */
+  takePlayerHits() {
+    const hits = this.playerHits;
+    this.playerHits = [];
+    return hits;
+  }
+
+  private damage(b: Boid, dmg: number, fromX: number, fromY: number, weapon: "sword" | "spear") {
     if (b.hp <= 0) return;
+    this.playerHits.push(weapon);
     b.hp -= dmg;
     b.flash = 0.15;
     const l = Math.hypot(b.x - fromX, b.y - fromY) || 1;
@@ -226,7 +237,7 @@ export class Combat {
         if (d > s.range + b.r || Math.abs(b.alt - s.alt) > 45 + b.r) continue;
         if (d > 18 && (ox * s.dx + oy * s.dy) / d < cosArc) continue;
         s.hits.add(b);
-        this.damage(b, s.damage, s.x, s.y);
+        this.damage(b, s.damage, s.x, s.y, "sword");
       }
       // The blade also blocks enemy projectiles passing through the swipe.
       for (const sh of this.shots) {
@@ -253,7 +264,7 @@ export class Combat {
         for (const b of this.boids) {
           if (b.hp <= 0) continue;
           if (Math.hypot(b.x - s.x, b.y - s.y) < b.r + params.player.spear.hitRadius * s.scale && Math.abs(b.alt - s.alt) < b.r + 26) {
-            this.damage(b, s.damage, s.x - s.vx * 0.05, s.y - s.vy * 0.05);
+            this.damage(b, s.damage, s.x - s.vx * 0.05, s.y - s.vy * 0.05, "spear");
             s.life = 0;
             break;
           }
