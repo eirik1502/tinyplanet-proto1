@@ -166,7 +166,7 @@ function hitPlayer(dmg: number, fromX: number, fromY: number): boolean {
   const p = player;
   if (p.invuln > 0 || game.state !== "play") return false;
   p.hp = Math.max(0, p.hp - dmg);
-  p.freeze = Math.max(p.freeze, params.player.hitStop.enemy);
+  p.freeze = Math.max(p.freeze, hitStop(dmg));
   p.invuln = params.player.health.invulnTime;
   game.shake = 0.35;
   combat.burst(p.x, p.y, p.alt, 10, "#ffd0b0");
@@ -508,10 +508,10 @@ function update(dt: number, dtReal: number) {
   p.invuln = Math.max(0, p.invuln - dt);
   combat.update(dt, dtReal, { x: p.x, y: p.y, alt: p.alt, targetable: playing && p.mode !== "lost" }, hitPlayer);
   // Hits in the air refill the double jump and some focus; sword hits also bounce you up.
-  // Sword hits freeze the player too, scaled by power (the target freezes in Combat).
-  for (const { weapon, power } of combat.takePlayerHits()) {
+  // Sword hits freeze the player too, by damage dealt (the target freezes in Combat).
+  for (const { weapon, damage } of combat.takePlayerHits()) {
     if (weapon === "sword" && p.mode !== "lost") {
-      p.freeze = Math.max(p.freeze, hitStop(power));
+      p.freeze = Math.max(p.freeze, hitStop(damage));
       p.redirect = p.mode === "air";
     }
     if (p.mode !== "air") continue;

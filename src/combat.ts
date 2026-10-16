@@ -40,7 +40,6 @@ export interface Shot {
   fromPlayer: boolean;
   damage: number;
   scale: number; // visual / hit size multiplier
-  power: number; // 0..1 charge of a player attack (sets the hit-stop)
 }
 
 export interface Slash {
@@ -79,14 +78,16 @@ export interface PlayerView {
 /** Hurt the player; false if the hit didn't land (invulnerable, or the round is over). */
 export type HitPlayer = (damage: number, fromX: number, fromY: number) => boolean;
 
-/** A player attack's hit-stop (s), longer for more charged attacks. */
-export function hitStop(power: number) {
-  return lerp(params.player.hitStop.min, params.player.hitStop.max, power);
+/** Hit-stop (s) for a hit dealing `damage`, from anyone: more damage freezes longer. */
+export function hitStop(damage: number) {
+  const h = params.player.hitStop;
+  const t = (damage - h.minDamage) / Math.max(1e-6, h.maxDamage - h.minDamage);
+  return lerp(h.min, h.max, Math.max(0, Math.min(1, t)));
 }
 
 export interface PlayerHit {
   weapon: "sword" | "spear";
-  power: number;
+  damage: number;
 }
 
 const CRUISE_ALT = ISLAND_TOP + 35;
@@ -177,7 +178,6 @@ export class Combat {
       fromPlayer: true,
       damage: lerp(params.player.spear.damage, params.player.spear.maxDamage, power),
       scale: lerp(1, params.player.spear.maxScale, power),
-      power,
     });
   }
 
@@ -188,10 +188,10 @@ export class Combat {
     return hits;
   }
 
-  private damage(b: Boid, dmg: number, fromX: number, fromY: number, hit: PlayerHit) {
+  private damage(b: Boid, dmg: number, fromX: number, fromY: number, weapon: PlayerHit["weapon"]) {
     if (b.hp <= 0) return;
-    this.playerHits.push(hit);
-    b.freeze = Math.max(b.freeze, hitStop(hit.power));
+    this.playerHits.push({ weapon, damage: dmg });
+    b.freeze = Math.max(b.freeze, hitStop(dmg));
     b.hp -= dmg;
     b.flash = 0.15;
     const l = Math.hypot(b.x - fromX, b.y - fromY) || 1;
@@ -256,7 +256,7 @@ export class Combat {
         if (d > s.range + b.r || Math.abs(b.alt - s.alt) > 45 + b.r) continue;
         if (d > 18 && (ox * s.dx + oy * s.dy) / d < cosArc) continue;
         s.hits.add(b);
-        this.damage(b, s.damage, s.x, s.y, { weapon: "sword", power: s.power });
+        this.damage(b, s.damage, s.x, s.y, "sword");
       }
       // The blade also blocks enemy projectiles passing through the swipe.
       for (const sh of this.shots) {
@@ -283,7 +283,7 @@ export class Combat {
         for (const b of this.boids) {
           if (b.hp <= 0) continue;
           if (Math.hypot(b.x - s.x, b.y - s.y) < b.r + params.player.spear.hitRadius * s.scale && Math.abs(b.alt - s.alt) < b.r + 26) {
-            this.damage(b, s.damage, s.x - s.vx * 0.05, s.y - s.vy * 0.05, { weapon: "spear", power: s.power });
+            this.damage(b, s.damage, s.x - s.vx * 0.05, s.y - s.vy * 0.05, "spear");
             s.life = 0;
             break;
           }
@@ -345,7 +345,8 @@ export class Combat {
         this.keepInBounds(b);
         if (player.targetable && Math.hypot(px, py, (player.alt - b.alt) * 0.7) < b.r + params.player.health.hitRadius) {
           // A landed melee hit freezes the attacker along with the player.
-          if (hitPlayer(params.enemyAttacks.hit.damage, b.x, b.y)) b.freeze = params.player.hitStop.enemy;
+          const dmg = params.enemyAttacks.hit.damage;
+          if (hitPlayer(dmg, b.x, b.y)) b.freeze = Math.max(b.freeze, hitStop(dmg));
           b.lunge = 0;
           b.vx = (-px / dP) * 160;
           b.vy = (-py / dP) * 160;
@@ -459,7 +460,6 @@ export class Combat {
             fromPlayer: false,
             damage: params.enemyAttacks.hit.damage,
             scale: 1,
-            power: 0,
           });
           b.cooldown = params.enemyAttacks.ranged.cooldown + this.rand() * 0.8;
         }
