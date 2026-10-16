@@ -37,6 +37,7 @@ export const DEFAULTS = {
     },
     airJump: {
       strength: 0.85, // Double jump height (× launch)
+      speed: 0.5, // Double jump speed (× launch)
       cone: 60, // Target cone ahead (degrees)
       bounce: 520, // Sword-hit bounce (up speed)
       netDepth: 45, // Safety bounce depth below rim
@@ -45,7 +46,7 @@ export const DEFAULTS = {
     slide: {
       minSpeed: 100, // Slide min speed
       keep: 1, // Slide speed kept
-      friction: 2.2, // Slide friction
+      friction: 4.2, // Slide friction
       jumpCarry: 0.6, // Slide speed carried into a jump
     },
   },

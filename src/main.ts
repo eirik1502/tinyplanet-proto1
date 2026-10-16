@@ -276,9 +276,9 @@ function closestIsland(): Island | null {
 
 /**
  * The island with the nearest rim point inside the double-jump cone that a double jump of
- * `jump` speed can reach: heading there at the jump's speed before falling back to rim height.
+ * `push` speed can reach: heading there at the push speed before falling back to rim height.
  */
-function islandAhead(jump: number): Island | null {
+function islandAhead(push: number): Island | null {
   const p = player;
   const heading = Math.atan2(p.vy, p.vx);
   const half = (params.move.airJump.cone * Math.PI) / 360;
@@ -306,7 +306,7 @@ function islandAhead(jump: number): Island | null {
       let diff = Math.atan2(dy, dx) - heading;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       if (Math.abs(diff) > half) continue;
-      const speed = Math.max(0, (p.vx * dx + p.vy * dy) / d) + jump;
+      const speed = Math.max(0, (p.vx * dx + p.vy * dy) / d) + push;
       if (d > speed * t) continue;
       isl = i;
       bestD = d;
@@ -321,10 +321,10 @@ function islandAhead(jump: number): Island | null {
  * that needs the least turn from the heading (without a heading: the nearest point).
  * Call after the jump's rise is set: `p.vz` decides how long the jump stays up.
  */
-function doubleJumpDir(jump: number): Vec | null {
+function doubleJumpDir(push: number): Vec | null {
   const p = player;
   const sp = Math.hypot(p.vx, p.vy);
-  const isl = (sp > 1 && islandAhead(jump)) || closestIsland();
+  const isl = (sp > 1 && islandAhead(push)) || closestIsland();
   if (!isl) return null;
 
   const heading = Math.atan2(p.vy, p.vx);
@@ -430,12 +430,12 @@ function update(dt: number, dtReal: number) {
     // of the current velocity already points that way, so jumping along the flight speeds it up.
     if (playing && pressed.has("Space") && p.airJumps > 0) {
       p.airJumps = 0;
-      const jump = launchSpeed() * params.move.airJump.strength;
-      p.vz = Math.max(p.vz, jump);
+      p.vz = Math.max(p.vz, launchSpeed() * params.move.airJump.strength);
       p.jumpHeld = true;
-      const aim = doubleJumpDir(jump);
+      const push = launchSpeed() * params.move.airJump.speed;
+      const aim = doubleJumpDir(push);
       if (aim) {
-        const sp = Math.max(0, p.vx * aim.x + p.vy * aim.y) + jump;
+        const sp = Math.max(0, p.vx * aim.x + p.vy * aim.y) + push;
         p.vx = aim.x * sp;
         p.vy = aim.y * sp;
       }
