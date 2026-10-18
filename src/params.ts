@@ -33,7 +33,7 @@ export const DEFAULTS = {
     },
     air: {
       turnRate: 2.5, // Air turn rate (rad/s)
-      accel: 420, // Speed up / brake (per s)
+      accel: 0, // Speed up / brake (per s)
       maxSpeed: 1.4, // Max speed (× launch speed)
       grabRadius: 18, // Grab radius
     },
@@ -72,8 +72,8 @@ export const DEFAULTS = {
       fadeOut: 0.15, // Fade out (s)
     },
     hitStop: {
-      min: 0.08, // Shortest freeze (s)
-      max: 0.3, // Longest freeze (s)
+      min: 0.17, // Shortest freeze (s)
+      max: 0.32, // Longest freeze (s)
       minDamage: 1, // Damage for shortest freeze
       maxDamage: 10, // Damage for longest freeze
     },
@@ -115,7 +115,7 @@ export const DEFAULTS = {
       rangedSpeed: 160, // Ranged speed
       bomberSpeed: 215, // Bomber speed
       aggroRange: 200, // Aggro range
-      disengageRange: 560, // Disengage range
+      disengageRange: 400, // Disengage range
     },
     flocking: {
       neighborRadius: 90, // Neighbour radius
