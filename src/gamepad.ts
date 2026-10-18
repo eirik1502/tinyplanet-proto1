@@ -2,7 +2,8 @@ import type { Vec } from "./island";
 
 // Gamepad input, read once per frame from the browser's Gamepad API. Buttons come out as
 // key-like codes named by their position in the standard (Xbox) layout: "PadA" is the bottom face
-// button on every pad, whatever is printed on it. The left stick (or d-pad) comes out as a vector.
+// button. On Nintendo pads A and B trade places, so "PadA" is the button labelled A (on the right),
+// as Nintendo players expect A to jump and confirm. The left stick (or d-pad) comes out as a vector.
 // Pads the browser doesn't map itself are translated by a built-in profile when there is one.
 // Browsers only report a pad after one of its buttons is pressed.
 
@@ -15,10 +16,10 @@ const BUTTONS = [
 /** The letters printed on the pad, for showing buttons. */
 export type PadLayout = "xbox" | "nintendo";
 
-/** Labels for each button code, per layout (by position: Nintendo's bottom button is B). */
+/** Labels for each button code, per layout (X / Y by position: Nintendo's left button is Y). */
 const LABELS: Record<PadLayout, Record<string, string>> = {
   xbox: { PadA: "A", PadB: "B", PadX: "X", PadY: "Y", PadLB: "LB", PadRB: "RB", PadLT: "LT", PadRT: "RT", PadBack: "Back", PadStart: "Start" },
-  nintendo: { PadA: "B", PadB: "A", PadX: "Y", PadY: "X", PadLB: "L", PadRB: "R", PadLT: "ZL", PadRT: "ZR", PadBack: "−", PadStart: "+" },
+  nintendo: { PadA: "A", PadB: "B", PadX: "Y", PadY: "X", PadLB: "L", PadRB: "R", PadLT: "ZL", PadRT: "ZR", PadBack: "−", PadStart: "+" },
 };
 
 export function padLabel(code: string, layout: PadLayout) {
@@ -107,9 +108,12 @@ export function readGamepad(): PadState {
   if (!pad) return IDLE;
 
   const profile = profileFor(pad);
+  const layout = profile?.layout ?? layoutFor(pad);
   const held = new Set<string>();
   BUTTONS.forEach((code, i) => {
-    const b = pad.buttons[profile ? (profile.buttons[i] ?? -1) : i];
+    // Nintendo pads: read "PadA" from the right face button (A) and "PadB" from the bottom one (B).
+    const std = layout === "nintendo" && i < 2 ? 1 - i : i;
+    const b = pad.buttons[profile ? (profile.buttons[std] ?? -1) : std];
     if (b && (i === 6 || i === 7 ? b.value > TRIGGER_PRESS : b.pressed)) held.add(code);
   });
   if (profile?.hat !== undefined) for (const code of hatDirs(pad.axes[profile.hat] ?? 9)) held.add(code);
@@ -121,7 +125,7 @@ export function readGamepad(): PadState {
     const l = Math.hypot(dx, dy);
     if (l) move = { x: dx / l, y: dy / l };
   }
-  return { held, move, layout: profile?.layout ?? layoutFor(pad) };
+  return { held, move, layout };
 }
 
 /** When the current rumble ends (ms, performance.now) and how strong it is. */

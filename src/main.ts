@@ -192,7 +192,8 @@ function rumblePad(strong: number, weak: number, ms: number) {
 
 type Mode = "hang" | "air" | "lost";
 
-// Gamepad: the right face button or right trigger for the sword, the left ones for the spear.
+// Gamepad: B (right on Xbox, bottom on Nintendo) or the right trigger for the sword, the left
+// face button or left trigger for the spear.
 const WEAPON_KEYS: Record<Weapon, string[]> = { sword: ["KeyZ", "KeyJ", "PadB", "PadRT"], spear: ["KeyX", "KeyK", "PadX", "PadLT"] };
 const WEAPON_BUTTONS: Record<Weapon, string> = { sword: "Mouse0", spear: "Mouse2" };
 

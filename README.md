@@ -37,9 +37,9 @@ attacks point at it. Left click attacks with the sword and right click with the 
 work too). The mode is remembered between sessions.
 
 Gamepad mode works like keyboard mode, with the left stick or d-pad in place of the arrows. The
-stick is analog: a partly pushed stick climbs, steers and speeds up less. Buttons go by position:
-the bottom face button jumps (A on Xbox, B on Switch), the right face button or right trigger is the
-sword, the left face button or left trigger the spear, Start / + pauses and Back / − mutes. The
+stick is analog: a partly pushed stick climbs, steers and speeds up less. A jumps (the bottom face
+button on Xbox, the right one on Switch), B or the right trigger is the sword, the left face button
+(X on Xbox, Y on Switch) or the left trigger is the spear, Start / + pauses and Back / − mutes. The
 briefing shows the letters printed on the pad in use. Using a pad switches to gamepad mode. Pads the
 browser doesn't map itself need a profile in `src/gamepad.ts` (PowerA pads have one). Where the
 browser supports it (Chromium), the pad rumbles on hits, blasts, hard landings and full charges.
