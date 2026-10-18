@@ -149,6 +149,9 @@ const SPEEDS: Record<BoidKind, () => number> = {
   queen: () => params.boids.queen.speed,
 };
 
+/** Starting health of the swarm's boids (the queen's is set per level). */
+export const BOID_HP: Record<SpawnKind, number> = { melee: 2, ranged: 2, bomber: 1 };
+
 export const BURST_COLORS: Record<BoidKind, string> = {
   melee: "#ff6b7d",
   ranged: "#6ff5dd",
@@ -223,7 +226,7 @@ export class Combat {
   }
 
   private spawn(kind: BoidKind, x: number, y: number, flock: Flock): Boid {
-    const hp = kind === "bomber" ? 1 : 2; // the queen's is set by `reset`
+    const hp = kind === "queen" ? 1 : BOID_HP[kind]; // the queen's is set by `reset`
     const a = this.rand() * Math.PI * 2;
     const b: Boid = {
       id: this.nextId++,

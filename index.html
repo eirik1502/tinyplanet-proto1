@@ -8,28 +8,65 @@
     html, body { margin: 0; height: 100%; background: #05030c; overflow: hidden; }
     canvas { display: block; width: 100vw; height: 100vh; }
     #hud { position: fixed; left: 12px; bottom: 10px; color: #cfc6ff; font: 13px/1.5 system-ui, sans-serif; opacity: .75; pointer-events: none; }
-    #briefing { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; background: rgba(10, 4, 22, .55); overflow-y: auto; color: #e8e2ff; font: 14px/1.45 system-ui, sans-serif; }
+    #briefing { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; background: rgba(8, 3, 18, .62); overflow-y: auto; color: #e8e2ff; font: 13px/1.4 system-ui, sans-serif; }
     #briefing[hidden] { display: none; }
-    #briefing .card { width: min(560px, 100%); max-height: 100%; overflow-y: auto; background: rgba(24, 12, 44, .92); border: 1px solid rgba(200, 180, 255, .2); border-radius: 12px; padding: 22px 26px; box-sizing: border-box; }
-    #briefing h1 { margin: 0; font-size: 30px; font-weight: 800; color: #ffd34d; }
-    #briefing .goal { margin: 2px 0 10px; color: #f0dcff; font-weight: 600; }
-    #briefing h2 { margin: 14px 0 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #a99be0; }
-    #briefing table { border-collapse: collapse; width: 100%; }
-    #briefing td { padding: 3px 0; vertical-align: top; }
-    #briefing td.keys { width: 38%; padding-right: 12px; color: #fff; font-weight: 600; white-space: nowrap; }
-    #briefing .dim { color: #a99be0; }
-    #briefing .small { font-size: 12px; margin: 14px 0 0; }
-    #briefing .new { display: inline-block; padding: 0 5px; border-radius: 4px; background: #ffd34d; color: #2a1640; font-size: 10px; font-weight: 800; vertical-align: 1px; }
-    #briefing .modes { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    #briefing button { font: inherit; color: inherit; background: rgba(255, 255, 255, .06); border: 1px solid rgba(200, 180, 255, .3); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
-    #briefing .modes button.on { background: #6a4cc8; border-color: #9a80ff; color: #fff; }
-    #briefing .enemies { list-style: none; margin: 0; padding: 0; }
-    #briefing .enemies li { position: relative; padding: 3px 0 5px 24px; }
-    #briefing .dot { position: absolute; left: 3px; top: 7px; width: 11px; height: 11px; border-radius: 50%; }
-    #briefing .dot.queen { left: 0; top: 4px; width: 17px; height: 17px; }
-    #briefing .start { display: block; width: 100%; margin-top: 16px; padding: 10px; font-size: 16px; font-weight: 700; background: #ffd34d; color: #2a1640; border: 0; }
-    #briefing .start .dim { color: #6a4c30; font-weight: 500; font-size: 13px; }
-    @media (max-width: 520px) { #briefing td.keys { white-space: normal; width: 40%; } }
+    #briefing svg { width: 1em; height: 1em; vertical-align: -.15em; flex: none; }
+    #briefing .sheet { width: min(900px, 100%); max-height: 100%; overflow-y: auto; box-sizing: border-box; padding: 20px 22px; background: rgba(22, 11, 40, .94); border: 1px solid rgba(200, 180, 255, .16); border-radius: 14px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
+    #briefing .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    #briefing h1 { margin: 0; font-size: 28px; line-height: 1.1; font-weight: 800; color: #ffd34d; }
+    #briefing .goal { margin: 3px 0 0; color: #f0dcff; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+    #briefing .goal svg { color: #ffd34d; }
+    #briefing button { font: inherit; color: inherit; cursor: pointer; }
+    #briefing .modes { display: flex; gap: 6px; align-items: center; }
+    #briefing .modes button { display: inline-flex; gap: 4px; align-items: center; padding: 6px 11px; background: rgba(255, 255, 255, .05); border: 1px solid rgba(200, 180, 255, .25); border-radius: 8px; color: #b9addf; }
+    #briefing .modes button svg { width: 1.25em; height: 1.25em; }
+    #briefing .modes button.on { background: #5b3fc0; border-color: #9a80ff; color: #fff; }
+    #briefing kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border: 1px solid rgba(220, 210, 255, .35); border-bottom-width: 2px; border-radius: 5px; background: rgba(255, 255, 255, .07); color: #fff; font: 600 11px/1 system-ui, sans-serif; }
+    #briefing kbd.wide { min-width: 46px; }
+    #briefing .cluster { display: inline-grid; grid-template-columns: repeat(3, 15px); gap: 1px; }
+    #briefing .cluster kbd { min-width: 15px; height: 13px; padding: 0; font-size: 8px; border-radius: 3px; }
+    #briefing .mouse { display: inline-flex; color: #fff; font-size: 24px; }
+    #briefing .or { color: #8d80bd; font-size: 11px; margin: 0 3px; }
+    #briefing .moves { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 14px 0; padding: 8px 12px; border-radius: 10px; background: rgba(255, 255, 255, .035); color: #b9addf; font-size: 12px; }
+    #briefing .move { display: flex; align-items: center; gap: 8px; }
+    #briefing .move .keys { display: inline-flex; align-items: center; }
+    #briefing .units { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); gap: 12px; align-items: start; }
+    #briefing .enemies { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    #briefing .unit { --c: #ffd34d; position: relative; padding: 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); background: linear-gradient(160deg, color-mix(in srgb, var(--c) 20%, #1d1036), #170c2c 65%); }
+    #briefing .unit > header { display: flex; gap: 10px; align-items: center; }
+    #briefing .portrait { width: 56px; height: 56px; flex: none; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--c) 35%, transparent), transparent 70%), rgba(0, 0, 0, .25); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 50%, transparent); }
+    #briefing .player .portrait { width: 68px; height: 68px; }
+    #briefing h3 { margin: 0 0 3px; font-size: 15px; color: #fff; display: flex; align-items: center; gap: 6px; }
+    #briefing .player h3 { font-size: 18px; color: var(--c); }
+    #briefing .flavour { margin: 4px 0 0; color: #b9addf; font-size: 12px; }
+    #briefing .stats { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+    #briefing .chip { display: inline-flex; gap: 3px; align-items: center; padding: 1px 6px; border-radius: 999px; background: rgba(255, 255, 255, .08); color: #e8e2ff; font-size: 11px; font-weight: 600; white-space: nowrap; }
+    #briefing .chip.hp { background: rgba(255, 90, 110, .18); color: #ffc2cb; }
+    #briefing .chip.hp svg { color: #ff5a6e; }
+    #briefing .abilities { display: grid; gap: 6px; margin-top: 10px; }
+    #briefing .ability { display: flex; gap: 10px; align-items: flex-start; padding: 8px; border-radius: 9px; background: rgba(0, 0, 0, .22); }
+    #briefing .ability-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 8px; background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); font-size: 18px; }
+    #briefing .ability-body { flex: 1; min-width: 0; }
+    #briefing .ability-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: #fff; }
+    #briefing .ability-head b { font-size: 14px; }
+    #briefing .ability-text { margin-top: 2px; color: #b9addf; font-size: 12px; }
+    #briefing .ability-input { display: flex; align-items: center; flex: none; padding-top: 2px; opacity: .85; }
+    #briefing .player .ability { padding: 10px; }
+    #briefing .player .ability-icon { width: 38px; height: 38px; font-size: 22px; }
+    #briefing .player .ability-head b { font-size: 16px; }
+    #briefing .new { display: inline-block; padding: 1px 5px; border-radius: 4px; background: #ffd34d; color: #2a1640; font-size: 9px; font-weight: 800; letter-spacing: .05em; }
+    #briefing .hint { margin: 12px 0 0; color: #8d80bd; font-size: 12px; text-align: center; }
+    #briefing .hint kbd { height: 17px; min-width: 17px; font-size: 10px; }
+    #briefing .start { display: flex; justify-content: center; align-items: center; gap: 10px; width: 100%; margin-top: 12px; padding: 11px; border: 0; border-radius: 10px; background: #ffd34d; color: #2a1640; font-size: 16px; font-weight: 800; }
+    #briefing .start kbd { background: rgba(42, 22, 64, .12); border-color: rgba(42, 22, 64, .35); color: #2a1640; }
+    #briefing .start span { display: inline-flex; gap: 4px; }
+    @media (max-width: 760px) {
+      #briefing .units { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 480px) {
+      #briefing .enemies { grid-template-columns: 1fr; }
+      #briefing .sheet { padding: 16px; }
+    }
   </style>
 </head>
 <body>
