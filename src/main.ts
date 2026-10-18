@@ -7,6 +7,7 @@ import { applyVolumes, music, sfx, toggleMute, unlockAudio } from "./audio";
 import { Avatar, type AvatarView } from "./avatar";
 import { drawBoidBody } from "./sprites";
 import { briefingHtml, paintPortraits, type InputMode, type Weapon } from "./briefing";
+import { readGamepad, rumble, type PadLayout } from "./gamepad";
 
 // ---------------------------------------------------------------------------------------------
 // Setup
@@ -61,14 +62,18 @@ window.addEventListener("blur", () => keys.clear());
 window.addEventListener("pointerdown", unlockAudio);
 
 /**
- * Input mode, toggled with I and remembered. "keyboard": the arrows / WASD both move and aim.
+ * Input mode, cycled with I and remembered. "keyboard": the arrows / WASD both move and aim.
  * "mouse": they still move, but jumps, double jumps and attacks aim at the cursor, and the mouse
- * buttons attack (left: sword, right: spear).
+ * buttons attack (left: sword, right: spear). "gamepad": like keyboard mode, with the left stick
+ * (analog) or d-pad for the arrows and the face buttons to jump and attack. Using a pad switches
+ * to gamepad mode.
  */
+const INPUT_MODES: InputMode[] = ["keyboard", "mouse", "gamepad"];
 const INPUT_MODE_KEY = "planetproto.inputMode";
 let inputMode: InputMode = "keyboard";
 try {
-  if (localStorage.getItem(INPUT_MODE_KEY) === "mouse") inputMode = "mouse";
+  const saved = localStorage.getItem(INPUT_MODE_KEY) as InputMode | null;
+  if (saved && INPUT_MODES.includes(saved)) inputMode = saved;
 } catch {
   // Ignore: persistence is a convenience.
 }
@@ -88,7 +93,7 @@ setInputMode(inputMode);
 window.addEventListener("keydown", (e) => {
   if (e.code === "KeyI" && !e.repeat && !(e.target instanceof HTMLInputElement))
   {
-    setInputMode(inputMode === "mouse" ? "keyboard" : "mouse");
+    setInputMode(INPUT_MODES[(INPUT_MODES.indexOf(inputMode) + 1) % INPUT_MODES.length]!);
     if (game.state === "briefing") showBriefing();
   }
 });
@@ -110,9 +115,49 @@ window.addEventListener("mouseup", (e) => {
 });
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
+// Gamepad buttons go into the key sets as "PadA", "PadRT", ... (by position, see gamepad.ts); the
+// stick is kept here. Read once per frame, before the update.
+let padHeld = new Set<string>();
+let padMove: Vec = { x: 0, y: 0 };
+/** The letters on the pad in use, for the briefing. */
+let padLayout: PadLayout = "xbox";
+
+function pollGamepad() {
+  const pad = readGamepad();
+  let used = Math.hypot(pad.move.x, pad.move.y) > 0.5;
+  for (const code of pad.held) {
+    if (padHeld.has(code)) continue;
+    pressed.add(code);
+    keys.add(code);
+    used = true;
+  }
+  for (const code of padHeld) {
+    if (pad.held.has(code)) continue;
+    keys.delete(code);
+    released.add(code);
+  }
+  padHeld = pad.held;
+  padMove = pad.move;
+  if (pressed.has("PadBack")) toggleMute();
+  const relabel = used && pad.layout !== padLayout;
+  if (used) padLayout = pad.layout;
+  if (used && inputMode !== "gamepad") {
+    unlockAudio();
+    setInputMode("gamepad");
+    if (game.state === "briefing") showBriefing();
+  } else if (relabel && game.state === "briefing") showBriefing();
+}
+
+/** Codes that jump, and that start / resume the level from the briefing. */
+const JUMP_KEYS = ["Space", "PadA"];
+const START_KEYS = ["Enter", "Space", "PadA", "PadStart"];
+const PAUSE_KEYS = ["Escape", "PadStart"];
+const anyPressed = (codes: string[]) => codes.some((k) => pressed.has(k));
+const anyHeld = (codes: string[]) => codes.some((k) => keys.has(k));
+
 /**
  * In mouse mode, the world direction (unit vector) from the player to the cursor, taken at the
- * player's altitude. Null in keyboard mode, or with the cursor right on the player.
+ * player's altitude. Null in the other modes, or with the cursor right on the player.
  */
 function mouseAim(): Vec | null {
   if (inputMode !== "mouse") return null;
@@ -124,12 +169,21 @@ function mouseAim(): Vec | null {
   return l > 1 ? { x: dx / l, y: dy / l } : null;
 }
 
-/** Arrow keys / WASD as a screen-space unit vector (y down). */
+/**
+ * Movement input as a screen-space vector (y down) of length 0..1: the left stick when it's
+ * pushed, else the arrow keys / WASD (always length 1). A half-pushed stick moves at half effort.
+ */
 function inputDir(): Vec {
+  if (padMove.x || padMove.y) return padMove;
   const x = +(keys.has("KeyD") || keys.has("ArrowRight")) - +(keys.has("KeyA") || keys.has("ArrowLeft"));
   const y = +(keys.has("KeyS") || keys.has("ArrowDown")) - +(keys.has("KeyW") || keys.has("ArrowUp"));
   const l = Math.hypot(x, y);
   return l > 0 ? { x: x / l, y: y / l } : { x: 0, y: 0 };
+}
+
+/** Gamepad rumble, only in gamepad mode. */
+function rumblePad(strong: number, weak: number, ms: number) {
+  if (inputMode === "gamepad") rumble(strong, weak, ms);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -138,7 +192,8 @@ function inputDir(): Vec {
 
 type Mode = "hang" | "air" | "lost";
 
-const WEAPON_KEYS: Record<Weapon, string[]> = { sword: ["KeyZ", "KeyJ"], spear: ["KeyX", "KeyK"] };
+// Gamepad: the right face button or right trigger for the sword, the left ones for the spear.
+const WEAPON_KEYS: Record<Weapon, string[]> = { sword: ["KeyZ", "KeyJ", "PadB", "PadRT"], spear: ["KeyX", "KeyK", "PadX", "PadLT"] };
 const WEAPON_BUTTONS: Record<Weapon, string> = { sword: "Mouse0", spear: "Mouse2" };
 
 const player = {
@@ -151,7 +206,7 @@ const player = {
   vx: 0,
   vy: 0,
   vz: 0,
-  jumpHeld: false, // Space still held since the last jump: releasing early cuts it short
+  jumpHeld: false, // jump still held since the last jump: releasing early cuts it short
   airJumps: 0, // double jumps left (0 or 1): one per flight, refilled by hits in the air
   netUsed: false, // the safety bounce below the rim is spent until the next grab
   focus: 1, // 0..1 slow-motion budget
@@ -286,6 +341,7 @@ function showBriefing(animate = false) {
     level: game.level,
     reason: game.briefing,
     inputMode,
+    padLayout,
     weapons,
     enemies,
     fresh: game.briefing === "pause" ? [] : [...weapons, ...enemies].filter((x) => UNLOCKS[x] === game.level && game.level > 1),
@@ -326,7 +382,7 @@ briefingEl.addEventListener("click", (e) => {
 /** While the briefing is up the world is paused: only its own keys do anything. */
 function updateBriefing(dtReal: number) {
   game.timer += dtReal;
-  if (game.timer > 0.3 && (pressed.has("Enter") || pressed.has("Space") || (game.briefing === "pause" && pressed.has("Escape"))))
+  if (game.timer > 0.3 && (anyPressed(START_KEYS) || (game.briefing === "pause" && anyPressed(PAUSE_KEYS))))
     closeBriefing();
   pressed.clear();
   released.clear();
@@ -343,6 +399,7 @@ function hitPlayer(dmg: number, fromX: number, fromY: number): boolean {
   p.invuln = params.player.health.invulnTime;
   game.shake = 0.35;
   sfx.playerHurt();
+  rumblePad(0.7, 0.5, 220);
   avatar.hurt(fromX, fromY, p.x, p.y);
   combat.burst(p.x, p.y, p.alt, 10, "#ffd0b0");
   if (p.mode === "air") {
@@ -363,6 +420,7 @@ function pushPlayer(vx: number, vy: number, vz: number) {
   const p = player;
   if (game.state !== "play" || p.mode === "lost") return;
   game.shake = Math.max(game.shake, 0.5);
+  rumblePad(1, 0.6, 320);
   if (p.mode === "air") {
     p.vx += vx;
     p.vy += vy;
@@ -594,7 +652,7 @@ const LOST_ALT = ISLAND_TOP - 80;
 
 /** `dt` is world time (slowed during slow motion); `dtReal` is wall-clock time, used for aiming. */
 function update(dt: number, dtReal: number) {
-  if (game.state === "play" && pressed.has("Escape")) {
+  if (game.state === "play" && anyPressed(PAUSE_KEYS)) {
     openBriefing("pause");
     pressed.clear();
     return;
@@ -610,8 +668,9 @@ function update(dt: number, dtReal: number) {
     p.freeze -= dtReal;
     if (p.freeze <= 0 && p.redirect) {
       p.redirect = false;
-      if (p.mode === "air" && (dir.x || dir.y)) {
-        const sp = Math.hypot(p.vx, p.vy);
+      const l = Math.hypot(dir.x, dir.y);
+      if (p.mode === "air" && l) {
+        const sp = Math.hypot(p.vx, p.vy) / l;
         p.vx = dir.x * sp;
         p.vy = dir.y * sp;
       }
@@ -634,7 +693,7 @@ function update(dt: number, dtReal: number) {
     if (p.slide) emitDust(e.x, e.y, Math.min(1, Math.abs(p.slide) / 300), dt);
 
     // Space jumps at once; holding it keeps the jump going full height (see the air section).
-    if (playing && pressed.has("Space")) {
+    if (playing && anyPressed(JUMP_KEYS)) {
       const f = launch(p.island, p.s, jumpAngle(mouseAim() ?? dir));
       carrySlide(f, e);
       Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
@@ -650,7 +709,7 @@ function update(dt: number, dtReal: number) {
     }
   } else if (p.mode === "air") {
     // Releasing Space while still rising cuts the jump short.
-    if (p.jumpHeld && !keys.has("Space")) {
+    if (p.jumpHeld && !anyHeld(JUMP_KEYS)) {
       if (p.vz > 0) p.vz *= params.move.jump.cut;
       p.jumpHeld = false;
     }
@@ -658,7 +717,7 @@ function update(dt: number, dtReal: number) {
 
     // Double jump: a fresh rise, heading for the closest island. The jump speed adds to whatever
     // of the current velocity already points that way, so jumping along the flight speeds it up.
-    if (playing && pressed.has("Space") && p.airJumps > 0) {
+    if (playing && anyPressed(JUMP_KEYS) && p.airJumps > 0) {
       p.airJumps = 0;
       p.vz = Math.max(p.vz, launchSpeed() * params.move.airJump.strength);
       p.jumpHeld = true;
@@ -672,6 +731,7 @@ function update(dt: number, dtReal: number) {
       combat.burst(p.x, p.y, p.alt - 6, 10, "#bff4ff");
       sfx.doubleJump();
       avatar.doubleJump();
+      rumblePad(0.15, 0.2, 60);
     }
 
     if (!p.aim) steerAir(dir, dt);
@@ -685,6 +745,7 @@ function update(dt: number, dtReal: number) {
       const speed = Math.hypot(p.vx, p.vy, p.vz);
       sfx.grab(speed);
       avatar.land(speed);
+      rumblePad(0, Math.min(0.5, speed / 1500), 60);
       grab(hit.island, hit.s, p.vx, p.vy);
       const e = islands[hit.island]!.pointAt(hit.s);
       emitDust(e.x, e.y, 4 + Math.min(10, speed / 80), 1 / 60);
@@ -694,10 +755,12 @@ function update(dt: number, dtReal: number) {
       combat.burst(p.x, p.y, p.alt, 14, "#9fe8ff");
       sfx.netBounce();
       avatar.bounce();
+      rumblePad(0.3, 0.3, 120);
     } else if (p.alt < LOST_ALT) {
       p.mode = "lost";
       p.lostTimer = 0;
       sfx.lost();
+      rumblePad(0.4, 0, 250);
     }
   } else {
     // Sinking into the haze, then reappear on the last rim we held.
@@ -753,7 +816,7 @@ function update(dt: number, dtReal: number) {
   if (game.state !== "play") {
     game.timer += dt;
     // Winning moves on to the next level; losing replays the same level on a fresh planet.
-    if (game.timer > 4.5 || (game.timer > 1.2 && pressed.has("Enter"))) {
+    if (game.timer > 4.5 || (game.timer > 1.2 && anyPressed(["Enter", "PadStart"]))) {
       restart(game.state === "victory" ? game.level + 1 : game.level, game.state === "defeat");
     }
   }
@@ -792,32 +855,37 @@ function endRound(state: "victory" | "defeat") {
 
 /**
  * Climb input along the rim, -1..1: toward the rim point whose outward normal faces the input
- * direction, at full speed until it nearly does. Pointing into the island still climbs.
+ * direction, at full speed until it nearly does. Pointing into the island still climbs. A partly
+ * pushed stick climbs slower.
  */
 function climbInput(e: { nx: number; ny: number; tx: number; ty: number }, dir: Vec): number {
-  if (!dir.x && !dir.y) return 0;
-  const off = Math.acos(Math.max(-1, Math.min(1, dir.x * e.nx + dir.y * e.ny)));
+  const l = Math.hypot(dir.x, dir.y);
+  if (!l) return 0;
+  const off = Math.acos(Math.max(-1, Math.min(1, (dir.x * e.nx + dir.y * e.ny) / l)));
   const side = dir.x * e.tx + dir.y * e.ty;
-  return (side >= 0 ? 1 : -1) * Math.min(1, off / 0.35);
+  return (side >= 0 ? 1 : -1) * Math.min(1, off / 0.35) * l;
 }
 
 /**
  * Air control: arrows turn the flight toward the input, and speed it up along it or brake
- * against it. Pulling straight back only brakes.
+ * against it. Pulling straight back only brakes. A partly pushed stick turns, speeds up and
+ * brakes proportionally less.
  */
 function steerAir(dir: Vec, dt: number) {
   const p = player;
-  if (!dir.x && !dir.y) return;
+  const l = Math.hypot(dir.x, dir.y);
+  if (!l) return;
   const air = params.move.air;
   let sp = Math.hypot(p.vx, p.vy);
   let a = sp > 1 ? Math.atan2(p.vy, p.vx) : Math.atan2(dir.y, dir.x);
-  const fwd = dir.x * Math.cos(a) + dir.y * Math.sin(a);
+  const fwd = (dir.x * Math.cos(a) + dir.y * Math.sin(a)) / l;
   if (sp > 1 && fwd > -0.7) {
     let diff = Math.atan2(dir.y, dir.x) - a;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-    a += Math.max(-air.turnRate * dt, Math.min(air.turnRate * dt, diff));
+    const turn = air.turnRate * l * dt;
+    a += Math.max(-turn, Math.min(turn, diff));
   }
-  const next = sp + fwd * air.accel * dt;
+  const next = sp + fwd * l * air.accel * dt;
   // Speeding up stops at the cap, but never slows a faster flight (from a hit or bounce).
   sp = Math.max(0, fwd > 0 ? Math.min(next, Math.max(sp, launchSpeed() * air.maxSpeed)) : next);
   p.vx = Math.cos(a) * sp;
@@ -932,7 +1000,10 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
   // Aiming runs on real time so slow motion doesn't slow the charge or the turning.
   const wasCharged = aimPower() >= 1;
   aim.t += dtReal;
-  if (!wasCharged && aimPower() >= 1) sfx.charged();
+  if (!wasCharged && aimPower() >= 1) {
+    sfx.charged();
+    rumblePad(0, 0.25, 50);
+  }
   const pa = params.player.aim;
   if (inputMode === "mouse") {
     // The aim follows the cursor directly.
@@ -1516,13 +1587,19 @@ function playCombatSounds() {
     if (ev.type === "hit") {
       // The player's own hits are always heard at full volume.
       sfx.hitEnemy(ev.kind!, ev.killed!, { pan: at.pan });
-      if (ev.kind === "queen" && ev.killed) sfx.queenDeath();
+      if (ev.kind === "queen" && ev.killed) {
+        sfx.queenDeath();
+        rumblePad(1, 1, 700);
+      } else rumblePad(ev.killed ? 0.45 : 0.2, ev.killed ? 0.6 : 0.45, ev.killed ? 140 : 80);
       continue;
     }
     if (at.gain <= 0.01) continue;
     if (ev.type === "shot") sfx.orbShot(at);
     else if (ev.type === "lunge") sfx.lunge(at);
-    else if (ev.type === "explode") sfx.explosion({ pan: at.pan, gain: Math.max(0.35, at.gain) });
+    else if (ev.type === "explode") {
+      sfx.explosion({ pan: at.pan, gain: Math.max(0.35, at.gain) });
+      rumblePad(0.6 * at.gain, 0.3 * at.gain, 200);
+    }
     else if (ev.type === "block") sfx.block(at);
     else sfx.thud(at);
   }
@@ -1926,6 +2003,7 @@ let worldTime = 0;
 function frame(now: number) {
   const dtReal = Math.min(0.05, (now - last) / 1000);
   last = now;
+  pollGamepad();
   updateTimeScale(dtReal);
   const dt = game.state === "briefing" ? 0 : dtReal * slow.scale;
   worldTime += dt;

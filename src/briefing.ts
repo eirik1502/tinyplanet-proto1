@@ -1,6 +1,7 @@
 import { Avatar, type AvatarView } from "./avatar";
 import { BOID_HP, BURST_COLORS, type BoidKind } from "./combat";
 import { drawBoidBody } from "./sprites";
+import { padLabel, type PadLayout } from "./gamepad";
 import { params } from "./tuning";
 
 // The briefing shown before each level (and as the pause screen): input mode, a compact movement
@@ -8,7 +9,7 @@ import { params } from "./tuning";
 // card per enemy on this level with its health and attack. Newly unlocked items are tagged.
 // Texts stay short: only what you can't easily learn by playing.
 
-export type InputMode = "keyboard" | "mouse";
+export type InputMode = "keyboard" | "mouse" | "gamepad";
 export type Weapon = "sword" | "spear";
 
 export interface BriefingInfo {
@@ -16,6 +17,8 @@ export interface BriefingInfo {
   /** Why the screen is up: a new level, a retry after defeat, or a pause mid-level. */
   reason: "new" | "retry" | "pause";
   inputMode: InputMode;
+  /** The letters on the gamepad, for gamepad mode. */
+  padLayout: PadLayout;
   weapons: Weapon[];
   enemies: Exclude<BoidKind, "queen">[];
   /** Weapons and enemies unlocked on this level. */
@@ -41,6 +44,7 @@ const ICONS = {
   net: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9M8 8l4 4 4-4"/><path d="M3 15c3 4 15 4 18 0"/></svg>`,
   heart: `<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z"/></svg>`,
   keyboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>`,
+  gamepad: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10a5 5 0 0 1 4.9 6l-.7 3.4a2.4 2.4 0 0 1-4.2 1L15 15H9l-2 2.4a2.4 2.4 0 0 1-4.2-1L2.1 13A5 5 0 0 1 7 7z"/><path d="M7 10v3M5.5 11.5h3M16 11h.01M18 12.5h.01"/></svg>`,
   mouse: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="2.5" width="12" height="19" rx="6"/><path d="M12 2.5V10M6 10h12"/></svg>`,
 };
 
@@ -51,6 +55,14 @@ function mouseButton(side: "left" | "right") {
 }
 
 const kbd = (k: string, wide = false) => `<kbd${wide ? ' class="wide"' : ""}>${k}</kbd>`;
+/** The letters on the gamepad of the briefing being built. */
+let layout: PadLayout = "xbox";
+/** A gamepad button by code ("PadA": the bottom face button), labelled for the pad in use. */
+function pad(code: string) {
+  const label = padLabel(code, layout);
+  return `<kbd class="pad${label.length === 1 ? " round" : ""}">${label}</kbd>`;
+}
+const stick = `<kbd class="pad round">L</kbd>`;
 const arrows = `<span class="cluster"><span></span>${kbd("↑")}<span></span>${kbd("←")}${kbd("↓")}${kbd("→")}</span>`;
 const or = `<span class="or">/</span>`;
 /**
@@ -93,6 +105,7 @@ function ability(a: Ability) {
 
 function playerCard(b: BriefingInfo) {
   const mouse = b.inputMode === "mouse";
+  const gamepad = b.inputMode === "gamepad";
   const sw = params.player.sword;
   const sp = params.player.spear;
   const attacks: Ability[] = [];
@@ -102,7 +115,7 @@ function playerCard(b: BriefingInfo) {
       name: "Sword",
       text: "Hold to power up. Bounce on aerial hits.",
       stats: [`${fmt(sw.damage)}–${fmt(sw.maxDamage)} dmg`, `${fmt(sw.cooldown)}s recharge`],
-      input: mouse ? `${mouseButton("left")}${or}${kbd("Z")}` : `${kbd("Z")}${or}${kbd("J")}`,
+      input: gamepad ? `${pad("PadB")}${or}${pad("PadRT")}` : mouse ? `${mouseButton("left")}${or}${kbd("Z")}` : `${kbd("Z")}${or}${kbd("J")}`,
       fresh: b.fresh.includes("sword"),
     });
   if (b.weapons.includes("spear"))
@@ -111,7 +124,7 @@ function playerCard(b: BriefingInfo) {
       name: "Spear",
       text: "Hold to power up. Thrown.",
       stats: [`${fmt(sp.damage)}–${fmt(sp.maxDamage)} dmg`, `${fmt(sp.cooldown)}s recharge`],
-      input: mouse ? `${mouseButton("right")}${or}${kbd("X")}` : `${kbd("X")}${or}${kbd("K")}`,
+      input: gamepad ? `${pad("PadX")}${or}${pad("PadLT")}` : mouse ? `${mouseButton("right")}${or}${kbd("X")}` : `${kbd("X")}${or}${kbd("K")}`,
       fresh: b.fresh.includes("spear"),
     });
   const passives: Ability[] = [
@@ -120,7 +133,7 @@ function playerCard(b: BriefingInfo) {
       name: "Double jump",
       text: "Refills on aerial hits.",
       stats: ["1 per flight"],
-      input: `${kbd("Space", true)}<span class="or">in air</span>`,
+      input: `${gamepad ? pad("PadA") : kbd("Space", true)}<span class="or">in air</span>`,
     },
     {
       icon: ICONS.net,
@@ -197,13 +210,21 @@ function enemyCard(kind: BoidKind, b: BriefingInfo) {
 
 export function briefingHtml(b: BriefingInfo): string {
   freshCount = 0;
-  const mouse = b.inputMode === "mouse";
+  layout = b.padLayout;
+  const mode = b.inputMode;
   const title =
     b.reason === "pause" ? `Paused · Level ${b.level}` : b.reason === "retry" ? `Retry level ${b.level}` : `Level ${b.level}`;
-  const moves = [
-    [`${arrows}<span class="or">or WASD</span>`, "Climb · steer in the air"],
-    [kbd("Space", true), mouse ? "Jump toward the cursor · hold for height" : "Jump · hold for height"],
-  ];
+  const moves =
+    mode === "gamepad"
+      ? [
+          [`${stick}<span class="or">or d-pad</span>`, "Climb · steer in the air"],
+          [pad("PadA"), "Jump · hold for height"],
+        ]
+      : [
+          [`${arrows}<span class="or">or WASD</span>`, "Climb · steer in the air"],
+          [kbd("Space", true), mode === "mouse" ? "Jump toward the cursor · hold for height" : "Jump · hold for height"],
+        ];
+  const modeButton = (m: InputMode, label: string) => `<button data-mode="${m}" class="${mode === m ? "on" : ""}">${label}</button>`;
   return `
     <div class="sheet${b.animate ? " intro" : ""}">
       <header class="top">
@@ -212,8 +233,9 @@ export function briefingHtml(b: BriefingInfo): string {
           <p class="goal">${ICONS.crown}Kill the queen</p>
         </div>
         <div class="modes" role="group" aria-label="Input mode">
-          <button data-mode="keyboard" class="${mouse ? "" : "on"}">${ICONS.keyboard}Keyboard</button>
-          <button data-mode="mouse" class="${mouse ? "on" : ""}">${ICONS.keyboard}+${ICONS.mouse}Mouse</button>
+          ${modeButton("keyboard", `${ICONS.keyboard}Keyboard`)}
+          ${modeButton("mouse", `${ICONS.keyboard}+${ICONS.mouse}Mouse`)}
+          ${modeButton("gamepad", `${ICONS.gamepad}Gamepad`)}
           ${kbd("I")}
         </div>
       </header>
@@ -224,8 +246,8 @@ export function briefingHtml(b: BriefingInfo): string {
         ${playerCard(b)}
         <div class="enemies">${(["queen", ...b.enemies] as BoidKind[]).map((k) => enemyCard(k, b)).join("")}</div>
       </div>
-      <p class="hint">${kbd("M")} mutes · ${kbd("Esc")} pauses</p>
-      <button class="start" data-start>${b.reason === "pause" ? "Resume" : "Start"} <span>${kbd("Enter")} ${kbd("Space", true)}</span></button>
+      <p class="hint">${mode === "gamepad" ? `${pad("PadBack")} mutes · ${pad("PadStart")} pauses` : `${kbd("M")} mutes · ${kbd("Esc")} pauses`}</p>
+      <button class="start" data-start>${b.reason === "pause" ? "Resume" : "Start"} <span>${mode === "gamepad" ? `${pad("PadA")} ${pad("PadStart")}` : `${kbd("Enter")} ${kbd("Space", true)}`}</span></button>
     </div>`;
 }
 

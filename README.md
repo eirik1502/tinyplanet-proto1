@@ -23,7 +23,7 @@ bun run typecheck
 | Z / J | Sword |
 | X / K | Spear (from level 3) |
 | M | Mute / unmute sound |
-| I | Switch input mode: keyboard only / keyboard + mouse |
+| I | Switch input mode: keyboard only / keyboard + mouse / gamepad |
 | Esc | Pause and show the controls |
 
 Each level opens with a briefing: pick the input mode, and see the controls and enemies for that
@@ -35,6 +35,14 @@ In keyboard + mouse mode, movement (climbing, air steering) stays on the arrows 
 aiming follows the cursor: jumps launch toward it, double jumps look for an island around it, and
 attacks point at it. Left click attacks with the sword and right click with the spear (Z / X still
 work too). The mode is remembered between sessions.
+
+Gamepad mode works like keyboard mode, with the left stick or d-pad in place of the arrows. The
+stick is analog: a partly pushed stick climbs, steers and speeds up less. Buttons go by position:
+the bottom face button jumps (A on Xbox, B on Switch), the right face button or right trigger is the
+sword, the left face button or left trigger the spear, Start / + pauses and Back / − mutes. The
+briefing shows the letters printed on the pad in use. Using a pad switches to gamepad mode. Pads the
+browser doesn't map itself need a profile in `src/gamepad.ts` (PowerA pads have one). Where the
+browser supports it (Chromium), the pad rumbles on hits, blasts, hard landings and full charges.
 
 Every flight has one double jump. Hitting an enemy while airborne refills it (max one) and regains
 focus; a sword hit also bounces you up. Slow motion while winding up an air attack drains focus; grabbing a rim refills
