@@ -23,6 +23,12 @@ bun run typecheck
 | Z / J | Sword |
 | X / K | Spear |
 | M | Mute / unmute sound |
+| I | Switch input mode: keyboard only / keyboard + mouse |
+
+In keyboard + mouse mode, movement (climbing, air steering) stays on the arrows / WASD, but all
+aiming follows the cursor: jumps launch toward it, double jumps look for an island around it, and
+attacks point at it. Left click attacks with the sword and right click with the spear (Z / X still
+work too). The mode is remembered between sessions.
 
 Every flight has one double jump. Hitting an enemy while airborne refills it (max one) and regains
 focus; a sword hit also bounces you up. Slow motion while winding up an air attack drains focus; grabbing a rim refills

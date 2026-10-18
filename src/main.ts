@@ -58,6 +58,75 @@ window.addEventListener("keyup", (e) => {
 window.addEventListener("blur", () => keys.clear());
 window.addEventListener("pointerdown", unlockAudio);
 
+/**
+ * Input mode, toggled with I and remembered. "keyboard": the arrows / WASD both move and aim.
+ * "mouse": they still move, but jumps, double jumps and attacks aim at the cursor, and the mouse
+ * buttons attack (left: sword, right: spear).
+ */
+type InputMode = "keyboard" | "mouse";
+const INPUT_MODE_KEY = "planetproto.inputMode";
+let inputMode: InputMode = "keyboard";
+try {
+  if (localStorage.getItem(INPUT_MODE_KEY) === "mouse") inputMode = "mouse";
+} catch {
+  // Ignore: persistence is a convenience.
+}
+const mouse = { x: 0, y: 0 };
+
+function setInputMode(m: InputMode) {
+  inputMode = m;
+  try {
+    localStorage.setItem(INPUT_MODE_KEY, m);
+  } catch {
+    // Ignore: persistence is a convenience.
+  }
+  canvas.style.cursor = m === "mouse" ? "crosshair" : "";
+  const hud = document.getElementById("hud");
+  if (hud) {
+    hud.innerHTML =
+      m === "mouse"
+        ? "Arrows / WASD: climb · Space: jump toward the cursor (hold for height), again in air to double jump · in air: arrows steer &amp; speed · air hits refill the double jump, sword hits bounce · Left click / Z: sword · Right click / X: spear · I: keyboard only · Kill the queen ♛"
+        : "Arrows / WASD: climb · Space: jump (hold for height), again in air to double jump · in air: arrows steer &amp; speed · air hits refill the double jump, sword hits bounce · Z / J: sword · X / K: spear · I: mouse aim · Kill the queen ♛";
+  }
+}
+setInputMode(inputMode);
+
+window.addEventListener("keydown", (e) => {
+  if (e.code === "KeyI" && !e.repeat && !(e.target instanceof HTMLInputElement))
+    setInputMode(inputMode === "mouse" ? "keyboard" : "mouse");
+});
+window.addEventListener("pointermove", (e) => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+});
+// Mouse buttons go into the key sets as "Mouse0" (left) / "Mouse2" (right). Presses only count on
+// the canvas, so clicking the tuning panel doesn't attack; releases count anywhere.
+canvas.addEventListener("mousedown", (e) => {
+  const code = `Mouse${e.button}`;
+  if (!keys.has(code)) pressed.add(code);
+  keys.add(code);
+});
+window.addEventListener("mouseup", (e) => {
+  const code = `Mouse${e.button}`;
+  keys.delete(code);
+  released.add(code);
+});
+canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+/**
+ * In mouse mode, the world direction (unit vector) from the player to the cursor, taken at the
+ * player's altitude. Null in keyboard mode, or with the cursor right on the player.
+ */
+function mouseAim(): Vec | null {
+  if (inputMode !== "mouse") return null;
+  const p = player;
+  const m = proj.unproject(mouse.x, mouse.y, p.mode === "hang" ? ISLAND_TOP : p.alt);
+  const dx = m.x - p.x;
+  const dy = m.y - p.y;
+  const l = Math.hypot(dx, dy);
+  return l > 1 ? { x: dx / l, y: dy / l } : null;
+}
+
 /** Arrow keys / WASD as a screen-space unit vector (y down). */
 function inputDir(): Vec {
   const x = +(keys.has("KeyD") || keys.has("ArrowRight")) - +(keys.has("KeyA") || keys.has("ArrowLeft"));
@@ -74,6 +143,7 @@ type Mode = "hang" | "air" | "lost";
 type Weapon = "sword" | "spear";
 
 const WEAPON_KEYS: Record<Weapon, string[]> = { sword: ["KeyZ", "KeyJ"], spear: ["KeyX", "KeyK"] };
+const WEAPON_BUTTONS: Record<Weapon, string> = { sword: "Mouse0", spear: "Mouse2" };
 
 const player = {
   mode: "hang" as Mode,
@@ -284,7 +354,7 @@ const MAX_JUMP_LEAN = 1.13;
 
 /**
  * Jump direction from a rim: toward the input, or without input the way the player is sliding,
- * within MAX_JUMP_LEAN of straight out. Straight out when neither.
+ * within MAX_JUMP_LEAN of straight out. Straight out when neither. In mouse mode `dir` points at the cursor.
  */
 function jumpAngle(dir: Vec): number {
   const e = islands[player.island]!.pointAt(player.s);
@@ -338,12 +408,11 @@ function closestIsland(): Island | null {
 }
 
 /**
- * The island with the nearest rim point inside the double-jump cone that a double jump of
- * `push` speed can reach: heading there at the push speed before falling back to rim height.
+ * The island with the nearest rim point inside the double-jump cone around `heading` that a
+ * double jump of `push` speed can reach: heading there at the push speed before falling back to rim height.
  */
-function islandAhead(push: number): Island | null {
+function islandAhead(push: number, heading: number): Island | null {
   const p = player;
-  const heading = Math.atan2(p.vy, p.vx);
   const half = (params.move.airJump.cone * Math.PI) / 360;
 
   // Time until the flight falls back to rim height.
@@ -382,22 +451,23 @@ function islandAhead(push: number): Island | null {
  * Double-jump direction. The target island is the nearest one the jump can reach inside a cone
  * around the heading; failing that, the closest island all around. On it, aim at the rim point
  * that needs the least turn from the heading (without a heading: the nearest point).
+ * `aim` (the cursor direction in mouse mode) stands in for the heading when given.
  * Call after the jump's rise is set: `p.vz` decides how long the jump stays up.
  */
-function doubleJumpDir(push: number): Vec | null {
+function doubleJumpDir(push: number, aim: Vec | null): Vec | null {
   const p = player;
-  const sp = Math.hypot(p.vx, p.vy);
-  const isl = (sp > 1 && islandAhead(push)) || closestIsland();
+  const hasHeading = aim !== null || Math.hypot(p.vx, p.vy) > 1;
+  const heading = aim ? Math.atan2(aim.y, aim.x) : Math.atan2(p.vy, p.vx);
+  const isl = (hasHeading && islandAhead(push, heading)) || closestIsland();
   if (!isl) return null;
 
-  const heading = Math.atan2(p.vy, p.vx);
   let tx = 0;
   let ty = 0;
   let best = Infinity;
   for (let s = 0; s < isl.perimeter; s += 6) {
     const e = isl.pointAt(s);
     let score: number;
-    if (sp > 1) {
+    if (hasHeading) {
       const diff = Math.atan2(e.y - p.y, e.x - p.x) - heading;
       score = Math.abs(Math.atan2(Math.sin(diff), Math.cos(diff)));
     } else score = Math.hypot(e.x - p.x, e.y - p.y);
@@ -484,7 +554,7 @@ function update(dt: number, dtReal: number) {
 
     // Space jumps at once; holding it keeps the jump going full height (see the air section).
     if (playing && pressed.has("Space")) {
-      const f = launch(p.island, p.s, jumpAngle(dir));
+      const f = launch(p.island, p.s, jumpAngle(mouseAim() ?? dir));
       carrySlide(f, e);
       Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
       p.mode = "air";
@@ -512,7 +582,7 @@ function update(dt: number, dtReal: number) {
       p.vz = Math.max(p.vz, launchSpeed() * params.move.airJump.strength);
       p.jumpHeld = true;
       const push = launchSpeed() * params.move.airJump.speed;
-      const aim = doubleJumpDir(push);
+      const aim = doubleJumpDir(push, mouseAim());
       if (aim) {
         const sp = Math.max(0, p.vx * aim.x + p.vy * aim.y) + push;
         p.vx = aim.x * sp;
@@ -739,6 +809,7 @@ function clampAimToRim(angle: number): number {
  * Sword (Z / J) and spear (X / K): hold to aim and power up, release to strike.
  * The aim starts at the closest enemy in range (else straight out from the rim, or along the
  * input / flight in the air) and turns toward the input direction, quickly at first and slower and slower until it locks at full power.
+ * In mouse mode the aim simply follows the cursor, and the mouse buttons attack too.
  */
 function updateAttacks(dt: number, dtReal: number, dir: Vec) {
   const p = player;
@@ -748,16 +819,20 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
     p.aim = null;
     return;
   }
-  const held = (w: Weapon) => WEAPON_KEYS[w].some((k) => keys.has(k));
-  const justPressed = (w: Weapon) => WEAPON_KEYS[w].some((k) => pressed.has(k));
+  const codes = (w: Weapon) => (inputMode === "mouse" ? [...WEAPON_KEYS[w], WEAPON_BUTTONS[w]] : WEAPON_KEYS[w]);
+  const held = (w: Weapon) => codes(w).some((k) => keys.has(k));
+  const justPressed = (w: Weapon) => codes(w).some((k) => pressed.has(k));
+  const cursor = mouseAim();
 
   if (!p.aim) {
     const weapon: Weapon | null =
       justPressed("sword") && p.swordCd <= 0 ? "sword" : justPressed("spear") && p.spearCd <= 0 ? "spear" : null;
     if (!weapon) return;
-    const target = closestEnemy();
+    const target = inputMode === "mouse" ? null : closestEnemy();
     let angle: number;
-    if (target) {
+    if (inputMode === "mouse") {
+      angle = cursor ? Math.atan2(cursor.y, cursor.x) : p.facing;
+    } else if (target) {
       angle = Math.atan2(target.y - p.y, target.x - p.x);
     } else if (p.mode === "hang") {
       const e = islands[p.island]!.pointAt(p.s);
@@ -767,7 +842,7 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
     } else {
       angle = Math.atan2(p.vy, p.vx);
     }
-    p.aim = { weapon, t: 0, angle };
+    p.aim = { weapon, t: 0, angle: clampAimToRim(angle) };
     sfx.aim(weapon);
     return;
   }
@@ -778,7 +853,12 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
   aim.t += dtReal;
   if (!wasCharged && aimPower() >= 1) sfx.charged();
   const pa = params.player.aim;
-  aim.angle = clampAimToRim(turnAim(aim.angle, dir, aim.t / pa.chargeTime, dtReal, pa.turnRate, pa.minTurnRate));
+  if (inputMode === "mouse") {
+    // The aim follows the cursor directly.
+    if (cursor) aim.angle = clampAimToRim(Math.atan2(cursor.y, cursor.x));
+  } else {
+    aim.angle = clampAimToRim(turnAim(aim.angle, dir, aim.t / pa.chargeTime, dtReal, pa.turnRate, pa.minTurnRate));
+  }
 
   if (!held(aim.weapon)) {
     const power = aimPower();

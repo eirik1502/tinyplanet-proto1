@@ -84,6 +84,26 @@ export class Projector {
     };
   }
 
+  /**
+   * Inverse of `project`: the game-plane point at altitude `alt` drawn at screen point (sx, sy).
+   * Points past the horizon land on the farthest visible point in that direction.
+   */
+  unproject(sx: number, sy: number, alt: number): { x: number; y: number } {
+    const dx = sx - this.cx;
+    const dy = sy - this.cy;
+    const rho = Math.hypot(dx, dy);
+    if (rho < 1e-6) return { x: this.camX, y: this.camY };
+    // Solve ρ = f·r·sinθ / (D − r·cosθ), i.e. f·r·sinθ + ρ·r·cosθ = ρ·D, for the near θ.
+    // ρ peaks at the limb, cosθ = r / D; past that, take the limb.
+    const r = this.R + alt;
+    const a = this.f * r;
+    const b = rho * r;
+    const k = (rho * this.camDist) / Math.hypot(a, b);
+    const th = k < 1 ? Math.asin(k) - Math.atan2(b, a) : Math.acos(Math.min(1, r / this.camDist));
+    const d = Math.max(0, th) * this.R;
+    return { x: this.camX + (dx / rho) * d, y: this.camY + (dy / rho) * d };
+  }
+
   /** Distance (in the game plane) from the camera beyond which the haze surface is hidden. */
   get horizonDistance(): number {
     return this.horizonTheta * this.R;
