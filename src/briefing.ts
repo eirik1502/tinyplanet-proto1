@@ -4,8 +4,9 @@ import { drawBoidBody } from "./sprites";
 import { params } from "./tuning";
 
 // The briefing shown before each level (and as the pause screen): input mode, a compact movement
-// strip, the player's card with the unlocked attacks as its properties, and a card per enemy on
-// this level with its health, attack and effects. Newly unlocked items are tagged.
+// strip, the player's card with the unlocked attacks and air abilities as its properties, and a
+// card per enemy on this level with its health and attack. Newly unlocked items are tagged.
+// Texts stay short: only what you can't easily learn by playing.
 
 export type InputMode = "keyboard" | "mouse";
 export type Weapon = "sword" | "spear";
@@ -33,6 +34,8 @@ const ICONS = {
   orb: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="17" cy="12" r="4" fill="currentColor"/><path d="M3 12h6M5 8h5M5 16h5"/></svg>`,
   blast: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.2 5.6L20 6l-2.8 5.2L22 15l-6 .8L15 22l-3-4.6L9 22l-1-6.2-6-.8 4.8-3.8L4 6l5.8 1.6z"/></svg>`,
   crown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 18h18l-1.5-10-4.5 4-3-6-3 6-4.5-4z" fill="currentColor" fill-opacity=".25"/></svg>`,
+  jump: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12l6-6 6 6M6 19l6-6 6 6"/></svg>`,
+  focus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/></svg>`,
   heart: `<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z"/></svg>`,
   keyboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>`,
   mouse: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="2.5" width="12" height="19" rx="6"/><path d="M12 2.5V10M6 10h12"/></svg>`,
@@ -69,37 +72,51 @@ function ability(a: Ability) {
     <div class="ability">
       <div class="ability-icon">${a.icon}</div>
       <div class="ability-body">
-        <div class="ability-head"><b>${a.name}</b>${isNew(!!a.fresh)}<span class="stats">${a.stats.map((s) => chip(s)).join("")}</span></div>
+        <div class="ability-head"><b>${a.name}</b>${isNew(!!a.fresh)}${a.input ? `<span class="ability-input">${a.input}</span>` : ""}</div>
+        ${a.stats.length ? `<div class="stats">${a.stats.map((s) => chip(s)).join("")}</div>` : ""}
         <div class="ability-text">${a.text}</div>
       </div>
-      ${a.input ? `<div class="ability-input">${a.input}</div>` : ""}
     </div>`;
 }
 
 function playerCard(b: BriefingInfo) {
   const mouse = b.inputMode === "mouse";
-  const aim = mouse ? "Aims at the cursor." : "Aims at the nearest enemy; arrows turn it.";
   const sw = params.player.sword;
   const sp = params.player.spear;
-  const attacks: Ability[] = [];
+  const abilities: Ability[] = [];
   if (b.weapons.includes("sword"))
-    attacks.push({
+    abilities.push({
       icon: ICONS.sword,
       name: "Sword",
-      text: `Hold to power up, release to slash a wide arc. ${aim} Air hits bounce you up and refill your double jump.`,
+      text: "Hold to power up. Bounce on aerial hits.",
       stats: [`${fmt(sw.damage)}–${fmt(sw.maxDamage)} dmg`, `${fmt(sw.cooldown)}s`],
       input: mouse ? `${mouseButton("left")}${or}${kbd("Z")}` : `${kbd("Z")}${or}${kbd("J")}`,
       fresh: b.fresh.includes("sword"),
     });
   if (b.weapons.includes("spear"))
-    attacks.push({
+    abilities.push({
       icon: ICONS.spear,
       name: "Spear",
-      text: `Hold to power up, release to throw. ${aim} Hits from range; a full charge flies faster and hits harder.`,
+      text: "Hold to power up. Thrown.",
       stats: [`${fmt(sp.damage)}–${fmt(sp.maxDamage)} dmg`, `${fmt(sp.cooldown)}s`],
       input: mouse ? `${mouseButton("right")}${or}${kbd("X")}` : `${kbd("X")}${or}${kbd("K")}`,
       fresh: b.fresh.includes("spear"),
     });
+  abilities.push(
+    {
+      icon: ICONS.jump,
+      name: "Double jump",
+      text: "Refills on aerial hits.",
+      stats: ["1 per flight"],
+      input: `${kbd("Space", true)}<span class="or">in air</span>`,
+    },
+    {
+      icon: ICONS.focus,
+      name: "Focus",
+      text: "Slow motion while aiming in the air. Refills on landing.",
+      stats: [`${fmt(1 / params.player.focus.drain)}s budget`],
+    },
+  );
   const h = params.player.health;
   return `
     <article class="unit player">
@@ -107,57 +124,37 @@ function playerCard(b: BriefingInfo) {
         <canvas class="portrait" data-portrait="player"></canvas>
         <div>
           <h3>You</h3>
-          <div class="stats">${chip(`${ICONS.heart}${h.max} HP`, "hp")}${chip(`Fall into the haze: −${fmt(h.fallDamage)}`)}</div>
+          <div class="stats">${chip(`${ICONS.heart}${h.max} HP`, "hp")}${chip(`Fall: −${fmt(h.fallDamage)}`)}</div>
         </div>
       </header>
-      <div class="abilities">${attacks.map(ability).join("")}</div>
+      <div class="abilities">${abilities.map(ability).join("")}</div>
     </article>`;
 }
 
 function enemyCard(kind: BoidKind, b: BriefingInfo) {
   const ea = params.enemyAttacks;
   const hit = fmt(ea.hit.damage);
-  const cards: Record<BoidKind, { name: string; text: string; hp: number; abilities: Ability[] }> = {
+  const cards: Record<BoidKind, { name: string; hp: number; abilities: Ability[] }> = {
     queen: {
       name: "Queen",
-      text: "Your target. Kill her to clear the level.",
       hp: b.queenHp,
-      abilities: [
-        { icon: ICONS.crown, name: "Escorted", text: "Flees when you come close while her flock screens her.", stats: [] },
-      ],
+      abilities: [{ icon: ICONS.crown, name: "Escorted", text: "Flees. Guarded by her flock.", stats: [] }],
     },
     melee: {
       name: "Melee boid",
-      text: "Fast and fragile. Swarms in close.",
       hp: BOID_HP.melee,
-      abilities: [
-        { icon: ICONS.lunge, name: "Lunge", text: "Dashes into you from up close.", stats: [`${hit} dmg`, `${fmt(ea.melee.cooldown)}s`] },
-      ],
+      abilities: [{ icon: ICONS.lunge, name: "Lunge", text: "Dashes in up close.", stats: [`${hit} dmg`, `${fmt(ea.melee.cooldown)}s`] }],
     },
     ranged: {
       name: "Ranged boid",
-      text: "Keeps its distance. Close in fast.",
       hp: BOID_HP.ranged,
-      abilities: [
-        {
-          icon: ICONS.orb,
-          name: "Orb shot",
-          text: "Fires a slow orb at you from afar. Its core glows when the next shot is ready.",
-          stats: [`${hit} dmg`, `${fmt(ea.ranged.cooldown)}s`],
-        },
-      ],
+      abilities: [{ icon: ICONS.orb, name: "Orb shot", text: "Shoots from a distance.", stats: [`${hit} dmg`, `${fmt(ea.ranged.cooldown)}s`] }],
     },
     bomber: {
       name: "Bomber boid",
-      text: "Dives straight at you. Its fuse sparks faster once it has seen you.",
       hp: BOID_HP.bomber,
       abilities: [
-        {
-          icon: ICONS.blast,
-          name: "Blast",
-          text: "Explodes on contact and blows you off your rim. Killing one sets it off too: use the spear.",
-          stats: [`${fmt(ea.bomber.damage)} dmg`, "knockback"],
-        },
+        { icon: ICONS.blast, name: "Blast", text: "Explodes on contact, or when killed.", stats: [`${fmt(ea.bomber.damage)} dmg`, "knockback"] },
       ],
     },
   };
@@ -169,7 +166,6 @@ function enemyCard(kind: BoidKind, b: BriefingInfo) {
         <div>
           <h3>${c.name}${isNew(b.fresh.includes(kind))}</h3>
           <div class="stats">${chip(`${ICONS.heart}${fmt(c.hp)} HP`, "hp")}</div>
-          <p class="flavour">${c.text}</p>
         </div>
       </header>
       <div class="abilities">${c.abilities.map(ability).join("")}</div>
@@ -183,7 +179,6 @@ export function briefingHtml(b: BriefingInfo): string {
   const moves = [
     [`${arrows}<span class="or">or WASD</span>`, "Climb · steer in the air"],
     [kbd("Space", true), mouse ? "Jump toward the cursor · hold for height" : "Jump · hold for height"],
-    [`${kbd("Space", true)}<span class="or">in air</span>`, "Double jump"],
   ];
   return `
     <div class="sheet">
@@ -205,7 +200,7 @@ export function briefingHtml(b: BriefingInfo): string {
         ${playerCard(b)}
         <div class="enemies">${(["queen", ...b.enemies] as BoidKind[]).map((k) => enemyCard(k, b)).join("")}</div>
       </div>
-      <p class="hint">Hit any boid and its whole flock comes for you. ${kbd("M")} mutes · ${kbd("Esc")} pauses</p>
+      <p class="hint">${kbd("M")} mutes · ${kbd("Esc")} pauses</p>
       <button class="start" data-start>${b.reason === "pause" ? "Resume" : "Start"} <span>${kbd("Enter")} ${kbd("Space", true)}</span></button>
     </div>`;
 }
