@@ -30,6 +30,7 @@ export interface Planet {
   escort: SpawnKind[];
   /** The other flocks: where each spawns and who is in it. */
   flocks: { x: number; y: number; kinds: SpawnKind[] }[];
+  queenHp: number;
   theme: Theme;
 }
 
@@ -45,6 +46,7 @@ export interface PlanetOptions {
   flockSize: number;
   /** How many of the swarm escort the queen. */
   escortCount: number;
+  queenHp: number;
 }
 
 export function generatePlanet(seed: number, opt: PlanetOptions): Planet {
@@ -85,7 +87,7 @@ export function generatePlanet(seed: number, opt: PlanetOptions): Planet {
     flocks.push({ x, y, kinds: kinds.splice(0, size) });
   }
 
-  return { seed, islands, bounds: { x: 0, y: 0, r: R }, startIsland, queenHome, escort, flocks, theme: generateTheme(rand) };
+  return { seed, islands, bounds: { x: 0, y: 0, r: R }, startIsland, queenHome, escort, flocks, queenHp: opt.queenHp, theme: generateTheme(rand) };
 }
 
 /**

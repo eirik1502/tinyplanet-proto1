@@ -21,9 +21,15 @@ bun run typecheck
 | Arrows / WASD | Climb; steer, speed up and brake while airborne |
 | Space | Jump at once (hold for full height); press again in the air to double jump |
 | Z / J | Sword |
-| X / K | Spear |
+| X / K | Spear (from level 3) |
 | M | Mute / unmute sound |
 | I | Switch input mode: keyboard only / keyboard + mouse |
+| Esc | Pause and show the controls |
+
+Each level opens with a briefing: pick the input mode, and see the controls and enemies for that
+level. The first levels introduce things one at a time: level 1 has the sword and a small queen
+flock of melee boids, level 2 adds ranged boids, and level 3 adds the spear and bombers. From level
+4 on everything is unlocked and the swarm grows each level.
 
 In keyboard + mouse mode, movement (climbing, air steering) stays on the arrows / WASD, but all
 aiming follows the cursor: jumps launch toward it, double jumps look for an island around it, and

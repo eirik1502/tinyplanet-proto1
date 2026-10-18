@@ -5,12 +5,39 @@ export const DEFAULTS = {
     levels: {
       start: 1, // Start level (on reload)
     },
-    level1: {
-      radius: 600, // Boundary radius
-      islands: 4, // Islands
-      melee: 6, // Melee boids
+    intro1: {
+      radius: 450, // Boundary radius
+      islands: 3, // Islands
+      melee: 4, // Melee boids
       ranged: 0, // Ranged boids
-      bombers: 1, // Bomber boids
+      bombers: 0, // Bomber boids
+      escort: 4, // Queen's escort
+      queenHp: 6, // Queen health
+    },
+    intro2: {
+      radius: 550, // Boundary radius
+      islands: 5, // Islands
+      melee: 6, // Melee boids
+      ranged: 4, // Ranged boids
+      bombers: 0, // Bomber boids
+      escort: 4, // Queen's escort
+      queenHp: 12, // Queen health
+    },
+    intro3: {
+      radius: 650, // Boundary radius
+      islands: 6, // Islands
+      melee: 8, // Melee boids
+      ranged: 4, // Ranged boids
+      bombers: 3, // Bomber boids
+      escort: 4, // Queen's escort
+      queenHp: 18, // Queen health
+    },
+    level4: {
+      radius: 700, // Boundary radius
+      islands: 7, // Islands
+      melee: 10, // Melee boids
+      ranged: 4, // Ranged boids
+      bombers: 3, // Bomber boids
     },
     perLevel: {
       radius: 60, // Boundary radius
@@ -116,6 +143,7 @@ export const DEFAULTS = {
       bomberSpeed: 215, // Bomber speed
       aggroRange: 200, // Aggro range
       disengageRange: 400, // Disengage range
+      provokedTime: 6, // Hit flock stays engaged (s)
     },
     flocking: {
       neighborRadius: 90, // Neighbour radius

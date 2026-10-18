@@ -20,6 +20,8 @@ export interface Flock {
   /** The flock it is flying over to join, if any. */
   joining: Flock | null;
   engaged: boolean;
+  /** Seconds left of staying engaged after a member was hit. */
+  provoked: number;
   /** Centre and mean velocity of the members, updated every frame. */
   cx: number;
   cy: number;
@@ -147,7 +149,7 @@ const SPEEDS: Record<BoidKind, () => number> = {
   queen: () => params.boids.queen.speed,
 };
 
-const BURST_COLORS: Record<BoidKind, string> = {
+export const BURST_COLORS: Record<BoidKind, string> = {
   melee: "#ff6b7d",
   ranged: "#6ff5dd",
   bomber: "#ffa040",
@@ -164,6 +166,8 @@ export class Combat {
   blasts: Blast[] = [];
   flocks: Flock[] = [];
   queen!: Boid;
+  /** The queen's starting escort size: her flock never sheds members below it. */
+  private escortSize = 0;
   bounds = { x: 0, y: 0, r: 1 };
   private islands: Island[] = [];
   private nextId = 0;
@@ -196,6 +200,8 @@ export class Combat {
     const home = planet.queenHome;
     const escort = this.newFlock(home.x, home.y);
     this.queen = this.spawn("queen", home.x, home.y, escort);
+    this.queen.hp = this.queen.maxHp = planet.queenHp;
+    this.escortSize = planet.escort.length;
     for (const kind of planet.escort) this.spawnNear(kind, home.x, home.y, escort);
     for (const f of planet.flocks) {
       const flock = this.newFlock(f.x, f.y);
@@ -204,7 +210,7 @@ export class Combat {
   }
 
   private newFlock(x: number, y: number): Flock {
-    const f: Flock = { members: [], goalX: x, goalY: y, joining: null, engaged: false, cx: x, cy: y, vx: 0, vy: 0 };
+    const f: Flock = { members: [], goalX: x, goalY: y, joining: null, engaged: false, provoked: 0, cx: x, cy: y, vx: 0, vy: 0 };
     this.flocks.push(f);
     return f;
   }
@@ -217,7 +223,7 @@ export class Combat {
   }
 
   private spawn(kind: BoidKind, x: number, y: number, flock: Flock): Boid {
-    const hp = kind === "queen" ? params.boids.queen.hp : kind === "bomber" ? 1 : 2;
+    const hp = kind === "bomber" ? 1 : 2; // the queen's is set by `reset`
     const a = this.rand() * Math.PI * 2;
     const b: Boid = {
       id: this.nextId++,
@@ -303,6 +309,8 @@ export class Combat {
     b.vx += ((b.x - fromX) / l) * push;
     b.vy += ((b.y - fromY) / l) * push;
     b.lunge = 0;
+    // Hitting any member (the queen too) sets the whole flock on the player.
+    b.flock.provoked = params.boids.swarm.provokedTime;
     this.burst(b.x, b.y, b.alt, b.hp <= 0 ? 18 : 6, BURST_COLORS[b.kind]);
     if (b.hp <= 0 && b.kind === "queen") this.burst(b.x, b.y, b.alt, 60, "#ffe27a");
     // Killing a bomber sets it off where it is.
@@ -480,12 +488,16 @@ export class Combat {
       }
       const n = f.members.length;
       Object.assign(f, { cx: cx / n, cy: cy / n, vx: vx / n, vy: vy / n });
-      // The whole flock engages once any member is close, and stays on until all are well away.
+      // The whole flock engages once any member is close or was hit, and stays on until all are
+      // well away and the provocation has worn off.
       const near = (r: number) =>
         f.members.some((b) => b.kind !== "queen" && Math.hypot(b.x - player.x, b.y - player.y) < r);
+      f.provoked = Math.max(0, f.provoked - dt);
       f.engaged =
         player.targetable &&
-        (near(params.boids.swarm.aggroRange) || (f.engaged && near(params.boids.swarm.disengageRange)));
+        (f.provoked > 0 ||
+          near(params.boids.swarm.aggroRange) ||
+          (f.engaged && near(params.boids.swarm.disengageRange)));
     }
 
     for (const f of [...this.flocks]) {
@@ -539,9 +551,10 @@ export class Combat {
   /** A random number of members leave together as a new flock, heading somewhere else. */
   private split(f: Flock) {
     const movers = f.members.filter((b) => b.kind !== "queen");
-    // Someone always stays behind, so the queen keeps at least one escort.
-    if (movers.length < 2) return;
-    const n = 1 + Math.floor(this.rand() * (movers.length - 1));
+    // Someone always stays behind; the queen keeps at least her starting escort.
+    const keep = f === this.queen.flock ? Math.max(1, this.escortSize) : 1;
+    if (movers.length <= keep) return;
+    const n = 1 + Math.floor(this.rand() * (movers.length - keep));
     for (let i = movers.length - 1; i > 0; i--) {
       const j = Math.floor(this.rand() * (i + 1));
       [movers[i], movers[j]] = [movers[j]!, movers[i]!];

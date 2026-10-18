@@ -8,11 +8,34 @@
     html, body { margin: 0; height: 100%; background: #05030c; overflow: hidden; }
     canvas { display: block; width: 100vw; height: 100vh; }
     #hud { position: fixed; left: 12px; bottom: 10px; color: #cfc6ff; font: 13px/1.5 system-ui, sans-serif; opacity: .75; pointer-events: none; }
+    #briefing { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; background: rgba(10, 4, 22, .55); overflow-y: auto; color: #e8e2ff; font: 14px/1.45 system-ui, sans-serif; }
+    #briefing[hidden] { display: none; }
+    #briefing .card { width: min(560px, 100%); max-height: 100%; overflow-y: auto; background: rgba(24, 12, 44, .92); border: 1px solid rgba(200, 180, 255, .2); border-radius: 12px; padding: 22px 26px; box-sizing: border-box; }
+    #briefing h1 { margin: 0; font-size: 30px; font-weight: 800; color: #ffd34d; }
+    #briefing .goal { margin: 2px 0 10px; color: #f0dcff; font-weight: 600; }
+    #briefing h2 { margin: 14px 0 6px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #a99be0; }
+    #briefing table { border-collapse: collapse; width: 100%; }
+    #briefing td { padding: 3px 0; vertical-align: top; }
+    #briefing td.keys { width: 38%; padding-right: 12px; color: #fff; font-weight: 600; white-space: nowrap; }
+    #briefing .dim { color: #a99be0; }
+    #briefing .small { font-size: 12px; margin: 14px 0 0; }
+    #briefing .new { display: inline-block; padding: 0 5px; border-radius: 4px; background: #ffd34d; color: #2a1640; font-size: 10px; font-weight: 800; vertical-align: 1px; }
+    #briefing .modes { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    #briefing button { font: inherit; color: inherit; background: rgba(255, 255, 255, .06); border: 1px solid rgba(200, 180, 255, .3); border-radius: 6px; padding: 5px 12px; cursor: pointer; }
+    #briefing .modes button.on { background: #6a4cc8; border-color: #9a80ff; color: #fff; }
+    #briefing .enemies { list-style: none; margin: 0; padding: 0; }
+    #briefing .enemies li { position: relative; padding: 3px 0 5px 24px; }
+    #briefing .dot { position: absolute; left: 3px; top: 7px; width: 11px; height: 11px; border-radius: 50%; }
+    #briefing .dot.queen { left: 0; top: 4px; width: 17px; height: 17px; }
+    #briefing .start { display: block; width: 100%; margin-top: 16px; padding: 10px; font-size: 16px; font-weight: 700; background: #ffd34d; color: #2a1640; border: 0; }
+    #briefing .start .dim { color: #6a4c30; font-weight: 500; font-size: 13px; }
+    @media (max-width: 520px) { #briefing td.keys { white-space: normal; width: 40%; } }
   </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hud">Arrows / WASD: climb · Space: jump (hold for height), again in air to double jump · in air: arrows steer &amp; speed · air hits refill the double jump, sword hits bounce · Z / J: sword · X / K: spear · Kill the queen ♛</div>
+  <div id="hud">Kill the queen ♛ · Esc: pause &amp; controls · I: input mode · M: mute</div>
+  <div id="briefing" hidden></div>
   <script type="module" src="./src/main.ts"></script>
 </body>
 </html>

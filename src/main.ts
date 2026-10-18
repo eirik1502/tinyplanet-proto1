@@ -2,9 +2,10 @@ import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
 import { createTuningPanel, params } from "./tuning";
 import { BLAST_TIME, Combat, hitStop, type Blast, type Boid } from "./combat";
-import { generatePlanet, type Planet } from "./planet";
+import { generatePlanet, type Planet, type SpawnKind } from "./planet";
 import { applyVolumes, music, sfx, toggleMute, unlockAudio } from "./audio";
 import { Avatar, type AvatarView } from "./avatar";
+import { briefingHtml, type InputMode, type Weapon } from "./briefing";
 
 // ---------------------------------------------------------------------------------------------
 // Setup
@@ -63,7 +64,6 @@ window.addEventListener("pointerdown", unlockAudio);
  * "mouse": they still move, but jumps, double jumps and attacks aim at the cursor, and the mouse
  * buttons attack (left: sword, right: spear).
  */
-type InputMode = "keyboard" | "mouse";
 const INPUT_MODE_KEY = "planetproto.inputMode";
 let inputMode: InputMode = "keyboard";
 try {
@@ -81,19 +81,15 @@ function setInputMode(m: InputMode) {
     // Ignore: persistence is a convenience.
   }
   canvas.style.cursor = m === "mouse" ? "crosshair" : "";
-  const hud = document.getElementById("hud");
-  if (hud) {
-    hud.innerHTML =
-      m === "mouse"
-        ? "Arrows / WASD: climb · Space: jump toward the cursor (hold for height), again in air to double jump · in air: arrows steer &amp; speed · air hits refill the double jump, sword hits bounce · Left click / Z: sword · Right click / X: spear · I: keyboard only · Kill the queen ♛"
-        : "Arrows / WASD: climb · Space: jump (hold for height), again in air to double jump · in air: arrows steer &amp; speed · air hits refill the double jump, sword hits bounce · Z / J: sword · X / K: spear · I: mouse aim · Kill the queen ♛";
-  }
 }
 setInputMode(inputMode);
 
 window.addEventListener("keydown", (e) => {
   if (e.code === "KeyI" && !e.repeat && !(e.target instanceof HTMLInputElement))
+  {
     setInputMode(inputMode === "mouse" ? "keyboard" : "mouse");
+    if (game.state === "briefing") showBriefing();
+  }
 });
 window.addEventListener("pointermove", (e) => {
   mouse.x = e.clientX;
@@ -140,7 +136,6 @@ function inputDir(): Vec {
 // ---------------------------------------------------------------------------------------------
 
 type Mode = "hang" | "air" | "lost";
-type Weapon = "sword" | "spear";
 
 const WEAPON_KEYS: Record<Weapon, string[]> = { sword: ["KeyZ", "KeyJ"], spear: ["KeyX", "KeyK"] };
 const WEAPON_BUTTONS: Record<Weapon, string> = { sword: "Mouse0", spear: "Mouse2" };
@@ -217,7 +212,7 @@ function avatarView(): AvatarView {
     facing: p.facing,
     vz: p.vz,
     aim: p.aim ? { weapon: p.aim.weapon, angle: p.aim.angle, power: aimPower() } : null,
-    spearReady: p.spearCd <= 0,
+    spearReady: unlocked("spear") && p.spearCd <= 0,
     frozen: p.freeze > 0,
   };
 }
@@ -227,36 +222,113 @@ function avatarView(): AvatarView {
 // ---------------------------------------------------------------------------------------------
 
 const combat = new Combat();
-const game = { state: "play" as "play" | "victory" | "defeat", timer: 0, level: 0, shake: 0 };
+type GameState = "briefing" | "play" | "victory" | "defeat";
+const game = { state: "play" as GameState, timer: 0, level: 0, shake: 0, briefing: "new" as "new" | "retry" | "pause" };
 
-/** Planet size and swarm for a level: level 1 values plus a per-level increase. */
+/** The level each weapon and enemy first appears on. */
+const UNLOCKS: Record<Weapon | SpawnKind, number> = { sword: 1, melee: 1, ranged: 2, spear: 3, bomber: 3 };
+const unlocked = (what: Weapon | SpawnKind, level = game.level) => level >= UNLOCKS[what];
+
+/**
+ * Planet size and swarm for a level. Levels 1-3 are hand-tuned intros; from level 4 on it's the
+ * level 4 values plus a per-level increase. Locked enemies never spawn.
+ */
 function levelSpec(level: number) {
-  const a = params.world.level1;
-  const d = params.world.perLevel;
-  const n = level - 1;
+  const w = params.world;
+  const intro = [w.intro1, w.intro2, w.intro3][level - 1];
+  const n = level - 4;
+  const a = intro ?? {
+    radius: w.level4.radius + w.perLevel.radius * n,
+    islands: w.level4.islands + w.perLevel.islands * n,
+    melee: w.level4.melee + w.perLevel.melee * n,
+    ranged: w.level4.ranged + w.perLevel.ranged * n,
+    bombers: w.level4.bombers + w.perLevel.bombers * n,
+    escort: params.boids.queen.escort,
+    queenHp: params.boids.queen.hp,
+  };
   return {
-    radius: a.radius + d.radius * n,
-    islandCount: Math.max(1, Math.round(a.islands + d.islands * n)),
-    meleeCount: Math.round(a.melee + d.melee * n),
-    rangedCount: Math.round(a.ranged + d.ranged * n),
-    bomberCount: Math.round(a.bombers + d.bombers * n),
+    radius: a.radius,
+    islandCount: Math.max(1, Math.round(a.islands)),
+    meleeCount: Math.round(a.melee),
+    rangedCount: unlocked("ranged", level) ? Math.round(a.ranged) : 0,
+    bomberCount: unlocked("bomber", level) ? Math.round(a.bombers) : 0,
     flockSize: params.boids.flocks.startSize,
-    escortCount: params.boids.queen.escort,
+    escortCount: Math.round(a.escort),
+    queenHp: Math.max(1, a.queenHp),
   };
 }
 
-/** Generate a new planet for `level` and start playing it. */
-function restart(level: number) {
+/** Generate a new planet for `level` and show its briefing (a defeat retries on a fresh planet). */
+function restart(level: number, retry = false) {
   game.level = level;
   planet = generatePlanet(Math.floor(Math.random() * 1e9), levelSpec(level));
   islands = planet.islands;
   combat.reset(planet);
   music.setSeed(planet.seed);
   resetPlayer();
-  game.state = "play";
   game.timer = 0;
   cam.x = player.x;
   cam.y = player.y;
+  openBriefing(retry ? "retry" : "new");
+}
+
+// ---------------------------------------------------------------------------------------------
+// Briefing (before each level, and the pause screen)
+// ---------------------------------------------------------------------------------------------
+
+const briefingEl = document.getElementById("briefing")!;
+
+function showBriefing() {
+  const weapons = (["sword", "spear"] as const).filter((w) => unlocked(w));
+  const enemies = (["melee", "ranged", "bomber"] as const).filter((k) => unlocked(k));
+  briefingEl.innerHTML = briefingHtml({
+    level: game.level,
+    reason: game.briefing,
+    inputMode,
+    weapons,
+    enemies,
+    fresh: game.briefing === "pause" ? [] : [...weapons, ...enemies].filter((x) => UNLOCKS[x] === game.level && game.level > 1),
+  });
+  briefingEl.hidden = false;
+}
+
+function openBriefing(reason: typeof game.briefing) {
+  game.state = "briefing";
+  game.briefing = reason;
+  game.timer = 0;
+  player.aim = null;
+  showBriefing();
+}
+
+function closeBriefing() {
+  briefingEl.hidden = true;
+  game.state = "play";
+  game.timer = 0;
+  // The key that started the level shouldn't also jump or attack.
+  pressed.clear();
+  keys.clear();
+}
+
+briefingEl.addEventListener("click", (e) => {
+  const t = (e.target as HTMLElement).closest<HTMLElement>("[data-mode],[data-start]");
+  if (!t) return;
+  unlockAudio();
+  if (t.dataset.mode) {
+    setInputMode(t.dataset.mode as InputMode);
+    showBriefing();
+  } else closeBriefing();
+});
+
+/** While the briefing is up the world is paused: only its own keys do anything. */
+function updateBriefing(dtReal: number) {
+  game.timer += dtReal;
+  if (game.timer > 0.3 && (pressed.has("Enter") || pressed.has("Space") || (game.briefing === "pause" && pressed.has("Escape"))))
+    closeBriefing();
+  pressed.clear();
+  released.clear();
+  sfx.loops(0, 0);
+  music.update(0, 0, 0.25);
+  applyVolumes();
 }
 
 function hitPlayer(dmg: number, fromX: number, fromY: number): boolean {
@@ -518,6 +590,11 @@ const LOST_ALT = ISLAND_TOP - 80;
 
 /** `dt` is world time (slowed during slow motion); `dtReal` is wall-clock time, used for aiming. */
 function update(dt: number, dtReal: number) {
+  if (game.state === "play" && pressed.has("Escape")) {
+    openBriefing("pause");
+    pressed.clear();
+    return;
+  }
   const playing = game.state === "play";
   const dir = playing ? inputDir() : { x: 0, y: 0 };
   const p = player;
@@ -673,7 +750,7 @@ function update(dt: number, dtReal: number) {
     game.timer += dt;
     // Winning moves on to the next level; losing replays the same level on a fresh planet.
     if (game.timer > 4.5 || (game.timer > 1.2 && pressed.has("Enter"))) {
-      restart(game.state === "victory" ? game.level + 1 : game.level);
+      restart(game.state === "victory" ? game.level + 1 : game.level, game.state === "defeat");
     }
   }
 
@@ -821,7 +898,7 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
   }
   const codes = (w: Weapon) => (inputMode === "mouse" ? [...WEAPON_KEYS[w], WEAPON_BUTTONS[w]] : WEAPON_KEYS[w]);
   const held = (w: Weapon) => codes(w).some((k) => keys.has(k));
-  const justPressed = (w: Weapon) => codes(w).some((k) => pressed.has(k));
+  const justPressed = (w: Weapon) => unlocked(w) && codes(w).some((k) => pressed.has(k));
   const cursor = mouseAim();
 
   if (!p.aim) {
@@ -1934,7 +2011,7 @@ function drawHud() {
   ctx.fillStyle = "#f0dcff";
   ctx.fillText(`♛ QUEEN · swarm ${combat.boids.length - 1} in ${combat.flocks.length} flocks · level ${game.level} · planet ${planet.seed.toString(36)}`, W / 2, 32);
 
-  if (game.state !== "play") {
+  if (game.state === "victory" || game.state === "defeat") {
     const a = Math.min(1, game.timer / 0.6);
     const win = game.state === "victory";
     ctx.fillStyle = win ? `rgba(40,20,60,${0.55 * a})` : `rgba(40,5,15,${0.6 * a})`;
@@ -1973,9 +2050,10 @@ function frame(now: number) {
   const dtReal = Math.min(0.05, (now - last) / 1000);
   last = now;
   updateTimeScale(dtReal);
-  const dt = dtReal * slow.scale;
+  const dt = game.state === "briefing" ? 0 : dtReal * slow.scale;
   worldTime += dt;
-  update(dt, dtReal);
+  if (game.state === "briefing") updateBriefing(dtReal);
+  else update(dt, dtReal);
   render(worldTime);
   requestAnimationFrame(frame);
 }
