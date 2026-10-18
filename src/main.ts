@@ -139,10 +139,10 @@ function pollGamepad() {
   padHeld = pad.held;
   padMove = pad.move;
   if (pressed.has("PadBack")) toggleMute();
+  if (used) unlockAudio();
   const relabel = used && pad.layout !== padLayout;
   if (used) padLayout = pad.layout;
   if (used && inputMode !== "gamepad") {
-    unlockAudio();
     setInputMode("gamepad");
     if (game.state === "briefing") showBriefing();
   } else if (relabel && game.state === "briefing") showBriefing();
