@@ -18,7 +18,7 @@
 - [ ] Release as a github app (on every deploy)
 
 
-Level progresssion:
+✅ Level progresssion:
 - Introduce attacks and enemies over the first few levels
 - Show an instruction screen before each level
   - Pick input mode
@@ -34,3 +34,22 @@ Queen protect
 - If there are fewer boids, close ones should join the queen flock
 - If the queen is attacked, the queen flock will aggro the player
 - In general, if a member of a flock is attacked, the flock aggros
+
+Power up / skills:
+- Safety bounce: 
+  - Explode on bounce
+  - Make black hole on landing, sucking enemies in
+  - Extra safety bounce
+- Landing/grabbing:
+  - Explode on landing
+  - Push away on landing (wind)
+- Double jump: 
+  - Float while holding jump for up to 3s
+  - Explode on double jump
+- Spear
+  - Beam upgrade: shoot a beam (instant / multihit)
+  - Grappling hook upgrade: Hook that connects with island or enemy. Laser rope, kills enemies touched
+- Sword
+  - Range upgrade
+  - Strength upgrade
+  - Lance upgrade: Longer ranged, thinner
