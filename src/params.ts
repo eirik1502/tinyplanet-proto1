@@ -13,7 +13,7 @@ export const DEFAULTS = {
       bombers: 1, // Bomber boids
     },
     perLevel: {
-      radius: 80, // Boundary radius
+      radius: 60, // Boundary radius
       islands: 1.6, // Islands
       melee: 4, // Melee boids
       ranged: 2.4, // Ranged boids
