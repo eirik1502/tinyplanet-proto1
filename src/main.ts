@@ -279,7 +279,7 @@ function restart(level: number, retry = false) {
 
 const briefingEl = document.getElementById("briefing")!;
 
-function showBriefing() {
+function showBriefing(animate = false) {
   const weapons = (["sword", "spear"] as const).filter((w) => unlocked(w));
   const enemies = (["melee", "ranged", "bomber"] as const).filter((k) => unlocked(k));
   briefingEl.innerHTML = briefingHtml({
@@ -290,6 +290,7 @@ function showBriefing() {
     enemies,
     fresh: game.briefing === "pause" ? [] : [...weapons, ...enemies].filter((x) => UNLOCKS[x] === game.level && game.level > 1),
     queenHp: combat.queen.maxHp,
+    animate,
   });
   briefingEl.hidden = false;
   paintPortraits(briefingEl, weapons);
@@ -300,7 +301,7 @@ function openBriefing(reason: typeof game.briefing) {
   game.briefing = reason;
   game.timer = 0;
   player.aim = null;
-  showBriefing();
+  showBriefing(true);
 }
 
 function closeBriefing() {

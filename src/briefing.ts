@@ -21,6 +21,8 @@ export interface BriefingInfo {
   /** Weapons and enemies unlocked on this level. */
   fresh: (Weapon | BoidKind)[];
   queenHp: number;
+  /** Play the appearance animation on new items (on opening, not on re-renders). */
+  animate: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -36,6 +38,7 @@ const ICONS = {
   crown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 18h18l-1.5-10-4.5 4-3-6-3 6-4.5-4z" fill="currentColor" fill-opacity=".25"/></svg>`,
   jump: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12l6-6 6 6M6 19l6-6 6 6"/></svg>`,
   focus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/></svg>`,
+  net: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9M8 8l4 4 4-4"/><path d="M3 15c3 4 15 4 18 0"/></svg>`,
   heart: `<svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z"/></svg>`,
   keyboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>`,
   mouse: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="2.5" width="12" height="19" rx="6"/><path d="M12 2.5V10M6 10h12"/></svg>`,
@@ -50,7 +53,15 @@ function mouseButton(side: "left" | "right") {
 const kbd = (k: string, wide = false) => `<kbd${wide ? ' class="wide"' : ""}>${k}</kbd>`;
 const arrows = `<span class="cluster"><span></span>${kbd("↑")}<span></span>${kbd("←")}${kbd("↓")}${kbd("→")}</span>`;
 const or = `<span class="or">/</span>`;
-const isNew = (on: boolean) => (on ? '<span class="new">NEW</span>' : "");
+/**
+ * Class, style and corner badge for an entity that may be newly unlocked. Each new entity on the
+ * sheet appears a little after the previous one.
+ */
+let freshCount = 0;
+function freshMark(on: boolean) {
+  if (!on) return { cls: "", style: "", badge: "" };
+  return { cls: " fresh", style: `--d:${freshCount++ * 0.35}s;`, badge: '<span class="badge-new">NEW</span>' };
+}
 const fmt = (v: number) => String(Number(v.toFixed(2)));
 const chip = (text: string, cls = "") => `<span class="chip ${cls}">${text}</span>`;
 
@@ -68,12 +79,13 @@ interface Ability {
 }
 
 function ability(a: Ability) {
+  const f = freshMark(!!a.fresh);
   return `
-    <div class="ability">
+    <div class="ability${f.cls}" style="${f.style}">
+      ${f.badge}
       <div class="ability-icon">${a.icon}</div>
       <div class="ability-body">
-        <div class="ability-head"><b>${a.name}</b>${isNew(!!a.fresh)}${a.input ? `<span class="ability-input">${a.input}</span>` : ""}</div>
-        ${a.stats.length ? `<div class="stats">${a.stats.map((s) => chip(s)).join("")}</div>` : ""}
+        <div class="ability-head"><b>${a.name}</b>${a.stats.map((s) => chip(s)).join("")}${a.input ? `<span class="ability-input">${a.input}</span>` : ""}</div>
         <div class="ability-text">${a.text}</div>
       </div>
     </div>`;
@@ -83,26 +95,26 @@ function playerCard(b: BriefingInfo) {
   const mouse = b.inputMode === "mouse";
   const sw = params.player.sword;
   const sp = params.player.spear;
-  const abilities: Ability[] = [];
+  const attacks: Ability[] = [];
   if (b.weapons.includes("sword"))
-    abilities.push({
+    attacks.push({
       icon: ICONS.sword,
       name: "Sword",
       text: "Hold to power up. Bounce on aerial hits.",
-      stats: [`${fmt(sw.damage)}–${fmt(sw.maxDamage)} dmg`, `${fmt(sw.cooldown)}s`],
+      stats: [`${fmt(sw.damage)}–${fmt(sw.maxDamage)} dmg`, `${fmt(sw.cooldown)}s recharge`],
       input: mouse ? `${mouseButton("left")}${or}${kbd("Z")}` : `${kbd("Z")}${or}${kbd("J")}`,
       fresh: b.fresh.includes("sword"),
     });
   if (b.weapons.includes("spear"))
-    abilities.push({
+    attacks.push({
       icon: ICONS.spear,
       name: "Spear",
       text: "Hold to power up. Thrown.",
-      stats: [`${fmt(sp.damage)}–${fmt(sp.maxDamage)} dmg`, `${fmt(sp.cooldown)}s`],
+      stats: [`${fmt(sp.damage)}–${fmt(sp.maxDamage)} dmg`, `${fmt(sp.cooldown)}s recharge`],
       input: mouse ? `${mouseButton("right")}${or}${kbd("X")}` : `${kbd("X")}${or}${kbd("K")}`,
       fresh: b.fresh.includes("spear"),
     });
-  abilities.push(
+  const passives: Ability[] = [
     {
       icon: ICONS.jump,
       name: "Double jump",
@@ -111,12 +123,18 @@ function playerCard(b: BriefingInfo) {
       input: `${kbd("Space", true)}<span class="or">in air</span>`,
     },
     {
+      icon: ICONS.net,
+      name: "Safety bounce",
+      text: "Springs you back up from your first dip below the rim.",
+      stats: ["1 per flight"],
+    },
+    {
       icon: ICONS.focus,
       name: "Focus",
       text: "Slow motion while aiming in the air. Refills on landing.",
       stats: [`${fmt(1 / params.player.focus.drain)}s budget`],
     },
-  );
+  ];
   const h = params.player.health;
   return `
     <article class="unit player">
@@ -127,7 +145,10 @@ function playerCard(b: BriefingInfo) {
           <div class="stats">${chip(`${ICONS.heart}${h.max} HP`, "hp")}${chip(`Fall: −${fmt(h.fallDamage)}`)}</div>
         </div>
       </header>
-      <div class="abilities">${abilities.map(ability).join("")}</div>
+      <div class="columns">
+        <section><h4>Attacks</h4><div class="abilities attacks">${attacks.map(ability).join("")}</div></section>
+        <section><h4>Abilities</h4><div class="abilities passives">${passives.map(ability).join("")}</div></section>
+      </div>
     </article>`;
 }
 
@@ -143,12 +164,12 @@ function enemyCard(kind: BoidKind, b: BriefingInfo) {
     melee: {
       name: "Melee boid",
       hp: BOID_HP.melee,
-      abilities: [{ icon: ICONS.lunge, name: "Lunge", text: "Dashes in up close.", stats: [`${hit} dmg`, `${fmt(ea.melee.cooldown)}s`] }],
+      abilities: [{ icon: ICONS.lunge, name: "Lunge", text: "Dashes in up close.", stats: [`${hit} dmg`, `${fmt(ea.melee.cooldown)}s recharge`] }],
     },
     ranged: {
       name: "Ranged boid",
       hp: BOID_HP.ranged,
-      abilities: [{ icon: ICONS.orb, name: "Orb shot", text: "Shoots from a distance.", stats: [`${hit} dmg`, `${fmt(ea.ranged.cooldown)}s`] }],
+      abilities: [{ icon: ICONS.orb, name: "Orb shot", text: "Shoots from a distance.", stats: [`${hit} dmg`, `${fmt(ea.ranged.cooldown)}s recharge`] }],
     },
     bomber: {
       name: "Bomber boid",
@@ -159,12 +180,14 @@ function enemyCard(kind: BoidKind, b: BriefingInfo) {
     },
   };
   const c = cards[kind];
+  const f = freshMark(b.fresh.includes(kind));
   return `
-    <article class="unit enemy${kind === "queen" ? " queen" : ""}" style="--c:${BURST_COLORS[kind]}">
+    <article class="unit enemy${kind === "queen" ? " queen" : ""}${f.cls}" style="--c:${BURST_COLORS[kind]};${f.style}">
+      ${f.badge}
       <header>
         <canvas class="portrait" data-portrait="${kind}"></canvas>
         <div>
-          <h3>${c.name}${isNew(b.fresh.includes(kind))}</h3>
+          <h3>${c.name}</h3>
           <div class="stats">${chip(`${ICONS.heart}${fmt(c.hp)} HP`, "hp")}</div>
         </div>
       </header>
@@ -173,6 +196,7 @@ function enemyCard(kind: BoidKind, b: BriefingInfo) {
 }
 
 export function briefingHtml(b: BriefingInfo): string {
+  freshCount = 0;
   const mouse = b.inputMode === "mouse";
   const title =
     b.reason === "pause" ? `Paused · Level ${b.level}` : b.reason === "retry" ? `Retry level ${b.level}` : `Level ${b.level}`;
@@ -181,7 +205,7 @@ export function briefingHtml(b: BriefingInfo): string {
     [kbd("Space", true), mouse ? "Jump toward the cursor · hold for height" : "Jump · hold for height"],
   ];
   return `
-    <div class="sheet">
+    <div class="sheet${b.animate ? " intro" : ""}">
       <header class="top">
         <div>
           <h1>${title}</h1>
