@@ -297,6 +297,22 @@ export const sfx = {
     noise({ f: 1200, f2: 3500, q: 3, dur: 0.14, vol: 0.12 * (at.gain ?? 1), pan: at.pan });
     tone({ f: 260, f2: 520, type: "sawtooth", dur: 0.1, vol: 0.04 * (at.gain ?? 1), pan: at.pan, lp: 1500 });
   },
+  /** The queen gets angry: a growl rising over the `dur` (s) until her blast. */
+  queenAnger(dur: number, at: At = {}) {
+    const g = at.gain ?? 1;
+    tone({ f: 90, f2: 260, type: "sawtooth", dur, vol: 0.14 * g, pan: at.pan, lp: 1200, attack: dur * 0.6 });
+    noise({ f: 300, f2: 1800, q: 1.5, dur, vol: 0.12 * g, pan: at.pan, attack: dur * 0.8 });
+  },
+  /** The queen's blast: a shrill shriek over a deep, ringing whump. */
+  queenBlast(at: At = {}) {
+    const g = at.gain ?? 1;
+    const pan = at.pan;
+    tone({ f: 90, f2: 35, type: "sine", dur: 0.7, vol: 0.5 * g, pan });
+    tone({ f: 1400, f2: 500, type: "sawtooth", dur: 0.35, vol: 0.09 * g, pan, lp: 3500, wet: 0.5 });
+    tone({ f: 1870, f2: 660, type: "square", dur: 0.3, vol: 0.05 * g, pan, lp: 3000, at: 0.02 });
+    noise({ f: 2500, f2: 300, q: 0.7, dur: 0.6, vol: 0.35 * g, pan, filter: "lowpass", wet: 0.6 });
+    for (const [i, n] of [79, 75, 72].entries()) tone({ f: midi(n), type: "sine", dur: 0.7, vol: 0.06 * g, pan, at: 0.06 + i * 0.05, wet: 0.8 });
+  },
   explosion(at: At = {}) {
     const g = at.gain ?? 1;
     tone({ f: 120, f2: 30, type: "sine", dur: 0.6, vol: 0.5 * g, pan: at.pan });

@@ -11,7 +11,8 @@ export type BoidKind = SpawnKind | "queen";
 /**
  * A group of boids that roams, fights and flocks together: the boids rules (separation, alignment,
  * cohesion) only apply between members. Flocks join other flocks and members split off into new
- * ones. The queen always has a flock, which stays with her.
+ * ones. The queen always has a flock, which stays with her and is topped back up to her starting
+ * escort from nearby flocks whenever it loses members.
  */
 export interface Flock {
   members: Boid[];
@@ -44,13 +45,12 @@ export interface Boid {
   r: number;
   cooldown: number;
   lunge: number; // seconds of lunge left (melee)
+  windup: number; // seconds of anger left before the queen's blast goes off
   flash: number; // hit flash timer
   freeze: number; // hit-stop left (s, real time): frozen boids don't move, act or animate
   heading: number; // facing for drawing; held while frozen (knockback changes vx/vy at once)
   phase: number; // wander / wing-flap phase
   flock: Flock;
-  homeX: number;
-  homeY: number;
 }
 
 export interface Shot {
@@ -79,13 +79,17 @@ export interface Slash {
   hits: Set<Boid>;
 }
 
-/** A bomber's explosion, kept for its expanding shock ring. */
+/** A bomber's explosion or the queen's blast, kept for its expanding shock ring. */
 export interface Blast {
   x: number;
   y: number;
   alt: number;
   age: number;
   radius: number;
+  /** The ring's colour, as "r,g,b". */
+  rgb: string;
+  /** A heavier look: thicker, with a second ring and a bigger flash. */
+  heavy?: boolean;
 }
 
 export interface Spark {
@@ -112,8 +116,11 @@ export interface PlayerView {
 export interface PlayerHooks {
   /** Hurt the player; false if the hit didn't land (invulnerable, or the round is over). */
   hit: (damage: number, fromX: number, fromY: number) => boolean;
-  /** Shove the player by this velocity (vz up); knocks them off a rim they hang on. */
-  push: (vx: number, vy: number, vz: number) => void;
+  /**
+   * Shove the player by this velocity (vz up); knocks them off a rim they hang on. A `hard` shove
+   * first cancels any flight against it, so it can't be flown through, and shakes harder.
+   */
+  push: (vx: number, vy: number, vz: number, hard?: boolean) => void;
 }
 
 /** Hit-stop (s) for a hit dealing `damage`, from anyone: more damage freezes longer. */
@@ -125,7 +132,7 @@ export function hitStop(damage: number) {
 
 /** Something that happened in combat, for sound. */
 export interface CombatEvent {
-  type: "hit" | "shot" | "lunge" | "explode" | "block" | "thud";
+  type: "hit" | "shot" | "lunge" | "explode" | "anger" | "queenBlast" | "block" | "thud";
   x: number;
   y: number;
   alt: number;
@@ -174,6 +181,9 @@ export const BURST_COLORS: Record<BoidKind, string> = {
 };
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+/** A blast's push at distance `d` from its centre: full at the centre, half at its edge. */
+const blastFalloff = (d: number, radius: number) => 0.5 + 0.5 * (1 - Math.min(1, d / radius));
 
 export class Combat {
   boids: Boid[] = [];
@@ -255,13 +265,12 @@ export class Combat {
       r: BOID_RADIUS[kind],
       cooldown: this.rand() * 1.5,
       lunge: 0,
+      windup: 0,
       freeze: 0,
       heading: 0,
       flash: 0,
       phase: this.rand() * 100,
       flock,
-      homeX: x,
-      homeY: y,
     };
     this.boids.push(b);
     flock.members.push(b);
@@ -326,8 +335,10 @@ export class Combat {
     b.vx += ((b.x - fromX) / l) * push;
     b.vy += ((b.y - fromY) / l) * push;
     b.lunge = 0;
-    // Hitting any member (the queen too) sets the whole flock on the player.
+    // Hitting any member (the queen too) sets the whole flock on the player; hitting the queen's
+    // flock also calls in the flock nearest the player after it.
     b.flock.provoked = params.boids.swarm.provokedTime;
+    if (b.flock === this.queen.flock) this.callReinforcements();
     this.burst(b.x, b.y, b.alt, b.hp <= 0 ? 18 : 6, BURST_COLORS[b.kind]);
     if (b.hp <= 0 && b.kind === "queen") this.burst(b.x, b.y, b.alt, 60, "#ffe27a");
     // Killing a bomber sets it off where it is.
@@ -343,30 +354,52 @@ export class Combat {
     const R = bp.blastRadius;
     b.hp = 0;
     this.event("explode", b.x, b.y, b.alt);
-    this.blasts.push({ x: b.x, y: b.y, alt: b.alt, age: 0, radius: R });
+    this.blasts.push({ x: b.x, y: b.y, alt: b.alt, age: 0, radius: R, rgb: "255,200,120" });
     this.burst(b.x, b.y, b.alt, 36, "#ffa040");
     this.burst(b.x, b.y, b.alt, 18, "#fff1a8");
     const blast = box(b.x, b.y, b.alt, R);
-    const falloff = (d: number) => 0.5 + 0.5 * (1 - Math.min(1, d / R));
     for (const o of this.boids) {
       if (o === b || o.hp <= 0) continue;
       const dx = o.x - b.x;
       const dy = o.y - b.y;
       const d = Math.hypot(dx, dy);
       if (!overlaps(blast, boidHurtbox(o))) continue;
-      const push = bp.boidPush * falloff(d) * (o.kind === "queen" ? 0.25 : 1);
+      const push = bp.boidPush * blastFalloff(d, R) * (o.kind === "queen" ? 0.25 : 1);
       o.vx += (dx / (d || 1)) * push;
       o.vy += (dy / (d || 1)) * push;
       o.lunge = 0;
     }
+    this.blastPlayer(blast, bp.damage, bp.playerPush, bp.playerLift);
+  }
+
+  /**
+   * The queen's blast: throws the player out at full force anywhere within its radius, at any
+   * height, but spares her swarm.
+   */
+  private queenBlast(q: Boid) {
+    const qa = params.enemyAttacks.queen;
+    this.event("queenBlast", q.x, q.y, q.alt);
+    this.blasts.push({ x: q.x, y: q.y, alt: q.alt, age: 0, radius: qa.blastRadius, rgb: "255,140,240", heavy: true });
+    this.burst(q.x, q.y, q.alt, 60, BURST_COLORS.queen);
+    this.burst(q.x, q.y, q.alt, 30, "#ffe27a");
+    this.burst(q.x, q.y, q.alt, 20, "#ffffff");
+    this.blastPlayer(box(q.x, q.y, q.alt, qa.blastRadius), qa.damage, qa.playerPush, qa.playerLift, true);
+  }
+
+  /**
+   * A blast catching the player: hurt, and thrown away from its centre (harder the closer). A
+   * `heavy` blast reaches them however far above or below it they are, throws at full force
+   * throughout, and can't be flown through.
+   */
+  private blastPlayer(blast: Hitbox, damage: number, push: number, lift: number, heavy = false) {
     const p = this.player;
-    if (!p.targetable || !overlaps(blast, playerHurtbox(p))) return;
-    this.hooks.hit(bp.damage, b.x, b.y);
-    const dx = p.x - b.x;
-    const dy = p.y - b.y;
+    if (!p.targetable || !overlaps(heavy ? { ...blast, alt: p.alt } : blast, playerHurtbox(p))) return;
+    this.hooks.hit(damage, blast.x, blast.y);
+    const dx = p.x - blast.x;
+    const dy = p.y - blast.y;
     const l = Math.hypot(dx, dy) || 1;
-    const k = falloff(Math.min(R, Math.hypot(dx, dy, p.alt - b.alt)));
-    this.hooks.push((dx / l) * bp.playerPush * k, (dy / l) * bp.playerPush * k, bp.playerLift * k);
+    const k = heavy ? 1 : blastFalloff(Math.hypot(dx, dy, p.alt - blast.alt), blast.radius);
+    this.hooks.push((dx / l) * push * k, (dy / l) * push * k, lift * k, heavy);
   }
 
   burst(x: number, y: number, alt: number, n: number, color: string) {
@@ -507,6 +540,8 @@ export class Combat {
           (f.engaged && near(params.boids.swarm.disengageRange)));
     }
 
+    this.recruitGuards();
+
     for (const f of [...this.flocks]) {
       if (!this.flocks.includes(f)) continue; // merged away this frame
       if (f.joining && !this.flocks.includes(f.joining)) f.joining = null;
@@ -544,6 +579,49 @@ export class Combat {
       }
       if (this.rand() < fp.leaveChance * dt) this.split(f);
     }
+  }
+
+  /**
+   * The queen is always guarded: while her flock is short of her starting escort, the flocks
+   * nearest her hand over members (idle flocks before engaged ones), who fly over to her.
+   */
+  private recruitGuards() {
+    const q = this.queen;
+    const qf = q.flock;
+    let missing = this.escortSize - qf.members.filter((b) => b.kind !== "queen").length;
+    if (q.hp <= 0 || missing <= 0) return;
+    const toQueen = (x: number, y: number) => Math.hypot(x - q.x, y - q.y);
+    const donors = this.flocks
+      .filter((f) => f !== qf && toQueen(f.cx, f.cy) < params.boids.queen.recruitRange)
+      .sort((a, b) => Number(a.engaged) - Number(b.engaged) || toQueen(a.cx, a.cy) - toQueen(b.cx, b.cy));
+    for (const f of donors) {
+      const recruits = f.members
+        .filter((b) => b.lunge <= 0)
+        .sort((a, b) => toQueen(a.x, a.y) - toQueen(b.x, b.y))
+        .slice(0, missing);
+      f.members = f.members.filter((b) => !recruits.includes(b));
+      for (const b of recruits) b.flock = qf;
+      qf.members.push(...recruits);
+      missing -= recruits.length;
+      if (missing <= 0) break;
+    }
+    this.flocks = this.flocks.filter((f) => f.members.length > 0);
+  }
+
+  /** The queen's flock is under attack: the flock nearest the player, besides hers, joins in. */
+  private callReinforcements() {
+    const p = this.player;
+    let best: Flock | null = null;
+    let bestD = Infinity;
+    for (const f of this.flocks) {
+      if (f === this.queen.flock) continue;
+      const d = Math.hypot(f.cx - p.x, f.cy - p.y);
+      if (d < bestD) {
+        best = f;
+        bestD = d;
+      }
+    }
+    if (best) best.provoked = params.boids.swarm.provokedTime;
   }
 
   /** `a` joins `b` (the queen's flock always takes the other in). */
@@ -809,10 +887,32 @@ export class Combat {
   }
 
   private updateQueen(b: Boid, dt: number, player: PlayerView, dP: number) {
+    // When the player comes close she gets angry, and after the wind-up lets off a blast.
+    const qa = params.enemyAttacks.queen;
+    if (b.windup > 0) {
+      b.windup -= dt;
+      if (b.windup <= 0) {
+        b.windup = 0;
+        b.cooldown = qa.cooldown;
+        this.queenBlast(b);
+      }
+    } else if (
+      player.targetable &&
+      b.cooldown <= 0 &&
+      overlaps(box(b.x, b.y, b.alt, qa.triggerRange), playerHurtbox(player))
+    ) {
+      b.windup = qa.windup;
+      this.event("anger", b.x, b.y, b.alt);
+    }
+
     let ax = 0;
     let ay = 0;
-    if (player.targetable && dP < params.boids.queen.fleeRange) {
-      // Flee from the player...
+    if (b.windup > 0) {
+      // Holding still while she seethes.
+      ax -= b.vx * 4;
+      ay -= b.vy * 4;
+    } else if (player.targetable && dP < params.boids.queen.fleeRange) {
+      // Flee from the player.
       ax += ((b.x - player.x) / dP) * 160;
       ay += ((b.y - player.y) / dP) * 160;
     } else {
@@ -820,14 +920,10 @@ export class Combat {
       ax += Math.cos(wa) * 50;
       ay += Math.sin(wa * 1.3) * 50;
     }
-    // ...but stay near home so she remains reachable.
-    const hx = b.homeX - b.x;
-    const hy = b.homeY - b.y;
-    const hd = Math.hypot(hx, hy);
-    if (hd > params.boids.queen.tether * 0.6) {
-      const pull = ((hd - params.boids.queen.tether * 0.6) / (params.boids.queen.tether * 0.4)) * 220;
-      ax += (hx / hd) * pull;
-      ay += (hy / hd) * pull;
+    const ob = this.outOfBounds(b);
+    if (ob) {
+      ax += ob.x * 300;
+      ay += ob.y * 300;
     }
     const away = this.islandForce(b);
     ax += away.x;

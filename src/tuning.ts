@@ -55,6 +55,7 @@ const GROUP_TITLES: Record<string, string> = {
   "enemyAttacks.melee": "Melee boids",
   "enemyAttacks.ranged": "Ranged boids",
   "enemyAttacks.bomber": "Bomber boids",
+  "enemyAttacks.queen": "Queen's blast",
   "audio.volume": "Volume (M mutes)",
 };
 
@@ -178,9 +179,9 @@ const SLIDERS: Record<string, Slider> = {
   "boids.queen.hp": ["Health", 1, 200, 1, true],
   "boids.queen.speed": ["Speed", 0, 400, 5],
   "boids.queen.fleeRange": ["Flee range", 0, 1000, 10],
-  "boids.queen.tether": ["Stays near home", 50, 1000, 10],
   "boids.queen.escort": ["Escort flock size (at start)", 0, 20, 1, true],
   "boids.queen.threatRadius": ["Threat radius", 0, 1500, 10],
+  "boids.queen.recruitRange": ["Recruits guards from flocks within", 0, 3000, 50],
 
   "combat.hits.height": ["Hits reach up / down", 0, 200, 1],
   "enemyAttacks.hit.damage": ["Damage per hit (%)", 0, 50, 0.5],
@@ -200,6 +201,13 @@ const SLIDERS: Record<string, Slider> = {
   "enemyAttacks.bomber.playerPush": ["Push on the player", 0, 1500, 10],
   "enemyAttacks.bomber.playerLift": ["Lift on the player", 0, 1200, 10],
   "enemyAttacks.bomber.boidPush": ["Push on other boids", 0, 1500, 10],
+  "enemyAttacks.queen.triggerRange": ["Trigger range", 10, 400, 5],
+  "enemyAttacks.queen.windup": ["Anger before the blast (s)", 0.1, 3, 0.05],
+  "enemyAttacks.queen.blastRadius": ["Blast radius", 20, 500, 5],
+  "enemyAttacks.queen.damage": ["Damage (%)", 0, 50, 0.5],
+  "enemyAttacks.queen.playerPush": ["Push on the player", 0, 1500, 10],
+  "enemyAttacks.queen.playerLift": ["Lift on the player", 0, 1200, 10],
+  "enemyAttacks.queen.cooldown": ["Cooldown (s)", 0, 10, 0.1],
 
   "audio.volume.master": ["Master", 0, 1, 0.05],
   "audio.volume.music": ["Music", 0, 1, 0.05],

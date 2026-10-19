@@ -176,9 +176,9 @@ export const DEFAULTS = {
       hp: 24, // Health
       speed: 85, // Speed
       fleeRange: 320, // Flee range
-      tether: 1000, // Stays near home
       escort: 4, // Escort flock size (at start)
       threatRadius: 410, // Threat radius
+      recruitRange: 900, // Recruits guards from flocks within
     },
   },
   combat: {
@@ -211,6 +211,15 @@ export const DEFAULTS = {
       playerPush: 560, // Push on the player
       playerLift: 420, // Lift on the player
       boidPush: 520, // Push on other boids
+    },
+    queen: {
+      triggerRange: 110, // Trigger range
+      windup: 0.8, // Anger before the blast (s)
+      blastRadius: 150, // Blast radius
+      damage: 12, // Damage (%)
+      playerPush: 950, // Push on the player
+      playerLift: 520, // Lift on the player
+      cooldown: 2.5, // Cooldown (s)
     },
   },
   audio: {

@@ -415,15 +415,22 @@ function hitPlayer(dmg: number, fromX: number, fromY: number): boolean {
 }
 
 /**
- * Shove the player (a bomber's blast). In the air it adds to the flight; on a rim it blows them
- * off it: outward, keeping the push's sideways part, as if they had jumped.
+ * Shove the player (a blast). In the air it adds to the flight; on a rim it blows them off it:
+ * outward, keeping the push's sideways part, as if they had jumped. A `hard` shove first cancels
+ * any flight against it.
  */
-function pushPlayer(vx: number, vy: number, vz: number) {
+function pushPlayer(vx: number, vy: number, vz: number, hard = false) {
   const p = player;
   if (game.state !== "play" || p.mode === "lost") return;
-  game.shake = Math.max(game.shake, 0.5);
-  rumblePad(1, 0.6, 320);
+  game.shake = Math.max(game.shake, hard ? 0.9 : 0.5);
+  rumblePad(1, hard ? 1 : 0.6, hard ? 450 : 320);
   if (p.mode === "air") {
+    const l = Math.hypot(vx, vy);
+    const against = l > 0 ? (p.vx * vx + p.vy * vy) / l : 0;
+    if (hard && against < 0) {
+      p.vx -= (vx / l) * against;
+      p.vy -= (vy / l) * against;
+    }
     p.vx += vx;
     p.vy += vy;
     p.vz = Math.max(p.vz, vz);
@@ -1621,6 +1628,11 @@ function playCombatSounds() {
       sfx.explosion({ pan: at.pan, gain: Math.max(0.35, at.gain) });
       rumblePad(0.6 * at.gain, 0.3 * at.gain, 200);
     }
+    else if (ev.type === "anger") sfx.queenAnger(params.enemyAttacks.queen.windup, at);
+    else if (ev.type === "queenBlast") {
+      sfx.queenBlast({ pan: at.pan, gain: Math.max(0.5, at.gain) });
+      rumblePad(0.8 * at.gain, 0.5 * at.gain, 260);
+    }
     else if (ev.type === "block") sfx.block(at);
     else sfx.thud(at);
   }
@@ -1760,26 +1772,41 @@ function drawSlash(sl: { x: number; y: number; alt: number; dx: number; dy: numb
   ctx.fill();
 }
 
-/** A bomber's blast: a flash, then a shock ring racing out to the blast radius. */
+/**
+ * A bomber's or the queen's blast: a flash, then a shock ring racing out to the blast radius.
+ * A heavy blast also fills its reach for a moment, with a second ring trailing the first.
+ */
 function drawBlast(bl: Blast) {
-  const t = bl.age / BLAST_TIME;
-  const fade = 1 - t;
-  const n = 28;
-  const r = bl.radius * (1 - (1 - t) ** 3);
-  ctx.beginPath();
-  for (let i = 0; i <= n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const q = proj.project(bl.x + Math.cos(a) * r, bl.y + Math.sin(a) * r, bl.alt);
-    if (i) ctx.lineTo(q.x, q.y);
-    else ctx.moveTo(q.x, q.y);
-  }
   const c = proj.project(bl.x, bl.y, bl.alt);
   if (!c.visible) return;
-  ctx.strokeStyle = `rgba(255,200,120,${0.9 * fade})`;
-  ctx.lineWidth = Math.max(1, 6 * fade * c.kt);
+  const t = bl.age / BLAST_TIME;
+  const fade = 1 - t;
+  const ring = (r: number) => {
+    const n = 32;
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const q = proj.project(bl.x + Math.cos(a) * r, bl.y + Math.sin(a) * r, bl.alt);
+      if (i) ctx.lineTo(q.x, q.y);
+      else ctx.moveTo(q.x, q.y);
+    }
+  };
+  const out = (u: number) => 1 - (1 - Math.min(1, u)) ** 3;
+  if (bl.heavy) {
+    ring(bl.radius * out(t * 1.4));
+    ctx.fillStyle = `rgba(${bl.rgb},${0.3 * fade * fade})`;
+    ctx.fill();
+    ring(bl.radius * out(t * 0.8));
+    ctx.strokeStyle = `rgba(255,255,255,${0.7 * fade})`;
+    ctx.lineWidth = Math.max(1, 4 * fade * c.kt);
+    ctx.stroke();
+  }
+  ring(bl.radius * out(t));
+  ctx.strokeStyle = `rgba(${bl.rgb},${0.9 * fade})`;
+  ctx.lineWidth = Math.max(1, (bl.heavy ? 12 : 6) * fade * c.kt);
   ctx.stroke();
   if (t < 0.35) {
-    const fr = (20 + 50 * t) * c.kt;
+    const fr = (bl.heavy ? 40 + 110 * t : 20 + 50 * t) * c.kt;
     ctx.globalCompositeOperation = "screen";
     ctx.globalAlpha = 1 - t / 0.35;
     ctx.drawImage(glowSprite, c.x - fr * 2, c.y - fr * 2, fr * 4, fr * 4);
@@ -1793,12 +1820,31 @@ function drawBoid(b: Boid) {
   const pr = proj.project(b.x, b.y, b.alt);
   if (!pr.visible) return;
   const k = pr.kt;
-  const heading = b.heading;
+  if (b.windup > 0) drawQueenWarning(b);
   ctx.save();
   ctx.translate(pr.x, pr.y);
   if (outOfHitHeight(b.alt, player.alt)) ctx.globalAlpha = OUT_OF_HEIGHT_ALPHA;
   drawBoidBody(ctx, b, k);
   ctx.restore();
+}
+
+/** While the queen winds up, the reach of her coming blast closes in around her. */
+function drawQueenWarning(q: Boid) {
+  const qa = params.enemyAttacks.queen;
+  const t = Math.max(0, Math.min(1, 1 - q.windup / qa.windup));
+  const n = 32;
+  for (const [r, a] of [[qa.blastRadius, 0.25 + 0.35 * t], [qa.blastRadius * (1.6 - 0.6 * t), 0.5 * t]] as const) {
+    ctx.beginPath();
+    for (let i = 0; i <= n; i++) {
+      const ang = (i / n) * Math.PI * 2;
+      const p = proj.project(q.x + Math.cos(ang) * r, q.y + Math.sin(ang) * r, q.alt);
+      if (i) ctx.lineTo(p.x, p.y);
+      else ctx.moveTo(p.x, p.y);
+    }
+    ctx.strokeStyle = `rgba(255,90,140,${a})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
 }
 
 /** Enemies and orbs out of hit height from the player (see hitbox.ts) are faded. */

@@ -30,11 +30,13 @@
 - Level 3: Introduce ranged attack and bomber boids
 
 Queen protect
-- 10% of the boids should guard the queen
-- If there are fewer boids, close ones should join the queen flock
-- If the queen is attacked, the queen flock will aggro the player
-- In general, if a member of a flock is attacked, the flock aggros
-- If the queen flock is attacked, the closest flock to the player will aggro
+- The queen should always be guarded
+- If the queen swarm loses members, new boids should be recruited from close flocks
+- If any member in the queen flock is attacked, the second closest flock will also aggro the player
+- Add attack to the queen
+  - When the player is close, trigger the attack
+  - The queen gets angry (animated), and after a delay, frees a short-ranged blast around
+  - The blast should have knockback power
 
 
 Power up / skills:
@@ -68,7 +70,8 @@ Power up / skills:
 - Air jump speed should be calculated differently.
   - Air jump should be defined by a jumpSpeed. The current speed will be added (direction adjusted), but never influence negatively. Max is defined by the global maxSpeed
 
+✅Improve height hit/miss
+- Set standard height
+- Show what enemies are in height range
 
-Bugs
-- Second hit on queen often miss
-- Attacks in air doesnt hit
+

@@ -7,21 +7,29 @@ import { params } from "./tuning";
 /** What a sprite needs to know about its boid. */
 export type BoidLook = Pick<Boid, "kind" | "id" | "heading" | "phase" | "lunge" | "cooldown" | "flash" | "r"> & {
   flock: { engaged: boolean };
+  windup?: number;
 };
 
 export function drawBoidBody(ctx: CanvasRenderingContext2D, b: BoidLook, k: number) {
   const heading = b.heading;
   if (b.kind === "queen") {
-    const pulse = 0.5 + 0.5 * Math.sin(b.phase * 3);
-    const aura = ctx.createRadialGradient(0, 0, 0, 0, 0, 55 * k);
-    aura.addColorStop(0, `rgba(230,120,255,${0.35 + 0.15 * pulse})`);
-    aura.addColorStop(1, "rgba(230,120,255,0)");
+    // Anger (0..1) builds over her blast's wind-up: she shakes, flaps harder and glows red.
+    const windup = b.windup ?? 0;
+    const anger = windup > 0 ? Math.max(0, Math.min(1, 1 - windup / params.enemyAttacks.queen.windup)) : 0;
+    const angry = windup > 0 ? 0.4 + 0.6 * anger : 0;
+    if (angry) ctx.translate(Math.sin(b.phase * 90) * 2.5 * angry * k, Math.cos(b.phase * 77) * 2.5 * angry * k);
+    const pulse = 0.5 + 0.5 * Math.sin(b.phase * (3 + 20 * angry));
+    const rgb = `${230 + 25 * angry},${120 - 70 * angry},${255 - 165 * angry}`;
+    const ar = (55 + 25 * angry) * k;
+    const aura = ctx.createRadialGradient(0, 0, 0, 0, 0, ar);
+    aura.addColorStop(0, `rgba(${rgb},${0.35 + 0.15 * pulse + 0.3 * angry})`);
+    aura.addColorStop(1, `rgba(${rgb},0)`);
     ctx.fillStyle = aura;
     ctx.beginPath();
-    ctx.arc(0, 0, 55 * k, 0, Math.PI * 2);
+    ctx.arc(0, 0, ar, 0, Math.PI * 2);
     ctx.fill();
     ctx.rotate(heading);
-    const flap = Math.abs(Math.sin(b.phase * 7));
+    const flap = Math.abs(Math.sin(b.phase * (7 + 14 * angry)));
     ctx.fillStyle = "rgba(240,200,255,0.4)";
     for (const side of [-1, 1]) {
       for (const [ox, w] of [[-2, 1], [-14, 0.75]] as const) {
@@ -61,10 +69,10 @@ export function drawBoidBody(ctx: CanvasRenderingContext2D, b: BoidLook, k: numb
       ctx.lineTo((14 + Math.cos(a + 0.25) * 6) * k, Math.sin(a + 0.25) * 6 * k);
       ctx.fill();
     }
-    ctx.fillStyle = "#1a0526";
+    ctx.fillStyle = angry ? "#ff2a3a" : "#1a0526";
     for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.arc(17 * k, side * 3 * k, 1.6 * k, 0, Math.PI * 2);
+      ctx.arc(17 * k, side * 3 * k, (1.6 + 0.8 * angry) * k, 0, Math.PI * 2);
       ctx.fill();
     }
   } else {
