@@ -193,6 +193,8 @@ export class Combat {
   blasts: Blast[] = [];
   flocks: Flock[] = [];
   queen!: Boid;
+  /** Where the queen is roaming to while the player isn't close. */
+  private queenGoal: { x: number; y: number } | null = null;
   /** The queen's starting escort size: her flock never sheds members below it. */
   private escortSize = 0;
   bounds = { x: 0, y: 0, r: 1 };
@@ -224,6 +226,7 @@ export class Combat {
     this.sparks = [];
     this.blasts = [];
     this.flocks = [];
+    this.queenGoal = null;
     const home = planet.queenHome;
     const escort = this.newFlock(home.x, home.y);
     this.queen = this.spawn("queen", home.x, home.y, escort);
@@ -911,14 +914,33 @@ export class Combat {
       // Holding still while she seethes.
       ax -= b.vx * 4;
       ay -= b.vy * 4;
-    } else if (player.targetable && dP < params.boids.queen.fleeRange) {
-      // Flee from the player.
-      ax += ((b.x - player.x) / dP) * 160;
-      ay += ((b.y - player.y) / dP) * 160;
     } else {
-      const wa = b.phase * 0.4;
-      ax += Math.cos(wa) * 50;
-      ay += Math.sin(wa * 1.3) * 50;
+      const qp = params.boids.queen;
+      let dx: number;
+      let dy: number;
+      let speed = qp.speed;
+      if (player.targetable && dP < qp.fleeRange) {
+        // Flee from the player, but the nearer the boundary the more she turns back inward, so she
+        // slips past them toward open space rather than being run into the edge.
+        const ix = this.bounds.x - b.x;
+        const iy = this.bounds.y - b.y;
+        const id = Math.hypot(ix, iy) || 1;
+        const edge = Math.max(0, Math.min(1, (id / this.bounds.r - 0.35) / 0.45));
+        dx = (b.x - player.x) / dP + (ix / id) * edge * 1.6;
+        dy = (b.y - player.y) / dP + (iy / id) * edge * 1.6;
+        this.queenGoal = null;
+      } else {
+        // Otherwise roam between spots in the inner part of the planet, slowly.
+        if (!this.queenGoal || Math.hypot(this.queenGoal.x - b.x, this.queenGoal.y - b.y) < 40) {
+          this.queenGoal = this.queenRoamGoal(player);
+        }
+        dx = this.queenGoal.x - b.x;
+        dy = this.queenGoal.y - b.y;
+        speed = Math.min(qp.speed * 0.55, Math.hypot(dx, dy));
+      }
+      const l = Math.hypot(dx, dy) || 1;
+      ax += ((dx / l) * speed - b.vx) * 2;
+      ay += ((dy / l) * speed - b.vy) * 2;
     }
     const ob = this.outOfBounds(b);
     if (ob) {
@@ -941,6 +963,25 @@ export class Combat {
     this.keepOffIslands(b);
     this.keepInBounds(b);
     b.alt = ISLAND_TOP + 50 + Math.sin(b.phase * 1.1) * 8;
+  }
+
+  /** Somewhere in the inner part of the planet, not over an island, and preferably away from the player. */
+  private queenRoamGoal(player: PlayerView): { x: number; y: number } {
+    let best = { x: this.bounds.x, y: this.bounds.y };
+    let bestScore = -Infinity;
+    for (let i = 0; i < 12; i++) {
+      const a = this.rand() * Math.PI * 2;
+      const d = Math.sqrt(this.rand()) * this.bounds.r * 0.55;
+      const x = this.bounds.x + Math.cos(a) * d;
+      const y = this.bounds.y + Math.sin(a) * d;
+      if (this.islands.some((isl) => isl.contains(x, y))) continue;
+      const score = player.targetable ? Math.hypot(x - player.x, y - player.y) : this.rand();
+      if (score > bestScore) {
+        best = { x, y };
+        bestScore = score;
+      }
+    }
+    return best;
   }
 
   /** Signed distance from an island's rim (negative inside) with the rim's outward normal there. */
