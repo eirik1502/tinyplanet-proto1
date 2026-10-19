@@ -72,6 +72,7 @@ export const DEFAULTS = {
     airJump: {
       speed: 220, // Double jump speed (sideways)
       height: 60, // Double jump height
+      minPeak: 90, // Lowest peak above the rims
       snapCone: 30, // Snap cone ahead (degrees)
       bounce: 520, // Sword-hit bounce (up speed)
       netDepth: 45, // Safety bounce depth below rim

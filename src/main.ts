@@ -736,7 +736,10 @@ function update(dt: number, dtReal: number) {
     // speed, so jumping along the flight speeds it up.
     if (playing && anyPressed(JUMP_KEYS) && p.airJumps > 0) {
       p.airJumps = 0;
-      p.vz = Math.max(p.vz, riseSpeed(params.move.airJump.height));
+      // Whatever the vertical speed was, the jump starts over: it rises `airJump.height` from here,
+      // or more when low, so it always peaks at least `airJump.minPeak` above the rims.
+      const aj = params.move.airJump;
+      p.vz = riseSpeed(Math.max(aj.height, ISLAND_TOP + aj.minPeak - p.alt));
       p.jumpHeld = true;
       const push = params.move.airJump.speed;
       const aim = doubleJumpDir(push, mouseAim(), dir);

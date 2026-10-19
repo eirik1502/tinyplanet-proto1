@@ -106,6 +106,7 @@ const SLIDERS: Record<string, Slider> = {
   "move.limits.maxHeight": ["Max height above the rims", 20, 600, 5],
   "move.airJump.speed": ["Double jump speed (sideways)", 0, 1000, 10],
   "move.airJump.height": ["Double jump height", 0, 300, 5],
+  "move.airJump.minPeak": ["Lowest peak above the rims", 0, 300, 5],
   "move.airJump.snapCone": ["Snap cone ahead (degrees)", 0, 180, 5],
   "move.airJump.bounce": ["Sword-hit bounce (up speed)", 0, 1200, 10],
   "move.airJump.netDepth": ["Safety bounce depth below rim", 0, 75, 1],
