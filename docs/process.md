@@ -8,17 +8,13 @@
 - [x] A queen should be in a flock with other boids.
 - [x] Remove drag towards queen
 - [x] Add an explosive enemy boid. It explods on contact, pushing other bodies and the player away. If the player is on an island, it will be pushed away
-- [ ] Enemy: If any boid in flock is attacked, aggro
 - [ ] Make islands shake on land
 - [ ] Animate trees on islands
-- [ ] Movement: Jump right out when slide speed is low and no button pressed
-- [ ] Tweak: Attack aim more than 6 degrees from edge
-- [ ] Improve mouse vs keybaord movement. Hit-move direction, air influence
-- [ ] Add joy controller input
+- [ ] Tweak: Attack aim more than 60 degrees from edge
 - [ ] Release as a github app (on every deploy)
 
 
-✅ Level progresssion:
+✅Level progresssion:
 - Introduce attacks and enemies over the first few levels
 - Show an instruction screen before each level
   - Pick input mode
@@ -29,7 +25,7 @@
 - Level 2: Introduce ranged boids
 - Level 3: Introduce ranged attack and bomber boids
 
-Queen protect
+✅Queen protect
 - The queen should always be guarded
 - If the queen swarm loses members, new boids should be recruited from close flocks
 - If any member in the queen flock is attacked, the second closest flock will also aggro the player
