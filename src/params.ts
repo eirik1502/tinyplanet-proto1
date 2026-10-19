@@ -117,12 +117,16 @@ export const DEFAULTS = {
       max: 100, // Max health
       fallDamage: 10, // Fall damage
       invulnTime: 0.35, // Invulnerable after hit (s)
-      hitRadius: 10, // Hit radius
+    },
+    hurtbox: {
+      radius: 10, // Radius
+      height: 32, // Height
     },
     sword: {
       range: 52, // Reach
       maxRange: 88, // Reach at full power
       arc: 1.35, // Half arc (rad)
+      height: 90, // Hit height
       damage: 2, // Damage
       maxDamage: 5, // Damage at full power
       activeTime: 0.18, // Active time (s)
@@ -136,6 +140,7 @@ export const DEFAULTS = {
       damage: 1, // Damage
       maxDamage: 3, // Damage at full power
       hitRadius: 12, // Hit radius
+      hitHeight: 52, // Hit height
       maxScale: 1.8, // Size at full power
       length: 46,
       cooldown: 0.45, // Cooldown (s)
@@ -194,11 +199,15 @@ export const DEFAULTS = {
       range: 420, // Shooting range
       orbSpeed: 280, // Orb speed
       orbLife: 2.2, // Orb life (s)
+      orbRadius: 6, // Orb radius
+      orbHeight: 12, // Orb height
       cooldown: 1.7, // Cooldown (s)
     },
     bomber: {
       triggerRange: 22, // Trigger range
+      triggerHeight: 60, // Trigger height
       blastRadius: 150, // Blast radius
+      blastHeight: 300, // Blast height
       damage: 6, // Damage (%)
       playerPush: 560, // Push on the player
       playerLift: 420, // Lift on the player
