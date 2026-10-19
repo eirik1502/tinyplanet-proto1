@@ -29,9 +29,15 @@ export function box(x: number, y: number, alt: number, radius: number): Box {
   return { x, y, alt, radius };
 }
 
+/** 1 if `alt` is too far above `from` for hits between them, -1 if too far below, else 0. */
+export function outOfHitHeight(alt: number, from: number): -1 | 0 | 1 {
+  const d = alt - from;
+  return d > params.combat.hits.height ? 1 : d < -params.combat.hits.height ? -1 : 0;
+}
+
 /** Whether `hit` overlaps `hurt`. */
 export function overlaps(hit: Hitbox, hurt: Hurtbox): boolean {
-  if (Math.abs(hurt.alt - hit.alt) > params.combat.hits.height) return false;
+  if (outOfHitHeight(hurt.alt, hit.alt) !== 0) return false;
   const ox = hurt.x - hit.x;
   const oy = hurt.y - hit.y;
   const d = Math.hypot(ox, oy);

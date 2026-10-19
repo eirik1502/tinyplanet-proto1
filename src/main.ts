@@ -5,6 +5,7 @@ import { BLAST_TIME, Combat, hitStop, type Blast, type Boid } from "./combat";
 import { generatePlanet, type Planet, type SpawnKind } from "./planet";
 import { applyVolumes, music, sfx, toggleMute, unlockAudio } from "./audio";
 import { Avatar, type AvatarView } from "./avatar";
+import { outOfHitHeight } from "./hitbox";
 import { drawBoidBody } from "./sprites";
 import { briefingHtml, paintPortraits, type InputMode, type Weapon } from "./briefing";
 import { readGamepad, rumble, type PadLayout } from "./gamepad";
@@ -1706,9 +1707,11 @@ function pushCombatDrawables(list: Drawable[], time: number) {
           const pr = proj.project(sh.x, sh.y, sh.alt);
           if (!pr.visible) return;
           const r = 9 * pr.kt;
+          if (outOfHitHeight(sh.alt, player.alt)) ctx.globalAlpha = OUT_OF_HEIGHT_ALPHA;
           ctx.globalCompositeOperation = "screen";
           ctx.drawImage(orbSprite, pr.x - r, pr.y - r, r * 2, r * 2);
           ctx.globalCompositeOperation = "source-over";
+          ctx.globalAlpha = 1;
         }
       },
     });
@@ -1793,10 +1796,13 @@ function drawBoid(b: Boid) {
   const heading = b.heading;
   ctx.save();
   ctx.translate(pr.x, pr.y);
-
+  if (outOfHitHeight(b.alt, player.alt)) ctx.globalAlpha = OUT_OF_HEIGHT_ALPHA;
   drawBoidBody(ctx, b, k);
   ctx.restore();
 }
+
+/** Enemies and orbs out of hit height from the player (see hitbox.ts) are faded. */
+const OUT_OF_HEIGHT_ALPHA = 0.4;
 
 // ---------------------------------------------------------------------------------------------
 // Slow motion
