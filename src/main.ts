@@ -468,20 +468,31 @@ function grab(islandIdx: number, s: number, vx = 0, vy = 0) {
 interface Flight { x: number; y: number; alt: number; vx: number; vy: number; vz: number; t: number }
 
 /**
- * Launch speed (horizontal and vertical alike) of a full jump: a 45° arc that would land
- * `jump.length` away at launch height under plain gravity (the apex float carries it a bit further).
+ * Upward speed that rises exactly `height` before peaking, under gravityAt (normal gravity down to
+ * the apex band, then the weaker apex gravity).
  */
-function launchSpeed() {
-  return Math.sqrt((params.move.jump.gravity * params.move.jump.length) / 2);
+function riseSpeed(height: number) {
+  const j = params.move.jump;
+  const h = Math.max(0, height);
+  const g = j.gravity;
+  const ga = g * j.apexGravity;
+  // Height risen inside the apex band alone.
+  const band = (j.apexBand * j.apexBand) / (2 * ga);
+  if (h <= band) return Math.sqrt(2 * ga * h);
+  return Math.sqrt(j.apexBand * j.apexBand + 2 * g * (h - band));
 }
 
-/** Launch state for a jump from rim parameter `s` in direction `angle`. */
-function launch(islandIdx: number, s: number, angle: number): Flight {
+/**
+ * Launch state for a jump from rim parameter `s` in direction `angle`. A slide adds to the jump
+ * speed (by `jump.slideFactor`) but not to its direction.
+ */
+function launch(islandIdx: number, s: number, angle: number, slide: number): Flight {
   const e = islands[islandIdx]!.pointAt(s);
-  const v = launchSpeed();
+  const j = params.move.jump;
+  const v = Math.min(params.move.limits.maxSpeed, j.speed + Math.abs(slide) * j.slideFactor);
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
-  return { x: e.x + e.nx * 12, y: e.y + e.ny * 12, alt: ISLAND_TOP, vx: dx * v, vy: dy * v, vz: v, t: 0 };
+  return { x: e.x + e.nx * 12, y: e.y + e.ny * 12, alt: ISLAND_TOP, vx: dx * v, vy: dy * v, vz: riseSpeed(j.height), t: 0 };
 }
 
 /** Most a jump can lean away from straight out of the rim, so it clears the island it leaves. */
@@ -502,24 +513,6 @@ function jumpAngle(dir: Vec): number {
   let diff = Math.atan2(dir.y, dir.x) - out;
   diff = Math.atan2(Math.sin(diff), Math.cos(diff));
   return out + Math.max(-MAX_JUMP_LEAN, Math.min(MAX_JUMP_LEAN, diff));
-}
-
-/**
- * A jump from a slide keeps some of the slide's momentum: its velocity along the rim adds to the
- * launch, turning and speeding the jump, still within MAX_JUMP_LEAN of straight out.
- */
-function carrySlide(f: Flight, e: { nx: number; ny: number; tx: number; ty: number }) {
-  const carry = player.slide * params.move.slide.jumpCarry;
-  if (!carry) return;
-  const vx = f.vx + e.tx * carry;
-  const vy = f.vy + e.ty * carry;
-  const sp = Math.hypot(vx, vy);
-  const out = Math.atan2(e.ny, e.nx);
-  let diff = Math.atan2(vy, vx) - out;
-  diff = Math.atan2(Math.sin(diff), Math.cos(diff));
-  const a = out + Math.max(-MAX_JUMP_LEAN, Math.min(MAX_JUMP_LEAN, diff));
-  f.vx = Math.cos(a) * sp;
-  f.vy = Math.sin(a) * sp;
 }
 
 /** Gravity at vertical speed `vz`: weaker near the apex, so jumps hang there a moment. */
@@ -543,12 +536,14 @@ function closestIsland(): Island | null {
 }
 
 /**
- * The island with the nearest rim point inside the double-jump cone around `heading` that a
- * double jump of `push` speed can reach: heading there at the push speed before falling back to rim height.
+ * The island to snap a double jump to: the one with the nearest rim point inside the snap cone
+ * around `heading` that a double jump of `push` speed can reach (heading there at the push speed
+ * before falling back to rim height). Failing that, the nearest one inside the cone; never one
+ * outside it.
  */
 function islandAhead(push: number, heading: number): Island | null {
   const p = player;
-  const half = (params.move.airJump.cone * Math.PI) / 360;
+  const half = (params.move.airJump.snapCone * Math.PI) / 360;
 
   // Time until the flight falls back to rim height.
   let alt = p.alt;
@@ -561,51 +556,64 @@ function islandAhead(push: number, heading: number): Island | null {
     t += step;
   }
 
-  let isl: Island | null = null;
-  let bestD = Infinity;
+  let reachable: Island | null = null;
+  let reachD = Infinity;
+  let inCone: Island | null = null;
+  let coneD = Infinity;
   for (const i of islands) {
     for (let s = 0; s < i.perimeter; s += 6) {
       const e = i.pointAt(s);
       const dx = e.x - p.x;
       const dy = e.y - p.y;
       const d = Math.hypot(dx, dy) || 1;
-      if (d >= bestD) continue;
+      if (d >= coneD && d >= reachD) continue;
       let diff = Math.atan2(dy, dx) - heading;
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       if (Math.abs(diff) > half) continue;
-      const speed = Math.max(0, (p.vx * dx + p.vy * dy) / d) + push;
-      if (d > speed * t) continue;
-      isl = i;
-      bestD = d;
+      if (d < coneD) {
+        inCone = i;
+        coneD = d;
+      }
+      const speed = Math.min(params.move.limits.maxSpeed, Math.max(0, (p.vx * dx + p.vy * dy) / d) + push);
+      if (d < reachD && d <= speed * t) {
+        reachable = i;
+        reachD = d;
+      }
     }
   }
-  return isl;
+  return reachable ?? inCone;
 }
 
 /**
- * Double-jump direction. The target island is the nearest one the jump can reach inside a cone
- * around the heading; failing that, the closest island all around. On it, aim at the rim point
- * that needs the least turn from the heading (without a heading: the nearest point).
- * `aim` (the cursor direction in mouse mode) stands in for the heading when given.
+ * Double-jump direction: the aim by default (the cursor in mouse mode, else the input direction),
+ * else along the flight. If the aim already points at an island it stays as it is; otherwise,
+ * if an island lies in the snap cone around it, the jump snaps to the rim point on it that needs
+ * the least turn (an outer edge). Null without any heading: the jump only rises.
  * Call after the jump's rise is set: `p.vz` decides how long the jump stays up.
  */
-function doubleJumpDir(push: number, aim: Vec | null): Vec | null {
+function doubleJumpDir(push: number, aim: Vec | null, dir: Vec): Vec | null {
   const p = player;
-  const hasHeading = aim !== null || Math.hypot(p.vx, p.vy) > 1;
-  const heading = aim ? Math.atan2(aim.y, aim.x) : Math.atan2(p.vy, p.vx);
-  const isl = (hasHeading && islandAhead(push, heading)) || closestIsland();
-  if (!isl) return null;
+  let heading: number;
+  if (aim) heading = Math.atan2(aim.y, aim.x);
+  else if (dir.x || dir.y) heading = Math.atan2(dir.y, dir.x);
+  else if (Math.hypot(p.vx, p.vy) > 1) heading = Math.atan2(p.vy, p.vx);
+  else return null;
+  const ahead = { x: Math.cos(heading), y: Math.sin(heading) };
+  const far = planet.bounds.r * 2;
+  // An island under the player doesn't count: the aim crosses its rim on the way out.
+  const hits = (i: Island) =>
+    !i.contains(p.x, p.y) && i.segmentHit(p.x, p.y, p.x + ahead.x * far, p.y + ahead.y * far) !== null;
+  if (islands.some(hits)) return ahead;
+  const isl = islandAhead(push, heading);
+  if (!isl) return ahead;
 
   let tx = 0;
   let ty = 0;
   let best = Infinity;
   for (let s = 0; s < isl.perimeter; s += 6) {
     const e = isl.pointAt(s);
-    let score: number;
-    if (hasHeading) {
-      const diff = Math.atan2(e.y - p.y, e.x - p.x) - heading;
-      score = Math.abs(Math.atan2(Math.sin(diff), Math.cos(diff)));
-    } else score = Math.hypot(e.x - p.x, e.y - p.y);
+    const diff = Math.atan2(e.y - p.y, e.x - p.x) - heading;
+    const score = Math.abs(Math.atan2(Math.sin(diff), Math.cos(diff)));
     if (score < best) {
       best = score;
       tx = e.x;
@@ -625,13 +633,21 @@ function netBounce(f: { alt: number; vz: number }, used: boolean): boolean {
 }
 
 /**
- * Advance a flight by dt. Returns the island and rim parameter if it hit one: either by crossing a
+ * Advance a flight by dt, within the air limits. Returns the island and rim parameter if it hit one: either by crossing a
  * rim (from above or level with it, so you can't jump over an island) or by touching the body below.
  */
 function stepFlight(f: Flight, dt: number, fromIsland: number): { island: number; s: number } | null {
   const ox = f.x;
   const oy = f.y;
   f.vz -= gravityAt(f.vz) * dt;
+  // Caps: a rise peaks by the height limit at the latest, and sideways speed stops at the max.
+  if (f.vz > 0) f.vz = Math.min(f.vz, riseSpeed(ISLAND_TOP + params.move.limits.maxHeight - f.alt));
+  const sp = Math.hypot(f.vx, f.vy);
+  const max = params.move.limits.maxSpeed;
+  if (sp > max) {
+    f.vx *= max / sp;
+    f.vy *= max / sp;
+  }
   f.x += f.vx * dt;
   f.y += f.vy * dt;
   f.alt += f.vz * dt;
@@ -695,8 +711,7 @@ function update(dt: number, dtReal: number) {
 
     // Space jumps at once; holding it keeps the jump going full height (see the air section).
     if (playing && anyPressed(JUMP_KEYS)) {
-      const f = launch(p.island, p.s, jumpAngle(mouseAim() ?? dir));
-      carrySlide(f, e);
+      const f = launch(p.island, p.s, jumpAngle(mouseAim() ?? dir), p.slide);
       Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
       p.mode = "air";
       p.airTime = 0;
@@ -716,16 +731,17 @@ function update(dt: number, dtReal: number) {
     }
     if (p.jumpHeld && p.vz <= 0) p.jumpHeld = false;
 
-    // Double jump: a fresh rise, heading for the closest island. The jump speed adds to whatever
-    // of the current velocity already points that way, so jumping along the flight speeds it up.
+    // Double jump: a fresh rise toward the aim, snapping to an island ahead. The jump speed adds
+    // to whatever of the current velocity already points that way (never less), up to the max
+    // speed, so jumping along the flight speeds it up.
     if (playing && anyPressed(JUMP_KEYS) && p.airJumps > 0) {
       p.airJumps = 0;
-      p.vz = Math.max(p.vz, launchSpeed() * params.move.airJump.strength);
+      p.vz = Math.max(p.vz, riseSpeed(params.move.airJump.height));
       p.jumpHeld = true;
-      const push = launchSpeed() * params.move.airJump.speed;
-      const aim = doubleJumpDir(push, mouseAim());
+      const push = params.move.airJump.speed;
+      const aim = doubleJumpDir(push, mouseAim(), dir);
       if (aim) {
-        const sp = Math.max(0, p.vx * aim.x + p.vy * aim.y) + push;
+        const sp = Math.min(params.move.limits.maxSpeed, Math.max(0, p.vx * aim.x + p.vy * aim.y) + push);
         p.vx = aim.x * sp;
         p.vy = aim.y * sp;
       }
@@ -887,8 +903,8 @@ function steerAir(dir: Vec, dt: number) {
     a += Math.max(-turn, Math.min(turn, diff));
   }
   const next = sp + fwd * l * air.accel * dt;
-  // Speeding up stops at the cap, but never slows a faster flight (from a hit or bounce).
-  sp = Math.max(0, fwd > 0 ? Math.min(next, Math.max(sp, launchSpeed() * air.maxSpeed)) : next);
+  // Speeding up stops at the max air speed.
+  sp = Math.max(0, Math.min(next, params.move.limits.maxSpeed));
   p.vx = Math.cos(a) * sp;
   p.vy = Math.sin(a) * sp;
 }
@@ -1611,7 +1627,7 @@ function updateSound() {
   const p = player;
   const playing = game.state === "play";
   const slide = p.mode === "hang" && p.freeze <= 0 ? Math.min(1, Math.abs(p.slide) / 400) : 0;
-  const wind = p.mode === "air" ? Math.min(1, Math.hypot(p.vx, p.vy, p.vz) / (launchSpeed() * 1.8)) : 0;
+  const wind = p.mode === "air" ? Math.min(1, Math.hypot(p.vx, p.vy, p.vz) / (params.move.limits.maxSpeed * 1.5)) : 0;
   sfx.loops(slide, wind);
 
   // The fight heats up with the number of engaged boids nearby, and when the queen is close.

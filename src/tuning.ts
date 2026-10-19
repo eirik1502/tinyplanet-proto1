@@ -32,6 +32,7 @@ const GROUP_TITLES: Record<string, string> = {
   "move.climb": "Climbing",
   "move.jump": "Jumping",
   "move.air": "Air control",
+  "move.limits": "Air limits",
   "move.airJump": "Double jump & bounces",
   "move.slide": "Sliding",
   "camera.view": "Camera",
@@ -91,25 +92,27 @@ const SLIDERS: Record<string, Slider> = {
   "world.perLevel.bombers": ["Bomber boids", 0, 20, 0.1, true],
 
   "move.climb.speed": ["Climb speed", 50, 800, 10],
-  "move.jump.length": ["Full jump length (Space held)", 100, 1000, 10],
+  "move.jump.speed": ["Jump speed (sideways)", 50, 1000, 10],
+  "move.jump.height": ["Full jump height (Space held)", 10, 300, 5],
+  "move.jump.slideFactor": ["Slide speed added to the jump speed (×)", 0, 1.5, 0.05],
   "move.jump.cut": ["Upward speed kept on early release", 0, 1, 0.05],
-  "move.jump.gravity": ["Gravity", 200, 2000, 10],
+  "move.jump.gravity": ["Gravity", 100, 2000, 10],
   "move.jump.apexGravity": ["Gravity near the apex (×)", 0.1, 1, 0.05],
   "move.jump.apexBand": ["Apex band (vertical speed)", 0, 500, 10],
   "move.air.turnRate": ["Air turn rate (rad/s)", 0, 15, 0.1],
   "move.air.accel": ["Speed up / brake (per s)", 0, 2000, 10],
-  "move.air.maxSpeed": ["Max speed (× launch speed)", 1, 3, 0.05],
   "move.air.grabRadius": ["Grab radius", 1, 40, 1],
-  "move.airJump.strength": ["Double jump height (× launch)", 0.2, 1.5, 0.05],
-  "move.airJump.speed": ["Double jump speed (× launch)", 0, 1.5, 0.05],
-  "move.airJump.cone": ["Target cone ahead (degrees)", 0, 180, 5],
+  "move.limits.maxSpeed": ["Max air speed (sideways)", 50, 1500, 10],
+  "move.limits.maxHeight": ["Max height above the rims", 20, 600, 5],
+  "move.airJump.speed": ["Double jump speed (sideways)", 0, 1000, 10],
+  "move.airJump.height": ["Double jump height", 0, 300, 5],
+  "move.airJump.snapCone": ["Snap cone ahead (degrees)", 0, 180, 5],
   "move.airJump.bounce": ["Sword-hit bounce (up speed)", 0, 1200, 10],
   "move.airJump.netDepth": ["Safety bounce depth below rim", 0, 75, 1],
   "move.airJump.netBounce": ["Safety bounce (up speed)", 0, 1200, 10],
   "move.slide.minSpeed": ["Slide min speed", 0, 600, 10],
   "move.slide.keep": ["Slide speed kept", 0, 1.5, 0.05],
   "move.slide.friction": ["Slide friction", 0.1, 10, 0.1],
-  "move.slide.jumpCarry": ["Slide speed carried into a jump", 0, 1.5, 0.05],
 
   "camera.view.height": ["Height", 150, 1500, 10],
   "camera.view.followSpeed": ["Follow speed", 0.2, 15, 0.1],
@@ -227,6 +230,8 @@ function setPath(path: string, v: unknown) {
 function load() {
   try {
     const saved = JSON.parse(getPref(STORAGE_KEY) ?? "{}") as Tree;
+    // Move values from before jumps were set by speed and height don't fit the new model.
+    if (saved.move?.jump && "length" in saved.move.jump) delete saved.move;
     for (const t of Object.keys(saved))
       for (const g of Object.keys(saved[t] ?? {}))
         for (const k of Object.keys(saved[t]![g] ?? {})) setPath(`${t}.${g}.${k}`, saved[t]![g]![k]);

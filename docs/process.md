@@ -56,7 +56,7 @@ Power up / skills:
   - Strength upgrade
   - Lance upgrade: Longer ranged, thinner
 
-Character controller tweaks
+✅Character controller tweaks
 - Cap air speed
 - Cap air height
 - Measure jump in speed + max height

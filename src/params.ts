@@ -52,22 +52,27 @@ export const DEFAULTS = {
       speed: 360, // Climb speed
     },
     jump: {
-      length: 400, // Full jump length (Space held)
+      speed: 260, // Jump speed (sideways)
+      height: 70, // Full jump height (Space held)
+      slideFactor: 0.3, // Slide speed added to the jump speed (×)
       cut: 0.35, // Upward speed kept on early release
-      gravity: 1200, // Gravity
-      apexGravity: 0.5, // Gravity near the apex (×)
-      apexBand: 140, // Apex band (vertical speed)
+      gravity: 600, // Gravity
+      apexGravity: 0.45, // Gravity near the apex (×)
+      apexBand: 150, // Apex band (vertical speed)
     },
     air: {
       turnRate: 2.5, // Air turn rate (rad/s)
       accel: 0, // Speed up / brake (per s)
-      maxSpeed: 1.4, // Max speed (× launch speed)
       grabRadius: 18, // Grab radius
     },
+    limits: {
+      maxSpeed: 420, // Max air speed (sideways)
+      maxHeight: 140, // Max height above the rims
+    },
     airJump: {
-      strength: 0.85, // Double jump height (× launch)
-      speed: 0.5, // Double jump speed (× launch)
-      cone: 60, // Target cone ahead (degrees)
+      speed: 220, // Double jump speed (sideways)
+      height: 60, // Double jump height
+      snapCone: 30, // Snap cone ahead (degrees)
       bounce: 520, // Sword-hit bounce (up speed)
       netDepth: 45, // Safety bounce depth below rim
       netBounce: 480, // Safety bounce (up speed)
@@ -76,7 +81,6 @@ export const DEFAULTS = {
       minSpeed: 100, // Slide min speed
       keep: 1, // Slide speed kept
       friction: 4.2, // Slide friction
-      jumpCarry: 0.6, // Slide speed carried into a jump
     },
   },
   camera: {
