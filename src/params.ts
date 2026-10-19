@@ -183,7 +183,7 @@ export const DEFAULTS = {
   },
   combat: {
     hits: {
-      height: 40, // Hits reach up / down
+      height: 60, // Hits reach up / down
     },
   },
   enemyAttacks: {
