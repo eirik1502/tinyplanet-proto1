@@ -54,19 +54,19 @@ export const DEFAULTS = {
     jump: {
       speed: 260, // Jump speed (sideways)
       height: 70, // Full jump height (Space held)
-      slideFactor: 0.3, // Slide speed added to the jump speed (×)
+      slideFactor: 1, // Slide speed added to the jump speed (×)
       cut: 0.35, // Upward speed kept on early release
-      gravity: 600, // Gravity
+      gravity: 900, // Gravity
       apexGravity: 0.45, // Gravity near the apex (×)
       apexBand: 150, // Apex band (vertical speed)
     },
     air: {
       turnRate: 2.5, // Air turn rate (rad/s)
       accel: 0, // Speed up / brake (per s)
-      grabRadius: 18, // Grab radius
+      grabRadius: 30, // Grab radius
     },
     limits: {
-      maxSpeed: 420, // Max air speed (sideways)
+      maxSpeed: 800, // Max air speed (sideways)
       maxHeight: 140, // Max height above the rims
     },
     airJump: {
@@ -76,7 +76,7 @@ export const DEFAULTS = {
       snapCone: 30, // Snap cone ahead (degrees)
       bounce: 520, // Sword-hit bounce (up speed)
       netDepth: 45, // Safety bounce depth below rim
-      netBounce: 480, // Safety bounce (up speed)
+      netBounce: 200, // Safety bounce (up speed)
     },
     slide: {
       minSpeed: 100, // Slide min speed
@@ -147,7 +147,7 @@ export const DEFAULTS = {
       rangedSpeed: 160, // Ranged speed
       bomberSpeed: 215, // Bomber speed
       aggroRange: 200, // Aggro range
-      disengageRange: 400, // Disengage range
+      disengageRange: 350, // Disengage range
       provokedTime: 6, // Hit flock stays engaged (s)
     },
     flocking: {
