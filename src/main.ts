@@ -984,8 +984,8 @@ function clampAimToRim(angle: number): number {
 
 /**
  * Sword (Z / J) and spear (X / K): hold to aim and power up, release to strike.
- * The aim starts at the closest enemy in range (else straight out from the rim, or along the
- * input / flight in the air) and turns toward the input direction, quickly at first and slower and slower until it locks at full power.
+ * The aim starts at the closest enemy in range (except in gamepad mode with the stick pushed,
+ * which starts along the stick), else straight out from the rim, or along the input / flight in the air, and turns toward the input direction, quickly at first and slower and slower until it locks at full power.
  * In mouse mode the aim simply follows the cursor, and the mouse buttons attack too.
  */
 function updateAttacks(dt: number, dtReal: number, dir: Vec) {
@@ -1005,7 +1005,9 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
     const weapon: Weapon | null =
       justPressed("sword") && p.swordCd <= 0 ? "sword" : justPressed("spear") && p.spearCd <= 0 ? "spear" : null;
     if (!weapon) return;
-    const target = inputMode === "mouse" ? null : closestEnemy();
+    // Aim assist, except when the stick already points somewhere (keyboard mode always assists).
+    const aiming = (dir.x || dir.y) && inputMode !== "keyboard";
+    const target = inputMode === "mouse" || aiming ? null : closestEnemy();
     let angle: number;
     if (inputMode === "mouse") {
       angle = cursor ? Math.atan2(cursor.y, cursor.x) : p.facing;
