@@ -1,4 +1,4 @@
-import { box, overlaps, type BoxSize, type Hitbox, type Hurtbox } from "./hitbox";
+import { box, overlaps, type Hitbox, type Hurtbox } from "./hitbox";
 import { ISLAND_TOP, mulberry32, type Island } from "./island";
 import type { Planet, SpawnKind } from "./planet";
 import { params } from "./tuning";
@@ -139,25 +139,16 @@ export interface PlayerHit {
   damage: number;
 }
 
-/** Where boids can be hit, by kind. A lunging melee boid's hurtbox is also its hitbox. */
-const BOID_HURTBOX: Record<BoidKind, BoxSize> = {
-  queen: { radius: 26, height: 52 },
-  melee: { radius: 8, height: 16 },
-  ranged: { radius: 9, height: 18 },
-  bomber: { radius: 9, height: 18 },
-};
+/** Hurtbox radius of boids, by kind. A lunging melee boid's hurtbox is also its hitbox. */
+const BOID_RADIUS: Record<BoidKind, number> = { queen: 26, melee: 8, ranged: 9, bomber: 9 };
 
-const boidHurtbox = (b: Boid): Hurtbox => box(b.x, b.y, b.alt, BOID_HURTBOX[b.kind]);
-const playerHurtbox = (p: PlayerView): Hurtbox => box(p.x, p.y, p.alt, params.player.hurtbox);
+const boidHurtbox = (b: Boid): Hurtbox => box(b.x, b.y, b.alt, b.r);
+const playerHurtbox = (p: PlayerView): Hurtbox => box(p.x, p.y, p.alt, params.player.hurtbox.radius);
 
 /** A projectile is both: it hits its target, and the sword can hit (block) the enemies'. */
 function shotBox(s: Shot): Hitbox & Hurtbox {
-  if (!s.fromPlayer) {
-    const r = params.enemyAttacks.ranged;
-    return box(s.x, s.y, s.alt, { radius: r.orbRadius, height: r.orbHeight });
-  }
-  const sp = params.player.spear;
-  return box(s.x, s.y, s.alt, { radius: sp.hitRadius * s.scale, height: sp.hitHeight });
+  const radius = s.fromPlayer ? params.player.spear.hitRadius * s.scale : params.enemyAttacks.ranged.orbRadius;
+  return box(s.x, s.y, s.alt, radius);
 }
 
 const CRUISE_ALT = ISLAND_TOP + 35;
@@ -261,7 +252,7 @@ export class Combat {
       vy: Math.sin(a) * 60,
       hp,
       maxHp: hp,
-      r: BOID_HURTBOX[kind].radius,
+      r: BOID_RADIUS[kind],
       cooldown: this.rand() * 1.5,
       lunge: 0,
       freeze: 0,
@@ -355,7 +346,7 @@ export class Combat {
     this.blasts.push({ x: b.x, y: b.y, alt: b.alt, age: 0, radius: R });
     this.burst(b.x, b.y, b.alt, 36, "#ffa040");
     this.burst(b.x, b.y, b.alt, 18, "#fff1a8");
-    const blast = box(b.x, b.y, b.alt, { radius: R, height: bp.blastHeight });
+    const blast = box(b.x, b.y, b.alt, R);
     const falloff = (d: number) => 0.5 + 0.5 * (1 - Math.min(1, d / R));
     for (const o of this.boids) {
       if (o === b || o.hp <= 0) continue;
@@ -428,7 +419,7 @@ export class Combat {
       s.age += dt;
       if (s.age > params.player.sword.activeTime) continue;
       const hitbox: Hitbox = {
-        ...box(s.x, s.y, s.alt, { radius: s.range, height: params.player.sword.height }),
+        ...box(s.x, s.y, s.alt, s.range),
         sector: { dx: s.dx, dy: s.dy, arc: params.player.sword.arc },
       };
       for (const b of this.boids) {
@@ -641,7 +632,7 @@ export class Combat {
       if (
         b.kind === "bomber" &&
         player.targetable &&
-        overlaps(box(b.x, b.y, b.alt, { radius: bp.triggerRange, height: bp.triggerHeight }), playerHurtbox(player))
+        overlaps(box(b.x, b.y, b.alt, bp.triggerRange), playerHurtbox(player))
       ) {
         this.explode(b);
         continue;
