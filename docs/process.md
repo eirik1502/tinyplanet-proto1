@@ -34,6 +34,8 @@ Queen protect
 - If there are fewer boids, close ones should join the queen flock
 - If the queen is attacked, the queen flock will aggro the player
 - In general, if a member of a flock is attacked, the flock aggros
+- If the queen flock is attacked, the closest flock to the player will aggro
+
 
 Power up / skills:
 - Safety bounce: 
@@ -53,3 +55,20 @@ Power up / skills:
   - Range upgrade
   - Strength upgrade
   - Lance upgrade: Longer ranged, thinner
+
+Character controller tweaks
+- Cap air speed
+- Cap air height
+- Measure jump in speed + max height
+- Jumps should in general be slower, shorter and more floaty 
+- When jumping from edge, don't let the slide affect direction, only jump speed. Defined by a jumpSpeed and a jumpSpeedSlideFactor (how much the slide speed affects)
+- Air jump snapping: Only snap to edges in a cone in front of aim (not anywhere around). defined by airJumpSnapCone (degrees).
+  - The snapping should work the same way, snapping to an outer edge within the cone
+  - Set cone to 30 deg
+- Air jump speed should be calculated differently.
+  - Air jump should be defined by a jumpSpeed. The current speed will be added (direction adjusted), but never influence negatively. Max is defined by the global maxSpeed
+
+
+Bugs
+- Second hit on queen often miss
+- Attacks in air doesnt hit
