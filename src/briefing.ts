@@ -14,8 +14,10 @@ export type Weapon = "sword" | "spear";
 
 export interface BriefingInfo {
   level: number;
-  /** The level's template, from level 4 on. */
-  template: { name: string; blurb: string } | null;
+  /** The level's template. */
+  template: { name: string; blurb: string; boss: boolean } | null;
+  /** The level's modifiers. */
+  modifiers: { name: string; blurb: string }[];
   /** Why the screen is up: a new level, a retry after defeat, or a pause mid-level. */
   reason: "new" | "retry" | "pause";
   inputMode: InputMode;
@@ -231,8 +233,13 @@ export function briefingHtml(b: BriefingInfo): string {
     <div class="sheet${b.animate ? " intro" : ""}">
       <header class="top">
         <div>
-          <h1>${title}${b.template ? `<span class="template"> · ${b.template.name}</span>` : ""}</h1>
+          <h1>${title}${b.template ? `<span class="template"> · ${b.template.name}</span>` : ""}${b.template?.boss ? `<span class="boss">Boss</span>` : ""}</h1>
           ${b.template ? `<p class="blurb">${b.template.blurb}</p>` : ""}
+          ${
+            b.modifiers.length
+              ? `<ul class="modifiers">${b.modifiers.map((m) => `<li><b>${m.name}</b> ${m.blurb}</li>`).join("")}</ul>`
+              : ""
+          }
           <p class="goal">${ICONS.crown}Kill the queen</p>
         </div>
         <div class="modes" role="group" aria-label="Input mode">

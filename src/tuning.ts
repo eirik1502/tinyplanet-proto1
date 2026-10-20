@@ -1,4 +1,4 @@
-import { TEMPLATES } from "./levels";
+import { POOL_TEMPLATES } from "./levels";
 import { DEFAULTS } from "./params";
 
 // Live-tweakable game parameters and the tabbed slider panel that edits them.
@@ -32,6 +32,7 @@ const GROUP_TITLES: Record<string, string> = {
   "world.level4": "Level 4 (everything unlocked; templates scale this)",
   "world.perLevel": "Added per level after 4",
   "world.costs": "Swarm budget cost per boid",
+  "world.modifiers": "Level modifiers (wind, fog, bosses' shield…)",
   "move.climb": "Climbing",
   "move.jump": "Jumping",
   "move.air": "Air control",
@@ -65,7 +66,19 @@ const GROUP_TITLES: Record<string, string> = {
 type Slider = [string, number, number, number, boolean?];
 const SLIDERS: Record<string, Slider> = {
   "world.levels.start": ["Start level (on reload)", 1, 20, 1],
-  "world.levels.template": ["Force template from level 4 (0 = random)", 0, TEMPLATES.length, 1, true],
+  "world.levels.template": ["Force template on pool levels (0 = random)", 0, POOL_TEMPLATES.length, 1, true],
+  "world.levels.modifiersFrom": ["Modifiers may appear from level", 1, 30, 1, true],
+  "world.levels.twoModifiersFrom": ["Up to two modifiers from level", 1, 30, 1, true],
+  "world.modifiers.wind": ["Wind strength", 0, 400, 5, true],
+  "world.modifiers.lowGravity": ["Low gravity (×)", 0.3, 1, 0.05, true],
+  "world.modifiers.heavyGravity": ["Heavy gravity (×)", 1, 2, 0.05, true],
+  "world.modifiers.fog": ["Fog view radius", 150, 1000, 10, true],
+  "world.modifiers.shield": ["Shield: share of the swarm to kill", 0, 1, 0.05, true],
+  "world.modifiers.reinforceEvery": ["Reinforcements every (s)", 3, 120, 1, true],
+  "world.modifiers.reinforceSize": ["Reinforcement flock size", 1, 12, 1, true],
+  "world.modifiers.reinforceCap": ["Swarm cap (× starting swarm)", 0.5, 3, 0.1, true],
+  "world.modifiers.eliteHp": ["Elite health (×)", 1, 5, 0.5, true],
+  "world.modifiers.eliteSize": ["Elite size (×)", 1, 2, 0.05, true],
   "world.intro1.radius": ["Boundary radius", 300, 2000, 10, true],
   "world.intro1.islands": ["Islands", 1, 40, 1, true],
   "world.intro1.melee": ["Melee boids", 0, 100, 1, true],

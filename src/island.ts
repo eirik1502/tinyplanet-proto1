@@ -38,6 +38,7 @@ const ROOT_SLICES = 18;
 export interface IslandStyle {
   /** Scales the outline's harmonics: low is round, high is ragged. Keep ≤ 1.1 (spacing pads for ~30% wobble). */
   wobble: number;
+  /** Trees on a usual-sized island; bigger ones get more. */
   trees: number;
 }
 
@@ -110,7 +111,9 @@ export class Island {
 
     // Trees, kept away from the rim so the edge stays readable.
     let tries = 0;
-    while (this.trees.length < style.trees && tries++ < 200) {
+    // Islands bigger than usual get more trees, by area.
+    const treeCount = Math.round(style.trees * Math.max(1, (radius / 120) ** 2));
+    while (this.trees.length < treeCount && tries++ < 200) {
       const a = rand() * Math.PI * 2;
       const rr = Math.sqrt(rand()) * radiusAt(a) * 0.62;
       const x = cx + Math.cos(a) * rr;

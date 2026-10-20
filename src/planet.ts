@@ -59,6 +59,22 @@ export interface Layout {
   /** Density map: the chance (0..1) a candidate here is kept. Default: everywhere. */
   accept?: (at: Spot) => number;
   style?: IslandStyle;
+  /** The player starts on the island nearest this point (units of the boundary radius). Default: the one farthest out. */
+  start?: Vec;
+}
+
+/**
+ * Which island the queen hovers by: the one farthest from the start, the one nearest the planet's
+ * centre, or the one with the most islands around it.
+ */
+export type QueenSpot = "far" | "centre" | "crowded";
+
+/** Limits on the planet's random colours. */
+export interface ThemeHint {
+  /** Vegetation hue range (degrees). */
+  hue?: [number, number];
+  /** Vegetation saturation range (0..1). */
+  sat?: [number, number];
 }
 
 /** Where the player starts and the queen lives, so flock placement can depend on them. */
@@ -73,6 +89,8 @@ export interface PlanetOptions {
   layout: Layout;
   /** Relative chance (0..1) a flock spawns at a spot. Default: anywhere. */
   flockWeight?: (at: Spot, swarm: SwarmSpots) => number;
+  queenSpot?: QueenSpot;
+  theme?: ThemeHint;
   islandCount: number;
   meleeCount: number;
   rangedCount: number;
@@ -89,14 +107,16 @@ export function generatePlanet(seed: number, opt: PlanetOptions): Planet {
   const R = opt.radius;
   const islands = generateIslands(rand, seed, R, opt.islandCount, opt.layout);
 
-  // Start on an island near the boundary, so the rest of the world lies ahead.
+  // Start where the layout asks, or on an island near the boundary, so the rest of the world lies ahead.
+  const want = opt.layout.start;
+  const startScore = (isl: Island) => (want ? -Math.hypot(isl.cx - want.x * R, isl.cy - want.y * R) : Math.hypot(isl.cx, isl.cy));
   let startIsland = 0;
   islands.forEach((isl, i) => {
-    if (Math.hypot(isl.cx, isl.cy) > Math.hypot(islands[startIsland]!.cx, islands[startIsland]!.cy)) startIsland = i;
+    if (startScore(isl) > startScore(islands[startIsland]!)) startIsland = i;
   });
   const start = islands[startIsland]!;
 
-  const queenHome = placeQueen(rand, islands, start, R);
+  const queenHome = placeQueen(rand, islands, queenIsland(islands, start, opt.queenSpot ?? "far"), start, R);
   const clearOfIslands = (x: number, y: number) =>
     islands.every((i) => Math.hypot(i.cx - x, i.cy - y) > i.radius * 1.35 + 20);
 
@@ -126,7 +146,7 @@ export function generatePlanet(seed: number, opt: PlanetOptions): Planet {
     flocks.push({ x, y, kinds: kinds.splice(0, size) });
   }
 
-  return { seed, islands, bounds: { x: 0, y: 0, r: R }, startIsland, queenHome, escort, flocks, queenHp: opt.queenHp, theme: generateTheme(rand) };
+  return { seed, islands, bounds: { x: 0, y: 0, r: R }, startIsland, queenHome, escort, flocks, queenHp: opt.queenHp, theme: generateTheme(rand, opt.theme) };
 }
 
 /** The widest nominal rim gap that's still a comfortable jump (the gap islands are spaced by). */
@@ -257,11 +277,22 @@ function bridge(
   return placed > 0;
 }
 
-/** The queen hovers just off the island farthest from the start, on a side that's open and in bounds. */
-function placeQueen(rand: () => number, islands: Island[], start: Island, R: number) {
-  const home = islands.reduce((a, b) =>
-    Math.hypot(a.cx - start.cx, a.cy - start.cy) > Math.hypot(b.cx - start.cx, b.cy - start.cy) ? a : b,
-  );
+/** The island the queen hovers by (never the start, unless it's the only one). */
+function queenIsland(islands: Island[], start: Island, spot: QueenSpot): Island {
+  const fromStart = (i: Island) => Math.hypot(i.cx - start.cx, i.cy - start.cy);
+  const score: Record<QueenSpot, (i: Island) => number> = {
+    far: fromStart,
+    centre: (i) => -Math.hypot(i.cx, i.cy),
+    // Islands within reach of a couple of jumps; ties go to the one farther from the start.
+    crowded: (i) => islands.filter((o) => o !== i && Math.hypot(o.cx - i.cx, o.cy - i.cy) < 550).length + fromStart(i) * 1e-4,
+  };
+  const others = islands.filter((i) => i !== start);
+  if (!others.length) return start;
+  return others.reduce((a, b) => (score[spot](b) > score[spot](a) ? b : a));
+}
+
+/** The queen hovers just off her island, on a side that's open, in bounds and away from the start. */
+function placeQueen(rand: () => number, islands: Island[], home: Island, start: Island, R: number) {
   let best = { x: home.cx, y: home.cy, score: -Infinity };
   for (let i = 0; i < 24; i++) {
     const a = (i / 24) * Math.PI * 2 + rand() * 0.2;
@@ -292,9 +323,11 @@ function hsl(h: number, s: number, l: number): RGB {
  * A palette for one planet: a vegetation hue for grass and canopies, and an earth hue (offset
  * from it) for the cliffs, fading into cool rock below.
  */
-function generateTheme(rand: () => number): Theme {
-  const veg = rand() * 360;
-  const vegSat = 0.35 + rand() * 0.3;
+function generateTheme(rand: () => number, hint: ThemeHint = {}): Theme {
+  const [h0, h1] = hint.hue ?? [0, 360];
+  const [s0, s1] = hint.sat ?? [0.35, 0.65];
+  const veg = h0 + rand() * (h1 - h0);
+  const vegSat = s0 + rand() * (s1 - s0);
   const canopy = veg + (rand() - 0.5) * 70;
   const earth = veg + 140 + rand() * 80;
   const earthSat = 0.2 + rand() * 0.25;

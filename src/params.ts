@@ -5,6 +5,8 @@ export const DEFAULTS = {
     levels: {
       start: 1, // Start level (on reload)
       template: 0, // Force template (0 = random)
+      modifiersFrom: 9, // Modifiers may appear from level
+      twoModifiersFrom: 14, // Up to two modifiers from level
     },
     intro1: {
       radius: 450, // Boundary radius
@@ -47,6 +49,18 @@ export const DEFAULTS = {
       melee: 1, // Melee boid
       ranged: 1.5, // Ranged boid
       bomber: 1.5, // Bomber boid
+    },
+    modifiers: {
+      wind: 90, // Wind strength
+      lowGravity: 0.7, // Low gravity (×)
+      heavyGravity: 1.15, // Heavy gravity (×)
+      fog: 380, // Fog view radius
+      shield: 0.6, // Shield: share of the swarm to kill
+      reinforceEvery: 18, // Reinforcements every (s)
+      reinforceSize: 4, // Reinforcement flock size
+      reinforceCap: 1.2, // Swarm cap (× starting swarm)
+      eliteHp: 2, // Elite health (×)
+      eliteSize: 1.35, // Elite size (×)
     },
   },
   move: {
