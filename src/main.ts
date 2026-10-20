@@ -2,7 +2,8 @@ import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
 import { createTuningPanel, params } from "./tuning";
 import { BLAST_TIME, Combat, hitStop, type Blast, type Boid } from "./combat";
-import { generatePlanet, type Planet, type SpawnKind } from "./planet";
+import { generatePlanet, type Planet, type PlanetOptions, type SpawnKind } from "./planet";
+import { pickTemplate, scatter, templateSpec, type LevelTemplate } from "./levels";
 import { applyVolumes, music, sfx, toggleMute, unlockAudio } from "./audio";
 import { Avatar, type AvatarView } from "./avatar";
 import { outOfHitHeight } from "./hitbox";
@@ -287,38 +288,50 @@ const game = { state: "play" as GameState, timer: 0, level: 0, shake: 0, briefin
 const UNLOCKS: Record<Weapon | SpawnKind, number> = { sword: 1, melee: 1, ranged: 2, spear: 3, bomber: 3 };
 const unlocked = (what: Weapon | SpawnKind, level = game.level) => level >= UNLOCKS[what];
 
+/** This level's template (none on the intro levels); a retry keeps it. */
+let template: LevelTemplate | null = null;
+
 /**
- * Planet size and swarm for a level. Levels 1-3 are hand-tuned intros; from level 4 on it's the
- * level 4 values plus a per-level increase. Locked enemies never spawn.
+ * Planet size and swarm for a level. Levels 1-3 are hand-tuned intros; from level 4 on the level 4
+ * values plus a per-level increase are the base, which the level's template shapes. Locked enemies
+ * never spawn.
  */
-function levelSpec(level: number) {
+function levelSpec(level: number): PlanetOptions {
   const w = params.world;
   const intro = [w.intro1, w.intro2, w.intro3][level - 1];
+  if (intro || !template) {
+    const a = intro ?? w.intro3;
+    return {
+      radius: a.radius,
+      layout: scatter(),
+      islandCount: Math.max(1, Math.round(a.islands)),
+      meleeCount: Math.round(a.melee),
+      rangedCount: unlocked("ranged", level) ? Math.round(a.ranged) : 0,
+      bomberCount: unlocked("bomber", level) ? Math.round(a.bombers) : 0,
+      flockSize: params.boids.flocks.startSize,
+      escortCount: Math.round(a.escort),
+      queenHp: Math.max(1, a.queenHp),
+    };
+  }
   const n = level - 4;
-  const a = intro ?? {
+  const base = {
     radius: w.level4.radius + w.perLevel.radius * n,
     islands: w.level4.islands + w.perLevel.islands * n,
-    melee: w.level4.melee + w.perLevel.melee * n,
-    ranged: w.level4.ranged + w.perLevel.ranged * n,
-    bombers: w.level4.bombers + w.perLevel.bombers * n,
-    escort: params.boids.queen.escort,
-    queenHp: params.boids.queen.hp,
+    budget: w.level4.budget + w.perLevel.budget * n,
+    costs: w.costs,
+    flockSize: params.boids.flocks.startSize,
   };
   return {
-    radius: a.radius,
-    islandCount: Math.max(1, Math.round(a.islands)),
-    meleeCount: Math.round(a.melee),
-    rangedCount: unlocked("ranged", level) ? Math.round(a.ranged) : 0,
-    bomberCount: unlocked("bomber", level) ? Math.round(a.bombers) : 0,
-    flockSize: params.boids.flocks.startSize,
-    escortCount: Math.round(a.escort),
-    queenHp: Math.max(1, a.queenHp),
+    ...templateSpec(template, base, (k) => unlocked(k, level)),
+    escortCount: Math.round(params.boids.queen.escort),
+    queenHp: Math.max(1, params.boids.queen.hp),
   };
 }
 
 /** Generate a new planet for `level` and show its briefing (a defeat retries on a fresh planet). */
 function restart(level: number, retry = false) {
   game.level = level;
+  if (!retry || !template) template = level > 3 ? pickTemplate(level, template, params.world.levels.template) : null;
   planet = generatePlanet(Math.floor(Math.random() * 1e9), levelSpec(level));
   islands = planet.islands;
   combat.reset(planet);
@@ -338,9 +351,12 @@ const briefingEl = document.getElementById("briefing")!;
 
 function showBriefing(animate = false) {
   const weapons = (["sword", "spear"] as const).filter((w) => unlocked(w));
-  const enemies = (["melee", "ranged", "bomber"] as const).filter((k) => unlocked(k));
+  // Only the kinds on this planet (a template's mix can leave one out).
+  const present = new Set([...planet.escort, ...planet.flocks.flatMap((f) => f.kinds)]);
+  const enemies = (["melee", "ranged", "bomber"] as const).filter((k) => unlocked(k) && present.has(k));
   briefingEl.innerHTML = briefingHtml({
     level: game.level,
+    template: template && { name: template.name, blurb: template.blurb },
     reason: game.briefing,
     inputMode,
     padLayout,

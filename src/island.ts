@@ -34,6 +34,15 @@ const CLIFF = 34;
 const CLIFF_SLICES = 9;
 const ROOT_SLICES = 18;
 
+/** How an island looks: outline wobble (1 = the default) and how many trees it carries. */
+export interface IslandStyle {
+  /** Scales the outline's harmonics: low is round, high is ragged. Keep ≤ 1.1 (spacing pads for ~30% wobble). */
+  wobble: number;
+  trees: number;
+}
+
+export const DEFAULT_STYLE: IslandStyle = { wobble: 1, trees: 6 };
+
 export class Island {
   readonly pts: Vec[] = [];
   /** cumulative perimeter length at each vertex; cum[n] = perimeter */
@@ -43,10 +52,16 @@ export class Island {
   readonly trees: Tree[] = [];
   readonly inner: Vec[] = [];
 
-  constructor(readonly cx: number, readonly cy: number, readonly radius: number, seed: number) {
+  constructor(
+    readonly cx: number,
+    readonly cy: number,
+    readonly radius: number,
+    seed: number,
+    style: IslandStyle = DEFAULT_STYLE,
+  ) {
     const rand = mulberry32(seed);
     const n = 64;
-    const harm = [2, 3, 5, 8].map((k, i) => ({ k, amp: [0.13, 0.09, 0.05, 0.025][i]!, ph: rand() * Math.PI * 2 }));
+    const harm = [2, 3, 5, 8].map((k, i) => ({ k, amp: [0.13, 0.09, 0.05, 0.025][i]! * style.wobble, ph: rand() * Math.PI * 2 }));
     const radiusAt = (a: number) => radius * (1 + harm.reduce((acc, h) => acc + h.amp * Math.sin(h.k * a + h.ph), 0));
 
     for (let i = 0; i < n; i++) {
@@ -95,7 +110,7 @@ export class Island {
 
     // Trees, kept away from the rim so the edge stays readable.
     let tries = 0;
-    while (this.trees.length < 6 && tries++ < 200) {
+    while (this.trees.length < style.trees && tries++ < 200) {
       const a = rand() * Math.PI * 2;
       const rr = Math.sqrt(rand()) * radiusAt(a) * 0.62;
       const x = cx + Math.cos(a) * rr;

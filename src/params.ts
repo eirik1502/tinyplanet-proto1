@@ -4,6 +4,7 @@ export const DEFAULTS = {
   world: {
     levels: {
       start: 1, // Start level (on reload)
+      template: 0, // Force template (0 = random)
     },
     intro1: {
       radius: 450, // Boundary radius
@@ -35,16 +36,17 @@ export const DEFAULTS = {
     level4: {
       radius: 700, // Boundary radius
       islands: 7, // Islands
-      melee: 10, // Melee boids
-      ranged: 4, // Ranged boids
-      bombers: 3, // Bomber boids
+      budget: 20.5, // Swarm budget
     },
     perLevel: {
       radius: 60, // Boundary radius
       islands: 1.6, // Islands
-      melee: 4, // Melee boids
-      ranged: 2.4, // Ranged boids
-      bombers: 1.2, // Bomber boids
+      budget: 9.4, // Swarm budget
+    },
+    costs: {
+      melee: 1, // Melee boid
+      ranged: 1.5, // Ranged boid
+      bomber: 1.5, // Bomber boid
     },
   },
   move: {

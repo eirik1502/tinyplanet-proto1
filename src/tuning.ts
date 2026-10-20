@@ -1,3 +1,4 @@
+import { TEMPLATES } from "./levels";
 import { DEFAULTS } from "./params";
 
 // Live-tweakable game parameters and the tabbed slider panel that edits them.
@@ -28,8 +29,9 @@ const GROUP_TITLES: Record<string, string> = {
   "world.intro1": "Level 1 (melee, sword)",
   "world.intro2": "Level 2 (+ ranged boids)",
   "world.intro3": "Level 3 (+ spear, bombers)",
-  "world.level4": "Level 4 (everything unlocked)",
+  "world.level4": "Level 4 (everything unlocked; templates scale this)",
   "world.perLevel": "Added per level after 4",
+  "world.costs": "Swarm budget cost per boid",
   "move.climb": "Climbing",
   "move.jump": "Jumping",
   "move.air": "Air control",
@@ -63,6 +65,7 @@ const GROUP_TITLES: Record<string, string> = {
 type Slider = [string, number, number, number, boolean?];
 const SLIDERS: Record<string, Slider> = {
   "world.levels.start": ["Start level (on reload)", 1, 20, 1],
+  "world.levels.template": ["Force template from level 4 (0 = random)", 0, TEMPLATES.length, 1, true],
   "world.intro1.radius": ["Boundary radius", 300, 2000, 10, true],
   "world.intro1.islands": ["Islands", 1, 40, 1, true],
   "world.intro1.melee": ["Melee boids", 0, 100, 1, true],
@@ -86,14 +89,13 @@ const SLIDERS: Record<string, Slider> = {
   "world.intro3.queenHp": ["Queen health", 1, 200, 1, true],
   "world.level4.radius": ["Boundary radius", 300, 2000, 10, true],
   "world.level4.islands": ["Islands", 1, 40, 1, true],
-  "world.level4.melee": ["Melee boids", 0, 100, 1, true],
-  "world.level4.ranged": ["Ranged boids", 0, 100, 1, true],
-  "world.level4.bombers": ["Bomber boids", 0, 100, 1, true],
+  "world.level4.budget": ["Swarm budget", 0, 200, 0.5, true],
   "world.perLevel.radius": ["Boundary radius", 0, 300, 5, true],
   "world.perLevel.islands": ["Islands", 0, 6, 0.1, true],
-  "world.perLevel.melee": ["Melee boids", 0, 20, 0.1, true],
-  "world.perLevel.ranged": ["Ranged boids", 0, 20, 0.1, true],
-  "world.perLevel.bombers": ["Bomber boids", 0, 20, 0.1, true],
+  "world.perLevel.budget": ["Swarm budget", 0, 50, 0.1, true],
+  "world.costs.melee": ["Melee boid", 0.1, 5, 0.1, true],
+  "world.costs.ranged": ["Ranged boid", 0.1, 5, 0.1, true],
+  "world.costs.bomber": ["Bomber boid", 0.1, 5, 0.1, true],
 
   "move.climb.speed": ["Climb speed", 50, 800, 10],
   "move.jump.speed": ["Jump speed (sideways)", 50, 1000, 10],
