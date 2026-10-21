@@ -117,7 +117,7 @@ export const DEFAULTS = {
     thrust: {
       length: 120, // Reach
       maxLength: 170, // Reach at full power
-      width: 22, // Width
+      width: 32, // Width
       damage: 3, // Damage
       maxDamage: 6, // Damage at full power
       lungeSpeed: 750, // Lunge speed
@@ -148,7 +148,7 @@ export const DEFAULTS = {
   },
   combat: {
     hits: {
-      height: 60, // Hits reach up / down
+      height: 1000, // Hits reach up / down
     },
     islands: {
       margin: 26, // Rim clearance

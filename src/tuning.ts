@@ -151,7 +151,7 @@ const SLIDERS: Record<string, Slider> = {
   "player.spear.cooldown": ["Cooldown (s)", 0, 2, 0.02],
 
 
-  "combat.hits.height": ["Hits reach up / down", 0, 200, 1],
+  "combat.hits.height": ["Hits reach up / down", 0, 1000, 5],
   "combat.islands.margin": ["Rim clearance", 0, 120, 1],
   "combat.islands.avoid": ["Avoid strength", 0, 200, 1],
 
