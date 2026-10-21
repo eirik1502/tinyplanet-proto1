@@ -101,7 +101,11 @@ Improve level design
   - Bomb boids: A little shorter explosion range (too hard to detonate without being hit). Dont need startup delay
   - Ranged boids: Also add startup delay and indicator. Make the attack mor punchy, show a little attack animation, before keeping moving.
 
-
-Make base attacks more interesting
+✅ Make base melee attack more interesting
 - Add 1-2-3 to the melee attack, mixing swipe (like today), strike (thinner and longer), and bash (smaller and more powerful)
   - Attack-dash: Second strike lunges the player to an enemy in range
+  
+Make combat more flowy
+- reduce delay between melee attacks 1-2-3
+- give shield for xs when attacking
+- Or another way to block damage
