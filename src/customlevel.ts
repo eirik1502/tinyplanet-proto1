@@ -60,8 +60,13 @@ export function templateLevel(name: string, level: number): LevelSpec {
 /** Whether `v` looks like a LevelSpec (for one read back from storage). */
 export function isLevelSpec(v: unknown): v is LevelSpec {
   const s = v as LevelSpec;
+  // Saved flocks get any style knobs added since they were saved.
   const okFlock = (f: FlockSpec) =>
-    !!f && Array.isArray(f.members) && f.members.every((m) => MEMBER_TYPES.includes(m.type) && typeof m.count === "number") && !!f.style;
+    !!f &&
+    Array.isArray(f.members) &&
+    f.members.every((m) => MEMBER_TYPES.includes(m.type) && typeof m.count === "number") &&
+    !!f.style &&
+    !!(f.style = { ...DEFAULT_STYLE, ...f.style });
   return (
     !!s &&
     s.layout in LAYOUTS &&

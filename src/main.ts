@@ -1738,6 +1738,8 @@ function playCombatSounds() {
     if (at.gain <= 0.01) continue;
     if (ev.type === "shot") sfx.orbShot(at);
     else if (ev.type === "lunge") sfx.lunge(at);
+    else if (ev.type === "windup") sfx.windup(ev.kind!, ev.dur!, at);
+    else if (ev.type === "interrupt") sfx.interrupt(at);
     else if (ev.type === "explode") {
       sfx.explosion({ pan: at.pan, gain: Math.max(0.35, at.gain) });
       rumblePad(0.6 * at.gain, 0.3 * at.gain, 200);
@@ -1934,7 +1936,7 @@ function drawBoid(b: Boid) {
   const pr = proj.project(b.x, b.y, b.alt);
   if (!pr.visible) return;
   const k = pr.kt;
-  if (b.windup > 0) drawQueenWarning(b);
+  if (b === combat.queen && b.windup > 0) drawQueenWarning(b);
   ctx.save();
   ctx.translate(pr.x, pr.y);
   if (outOfHitHeight(b.alt, player.alt)) ctx.globalAlpha = OUT_OF_HEIGHT_ALPHA;

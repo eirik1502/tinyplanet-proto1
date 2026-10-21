@@ -54,7 +54,12 @@ export interface Boid<P extends BaseParams = BaseParams> {
   r: number;
   cooldown: number;
   lunge: number; // seconds of lunge left (melee)
-  windup: number; // seconds of anger left before the queen's blast goes off
+  /** Seconds left winding up an attack (telegraphed), or of the queen's anger before her blast. */
+  windup: number;
+  /** Seconds left recovering after an attack, or staggered after an interrupted one: drifts, can't act. */
+  recover: number;
+  /** Direction of the attack being wound up (rad); it locks shortly before the attack goes off. */
+  aim: number;
   flash: number; // hit flash timer
   freeze: number; // hit-stop left (s, real time): frozen boids don't move, act or animate
   heading: number; // facing for drawing; held while frozen (knockback changes vx/vy at once)
@@ -159,12 +164,14 @@ export function hitStop(damage: number) {
 
 /** Something that happened in combat, for sound. */
 export interface CombatEvent {
-  type: "hit" | "shot" | "lunge" | "explode" | "anger" | "queenBlast" | "block" | "thud";
+  type: "hit" | "shot" | "lunge" | "windup" | "interrupt" | "explode" | "anger" | "queenBlast" | "block" | "thud";
   x: number;
   y: number;
   alt: number;
-  /** For hits: the type of who was hit, and whether it died. */
+  /** For hits: the type of who was hit, and whether it died; for windups, who winds up. */
   kind?: BoidTypeId;
+  /** For windups: how long until the attack goes off (s). */
+  dur?: number;
   killed?: boolean;
 }
 
@@ -190,6 +197,9 @@ export const BLAST_TIME = 0.45;
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /** A blast's push at distance `d` from its centre: full at the centre, half at its edge. */
+/** How long a boid staggers after its windup is interrupted by a hit (s). */
+const STAGGER = 0.7;
+
 const blastFalloff = (d: number, radius: number) => 0.5 + 0.5 * (1 - Math.min(1, d / radius));
 
 /** How hard members push apart inside their flock's spacing. */
@@ -314,6 +324,8 @@ export class Combat {
       cooldown: this.rand() * 1.5,
       lunge: 0,
       windup: 0,
+      recover: 0,
+      aim: 0,
       freeze: 0,
       heading: 0,
       flash: 0,
@@ -393,6 +405,13 @@ export class Combat {
     b.vx += ((b.x - fromX) / l) * push;
     b.vy += ((b.y - fromY) / l) * push;
     b.lunge = 0;
+    // A hit while winding up interrupts the attack and staggers the boid: a window to punish.
+    if (!isQueen && b.windup > 0 && b.hp > 0) {
+      b.windup = 0;
+      b.recover = Math.max(b.recover, STAGGER);
+      this.event("interrupt", b.x, b.y, b.alt);
+      this.burst(b.x, b.y, b.alt, 10, "#ffffff");
+    }
     // Hitting any member sets the whole flock on the player; hitting the queen or her guard also
     // calls in the flock nearest the player after it.
     if (isQueen) this.provokeEscort();
@@ -433,6 +452,7 @@ export class Combat {
       o.vx += (dx / (d || 1)) * push;
       o.vy += (dy / (d || 1)) * push;
       o.lunge = 0;
+      if (o !== this.queen) o.windup = 0;
     }
     this.blastPlayer(blast, bp.damage, bp.playerPush, bp.playerLift);
   }
@@ -794,12 +814,28 @@ export class Combat {
         }
       }
 
-      if (c.fighting && b.cooldown <= 0 && type.attack?.(b, c)) continue;
+      // Only so many members of a flock attack at once, so a flock comes at you in a readable rhythm.
+      if (c.fighting && b.cooldown <= 0 && this.attacking(flock) < flock.style.attackers && type.attack?.(b, c)) continue;
 
       this.fly(b, steer.ax, steer.ay, b.params.speed * (guarding ? 1.3 : 1), 4, dt);
       const alt = Math.max(ISLAND_TOP - 15, Math.min(ISLAND_TOP + 170, steer.alt));
       b.alt += Math.max(-90 * dt, Math.min(90 * dt, alt - b.alt));
     }
+  }
+
+  /** How many of a flock's members are winding up or carrying out an attack. */
+  private attacking(f: Flock) {
+    let n = 0;
+    for (const o of f.members) if (o.hp > 0 && (o.windup > 0 || o.lunge > 0)) n++;
+    return n;
+  }
+
+  /** Bleed off a boid's speed (`rate` per s) and let it drift: winding up, recovering. */
+  brake(b: Boid, rate: number, dt: number) {
+    const k = Math.exp(-rate * dt);
+    b.vx *= k;
+    b.vy *= k;
+    this.coast(b, dt);
   }
 
   /**

@@ -28,6 +28,8 @@ export interface FlockStyle {
   grudge: number;
   /** 1: hunts the player from the start, wherever they are. */
   hunts: number;
+  /** How many members may be attacking (winding up or lunging) at once. */
+  attackers: number;
 }
 
 export const DEFAULT_STYLE: FlockStyle = {
@@ -41,6 +43,7 @@ export const DEFAULT_STYLE: FlockStyle = {
   giveUpRange: 350,
   grudge: 6,
   hunts: 0,
+  attackers: 2,
 };
 
 export const STYLE_INPUTS: Record<keyof FlockStyle, ParamInput> = {
@@ -54,6 +57,7 @@ export const STYLE_INPUTS: Record<keyof FlockStyle, ParamInput> = {
   giveUpRange: ["Give-up range", 0, 2000, 10],
   grudge: ["Grudge after a hit (s)", 0, 30, 0.5],
   hunts: ["Hunts you from the start", 0, 1, 1],
+  attackers: ["Attacking at once", 1, 12, 1],
 };
 
 /** Members of one type: how many, and any param overrides. */

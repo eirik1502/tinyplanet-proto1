@@ -18,7 +18,7 @@ export const BOMBER: BoidType<BomberParams> = {
   name: "Bomber boid",
   color: "#ffa040",
   radius: 9,
-  params: { hp: 1, speed: 215, size: 1, cost: 1.5, triggerRange: 22, blastRadius: 150, damage: 6, playerPush: 560, playerLift: 420, boidPush: 520 },
+  params: { hp: 1, speed: 215, size: 1, cost: 1.5, triggerRange: 22, blastRadius: 80, damage: 6, playerPush: 560, playerLift: 420, boidPush: 520 },
   inputs: {
     hp: ["Health", 1, 50, 1],
     speed: ["Speed", 20, 600, 5],

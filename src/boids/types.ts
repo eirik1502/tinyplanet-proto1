@@ -86,6 +86,7 @@ export interface BoidLook<P extends BaseParams = BaseParams> {
   lunge: number;
   cooldown: number;
   windup: number;
+  recover: number;
   flash: number;
   params: P;
   flock: { engaged: boolean };

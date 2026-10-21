@@ -271,7 +271,7 @@ export function paintPortraits(root: HTMLElement, weapons: Weapon[], enemies: Br
       // The queen's body sits behind her head: shift her down to centre it.
       ctx.translate(size / 2, size / 2 + (queen ? 6 * k : 0));
       // Portraits show every variant at the usual size; the card lists its size.
-      const look = { id: 1, heading: -Math.PI / 2, phase: 0.06, lunge: 0, cooldown: 0, windup: 0, flash: 0, flock: { engaged: true } };
+      const look = { id: 1, heading: -Math.PI / 2, phase: 0.06, lunge: 0, cooldown: 0, windup: 0, recover: 0, flash: 0, flock: { engaged: true } };
       drawBoidBody(ctx, enemy.type, { ...look, params: { ...enemy.params, size: 1 } }, k);
     }
   }

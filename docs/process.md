@@ -95,10 +95,13 @@ Improve level design
 - Make planets smaller in general, focus on combat around a queen.
 
 Improve combat mechanics
-- Micro mechanics in combat vs a flock
+- Make micro mechanics in combat vs a flock more interesting and skill-based
 - Make opponents more understandable
-  - Melee boids: Increase time from starting attack to attacking. Visually indicate attack started
-  - Bomb boids: Shorter explosion range (too hard to detonate without being hit)
-  - Ranged boids: Indicate projectile a little time before shooting. Make it more explicit attack: indicate will attack, show attack animation (without moving) then shoot.
-- Flocking
-  - Flocks should stay tight (dont consider radius, always check all members)
+  - Melee boids: Add a delay between starting and executing an attack (before charging). Visually indicate attack started
+  - Bomb boids: A little shorter explosion range (too hard to detonate without being hit). Dont need startup delay
+  - Ranged boids: Also add startup delay and indicator. Make the attack mor punchy, show a little attack animation, before keeping moving.
+
+
+Make base attacks more interesting
+- Add 1-2-3 to the melee attack, mixing swipe (like today), strike (thinner and longer), and bash (smaller and more powerful)
+  - Attack-dash: Second strike lunges the player to an enemy in range

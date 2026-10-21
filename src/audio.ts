@@ -289,8 +289,22 @@ export const sfx = {
   },
   /** A ranged boid fires an orb. */
   orbShot(at: At = {}) {
+    tone({ f: 180, f2: 70, type: "sine", dur: 0.12, vol: 0.14 * (at.gain ?? 1), pan: at.pan });
     tone({ f: 700, f2: 1400, type: "sine", dur: 0.15, vol: 0.1 * (at.gain ?? 1), pan: at.pan });
     tone({ f: 350, f2: 700, type: "triangle", dur: 0.12, vol: 0.05 * (at.gain ?? 1), pan: at.pan });
+  },
+  /** A boid starts winding up an attack that goes off in `dur` s: a rising whine (melee) or charge (ranged). */
+  windup(kind: string, dur: number, at: At = {}) {
+    const g = at.gain ?? 1;
+    const d = Math.max(0.05, dur);
+    if (kind === "ranged") tone({ f: 300, f2: 1100, type: "sine", dur: d, vol: 0.05 * g, pan: at.pan, attack: d * 0.8 });
+    else tone({ f: 380, f2: 760, type: "sawtooth", dur: d, vol: 0.035 * g, pan: at.pan, lp: 1800, attack: d * 0.7 });
+  },
+  /** A hit interrupts a boid's windup. */
+  interrupt(at: At = {}) {
+    const g = at.gain ?? 1;
+    tone({ f: 900, f2: 300, type: "square", dur: 0.12, vol: 0.05 * g, pan: at.pan, lp: 2500 });
+    noise({ f: 2500, f2: 800, q: 2, dur: 0.08, vol: 0.08 * g, pan: at.pan });
   },
   /** A melee boid lunges. */
   lunge(at: At = {}) {
