@@ -1,5 +1,20 @@
 # Tasks
 
+✅ Make a prototype with web technology (typescript + bun) with libs if needed. 
+* A top-down 2d game that feels 3d.
+* Full 2d top-down, seen straight from above
+* A character floating over a planet
+* Camera placed above the character, sliding towords the character while moving
+* The character and camera are directly over a planet
+* All objects are 2d sprites, and physics are 2d
+* When objects are away from the camera, they "warp" like a perspective projection, along the planet surface
+* On the planet surface are islands
+* The rest of the surface is just covered by some mystical, transparent, haze
+* The character holds the edge og islands, and can jump from an island to other islands
+* In the air, the player can affect the jump direction slightly
+  Make a prototype with three islands
+
+
 - [x] island. Set aim toward: The closest island. Use a reachable point on that island that requires the least turning.reachable point
 - [x] Freeze frames: If Melee hit, apply freeze frames to both targets, change air movement towards direction held afterwards. Ranged attacks only applies freeze frames to the target (no direction change). Enemy attacks also applies freeze frames. The freeze length should be based on the power of the attack.
 - [x] Enemies: Should go in smaller flocks composed of a set of bodies. The bodies algorithm only applies within a flock.
@@ -70,4 +85,7 @@ Power up / skills:
 - Set standard height
 - Show what enemies are in height range
 
-
+Level progression
+- Levels should be more varied
+- E.g. make some templates that scales with level
+- Island generation variation, like: density, clusters, density map (more dense towards edges, etc), and others

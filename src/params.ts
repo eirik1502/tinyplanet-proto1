@@ -104,7 +104,7 @@ export const DEFAULTS = {
       fadeOut: 0.15, // Fade out (s)
     },
     hitStop: {
-      min: 0.17, // Shortest freeze (s)
+      min: 0.08, // Shortest freeze (s)
       max: 0.32, // Longest freeze (s)
       minDamage: 1, // Damage for shortest freeze
       maxDamage: 10, // Damage for longest freeze
