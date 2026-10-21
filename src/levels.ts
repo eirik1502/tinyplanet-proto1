@@ -22,8 +22,8 @@ import type { Params } from "./tuning";
 // Levels. Everything about a level is a LevelSpec: plain data (layout, size, queen, flocks,
 // modifiers, weapons) that a planet is generated from. The dev panel's custom levels edit one
 // directly; the game's levels come from templates. PROGRESSION says which template each level
-// uses; a template turns a level number into a spec: the level's size and swarm budget, shaped by
-// the template's layout, flocks and modifiers.
+// uses; a template turns a level number into a spec: its own planet size (tuned to its theme, not
+// the level) and the level's swarm budget, shaped by the template's layout, flocks and modifiers.
 
 /** A level, fully described: what the planet is generated from. */
 export interface LevelSpec {
@@ -53,11 +53,8 @@ export interface LevelTemplate {
   blurb: string;
   boss?: boolean;
   layout: LayoutId;
-  /** Fixed size instead of the level's scaled one (the intro levels). */
-  fixed?: { radius: number; islands: number };
-  /** Multipliers on the level's boundary radius and island count. */
-  size?: number;
-  islands?: number;
+  /** The planet's boundary radius and island count: set by the theme, the same on every level. */
+  planet: { radius: number; islands: number };
   /** Flocks every planet of this template has. */
   flocks?: FlockEntry[];
   /** The rest of the level's swarm budget is spent on flocks picked from here (repeat one to weight it). */
@@ -81,8 +78,6 @@ export interface LevelTemplate {
 
 /** Base values for a level from the tuning panel (level 4 + per-level increase). */
 export interface LevelBase {
-  radius: number;
-  islands: number;
   budget: number;
 }
 
@@ -343,7 +338,7 @@ const firstFlight: LevelTemplate = {
   name: "First flight",
   blurb: "A small planet and a lightly guarded queen.",
   layout: "scatter",
-  fixed: { radius: 450, islands: 3 },
+  planet: { radius: 450, islands: 3 },
   escort: { name: "Escort", members: [{ type: "melee", count: 4 }] },
   queenHp: 0.25,
   theme: { hue: [85, 135] },
@@ -353,7 +348,7 @@ const crossfire: LevelTemplate = {
   name: "Crossfire",
   blurb: "Ranged boids keep their distance and shoot. Close in fast.",
   layout: "scatter",
-  fixed: { radius: 550, islands: 5 },
+  planet: { radius: 550, islands: 5 },
   escort: { name: "Escort", members: [{ type: "melee", count: 2 }, { type: "ranged", count: 2 }] },
   flocks: [{ flock: MELEE_PACK }, { flock: SKIRMISHERS }],
   queenHp: 0.5,
@@ -363,7 +358,7 @@ const bombsAway: LevelTemplate = {
   name: "Bombs away",
   blurb: "Bombers blow up on contact. Take them out from range with the spear.",
   layout: "scatter",
-  fixed: { radius: 650, islands: 6 },
+  planet: { radius: 650, islands: 6 },
   flocks: [{ flock: MELEE_PACK }, { flock: SKIRMISHERS }, { flock: BOMBER_RUN }],
   queenHp: 0.75,
 };
@@ -372,6 +367,7 @@ const openSkies: LevelTemplate = {
   name: "Open skies",
   blurb: "Islands scattered far and wide.",
   layout: "scatter",
+  planet: { radius: 850, islands: 10 },
   pool: [MIXED_FLOCK],
 };
 
@@ -379,7 +375,7 @@ const theRing: LevelTemplate = {
   name: "The ring",
   blurb: "A ring of islands around an empty sky. The swarm gathers in the middle.",
   layout: "ring",
-  size: 1.25,
+  planet: { radius: 950, islands: 11 },
   pool: [MIXED_FLOCK],
   placement: "middle",
 };
@@ -388,7 +384,7 @@ const archipelago: LevelTemplate = {
   name: "Archipelago",
   blurb: "Island groups linked by stepping stones. Fewer, bigger flocks.",
   layout: "clusters",
-  size: 1.4,
+  planet: { radius: 1000, islands: 15 },
   pool: [BIG_PACK, BIG_PACK, MIXED_FLOCK],
   queen: "crowded",
   theme: { hue: [150, 210] },
@@ -398,9 +394,8 @@ const theGauntlet: LevelTemplate = {
   name: "The gauntlet",
   blurb: "One long path to the queen, watched by ranged boids.",
   layout: "gauntlet",
-  size: 1.35,
-  islands: 0.8,
-  pool: [SKIRMISHERS, SKIRMISHERS, MELEE_PACK, BOMBER_RUN],
+  planet: { radius: 1050, islands: 10 },
+  pool: [SKIRMISHERS, SKIRMISHERS, MELEE_PACK],
   placement: "ambush",
 };
 
@@ -408,7 +403,7 @@ const pebbleField: LevelTemplate = {
   name: "Pebbles",
   blurb: "Tiny islands and lots of bombers in small flocks. Keep hopping.",
   layout: "pebbles",
-  islands: 1.6,
+  planet: { radius: 800, islands: 14 },
   pool: [BOMBER_RUN, BOMBER_RUN, MELEE_PACK, SKIRMISHERS],
 };
 
@@ -416,6 +411,7 @@ const queensCourt: LevelTemplate = {
   name: "Queen's court",
   blurb: "The whole swarm stays close to the queen.",
   layout: "scatter",
+  planet: { radius: 800, islands: 10 },
   pool: [MIXED_FLOCK],
   placement: "guardQueen",
   theme: { hue: [270, 330] },
@@ -425,7 +421,7 @@ const citadel: LevelTemplate = {
   name: "The citadel",
   blurb: "The queen holds the heart of a dense island cluster. Patrols circle the outskirts.",
   layout: "core",
-  size: 1.2,
+  planet: { radius: 900, islands: 9 },
   pool: [MIXED_FLOCK],
   queen: "centre",
   placement: "edges",
@@ -435,7 +431,7 @@ const thicket: LevelTemplate = {
   name: "The thicket",
   blurb: "Sparse islands at first, crowding together toward the queen.",
   layout: "gradient",
-  size: 1.2,
+  planet: { radius: 950, islands: 13 },
   pool: [MIXED_FLOCK],
   placement: "guardQueen",
 };
@@ -444,8 +440,7 @@ const continentsTemplate: LevelTemplate = {
   name: "Continents",
   blurb: "A few huge islands with pebbles between them. Big melee packs, and brutes.",
   layout: "continents",
-  size: 1.3,
-  islands: 0.9,
+  planet: { radius: 1000, islands: 10 },
   pool: [BIG_PACK, MELEE_PACK, BRUTES],
 };
 
@@ -453,8 +448,7 @@ const leaps: LevelTemplate = {
   name: "Long leaps",
   blurb: "Wide gaps between every island. Save your double jump.",
   layout: "longLeaps",
-  size: 1.2,
-  islands: 0.9,
+  planet: { radius: 950, islands: 9 },
   pool: [SKIRMISHERS, SKIRMISHERS, MIXED_FLOCK],
 };
 
@@ -462,7 +456,7 @@ const theWilds: LevelTemplate = {
   name: "The wilds",
   blurb: "Islands bunch up and thin out at random.",
   layout: "wilds",
-  size: 1.2,
+  planet: { radius: 1000, islands: 13 },
   pool: [MIXED_FLOCK],
   theme: { hue: [20, 70] },
 };
@@ -472,7 +466,7 @@ const theHive: LevelTemplate = {
   blurb: "Boss: a shielded queen at the heart of her hive, and her swarm keeps growing.",
   boss: true,
   layout: "core",
-  size: 1.15,
+  planet: { radius: 900, islands: 9 },
   queen: "centre",
   queenHp: 2,
   // Reinforcements make up the difference.
@@ -488,7 +482,7 @@ const royalGuard: LevelTemplate = {
   blurb: "Boss: an elite swarm guards a shielded queen in the fog.",
   boss: true,
   layout: "clusters",
-  size: 1.4,
+  planet: { radius: 950, islands: 14 },
   queen: "crowded",
   queenHp: 2.5,
   // Elite boids have double health: half as many of them.
@@ -504,7 +498,7 @@ const theStorm: LevelTemplate = {
   blurb: "Boss: a gale sweeps the ring while elite reinforcements keep coming.",
   boss: true,
   layout: "ring",
-  size: 1.25,
+  planet: { radius: 1000, islands: 12 },
   queenHp: 3,
   // Elite boids have double health, and reinforcements top the swarm up.
   budget: 0.5,
@@ -585,8 +579,7 @@ export function planLevel(
 }
 
 /**
- * The spec for a template on a level: the level's base size scaled by the template (or its fixed
- * size), its listed flocks, then flocks from its pool until the level's budget (less the listed
+ * The spec for a template on a level: the template's planet, its listed flocks, then flocks from its pool until the level's budget (less the listed
  * flocks and the escort) is spent. Sampled flocks draw from `rand`.
  */
 export function resolveLevel(
@@ -611,8 +604,8 @@ export function resolveLevel(
   }
   return {
     layout: t.layout,
-    radius: t.fixed?.radius ?? base.radius * (t.size ?? 1),
-    islands: Math.max(1, Math.round(t.fixed?.islands ?? base.islands * (t.islands ?? 1))),
+    radius: t.planet.radius,
+    islands: t.planet.islands,
     theme: t.theme,
     placement: t.placement ?? "anywhere",
     queenSpot: t.queen ?? "far",
@@ -631,12 +624,7 @@ export const weaponsAt = (level: number): Weapon[] => (["sword", "spear"] as con
 
 /** The base for `level` from the tuning panel: the level 4 values plus a per-level increase. */
 export function levelBase(level: number, w: Params["world"]): LevelBase {
-  const n = level - 4;
-  return {
-    radius: w.level4.radius + w.perLevel.radius * n,
-    islands: w.level4.islands + w.perLevel.islands * n,
-    budget: w.level4.budget + w.perLevel.budget * n,
-  };
+  return { budget: w.level4.budget + w.perLevel.budget * (level - 4) };
 }
 
 /** Planet options for a spec. */

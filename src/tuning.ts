@@ -25,7 +25,7 @@ const TAB_TITLES: Record<keyof Params, string> = {
 
 const GROUP_TITLES: Record<string, string> = {
   "world.levels": "Modifiers by level",
-  "world.level4": "Level 4 (everything unlocked; templates scale this)",
+  "world.level4": "Level 4 swarm (everything unlocked; templates scale this)",
   "world.perLevel": "Added per level after 4",
   "world.modifiers": "Level modifiers (wind, fog, bosses' shield…)",
   "move.climb": "Climbing",
@@ -65,11 +65,7 @@ const SLIDERS: Record<string, Slider> = {
   "world.modifiers.reinforceCap": ["Swarm cap (× starting swarm)", 0.5, 3, 0.1, true],
   "world.modifiers.eliteHp": ["Elite health (×)", 1, 5, 0.5, true],
   "world.modifiers.eliteSize": ["Elite size (×)", 1, 2, 0.05, true],
-  "world.level4.radius": ["Boundary radius", 300, 2000, 10, true],
-  "world.level4.islands": ["Islands", 1, 40, 1, true],
   "world.level4.budget": ["Swarm budget", 0, 200, 0.5, true],
-  "world.perLevel.radius": ["Boundary radius", 0, 300, 5, true],
-  "world.perLevel.islands": ["Islands", 0, 6, 0.1, true],
   "world.perLevel.budget": ["Swarm budget", 0, 50, 0.1, true],
 
   "move.climb.speed": ["Climb speed", 50, 800, 10],

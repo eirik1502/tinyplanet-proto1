@@ -7,13 +7,9 @@ export const DEFAULTS = {
       twoModifiersFrom: 14, // Up to two modifiers from level
     },
     level4: {
-      radius: 700, // Boundary radius
-      islands: 7, // Islands
       budget: 20.5, // Swarm budget
     },
     perLevel: {
-      radius: 60, // Boundary radius
-      islands: 1.6, // Islands
       budget: 9.4, // Swarm budget
     },
     modifiers: {

@@ -27,7 +27,7 @@ with level. `PROGRESSION` in `src/levels.ts` says which template each level uses
 
 ## 3. Templates and progression
 
-- [x] `LevelTemplate`: name, blurb, boss, layout, size/islands/budget multipliers, enemy mix, flock size, flock map, queen spot, queen health, theme, modifiers, fixed (intro) values
+- [x] `LevelTemplate`: name, blurb, boss, layout, planet size (radius + islands, fixed per template; doesn't grow with level), budget multiplier, enemy mix, flock size, flock map, queen spot, queen health, theme, modifiers
 - [x] Difficulty budget per level (`world.level4.budget` + `world.perLevel.budget`); per-boid costs (`world.costs`); templates split it by `mix`
 - [x] `PROGRESSION`: each entry (a template or a pool) is in effect from its level until the next entry; the last one stays in effect
 - [x] Pool picks never repeat the previous level's template; a retry keeps template and modifiers

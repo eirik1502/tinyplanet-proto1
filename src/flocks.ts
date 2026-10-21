@@ -95,11 +95,11 @@ export const BOMBER_RUN: FlockTemplate = {
 };
 export const MIXED_FLOCK: FlockTemplate = {
   name: "Mixed flock",
-  sample: { weights: { melee: 0.49, ranged: 0.29, bomber: 0.22 }, size: [3, 5] },
+  sample: { weights: { melee: 0.55, ranged: 0.35, bomber: 0.1 }, size: [3, 5] },
 };
 export const BIG_PACK: FlockTemplate = {
   name: "Big pack",
-  sample: { weights: { melee: 0.7, ranged: 0.2, bomber: 0.1 }, size: [6, 8] },
+  sample: { weights: { melee: 0.75, ranged: 0.25 }, size: [6, 8] },
   style: { spread: 110, tightness: 0.4 },
 };
 export const BRUTES: FlockTemplate = {
