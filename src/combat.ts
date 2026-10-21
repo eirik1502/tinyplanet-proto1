@@ -3,7 +3,7 @@ import type { BomberParams } from "./boids/bomber";
 import type { QueenParams } from "./boids/queen";
 import { resolveParams, type BaseParams, type BoidContext, type BoidType } from "./boids/types";
 import { DEFAULT_STYLE, type FlockSpec, type FlockStyle } from "./flocks";
-import { box, overlaps, type Hitbox, type Hurtbox } from "./hitbox";
+import { box, outOfHitHeight, overlaps, type Hitbox, type Hurtbox } from "./hitbox";
 import { ISLAND_TOP, mulberry32, type Island } from "./island";
 import type { Planet } from "./planet";
 import { params } from "./tuning";
@@ -180,7 +180,8 @@ export interface PlayerHit {
   damage: number;
 }
 
-const boidHurtbox = (b: Boid): Hurtbox => box(b.x, b.y, b.alt, b.r);
+const reach = (b: Boid) => b.type.reach?.(b) ?? 0;
+const boidHurtbox = (b: Boid): Hurtbox => ({ ...box(b.x, b.y, b.alt, b.r), height: reach(b) });
 const playerHurtbox = (p: PlayerView): Hurtbox => box(p.x, p.y, p.alt, params.player.hurtbox.radius);
 
 /** A projectile is both: it hits its target, and the sword can hit (block) the enemies'. */
@@ -496,7 +497,12 @@ export class Combat {
 
   /** Whether the player can be hit within `range` of `b` (default: its body). */
   touchesPlayer(b: Boid, range = b.r) {
-    return this.player.targetable && overlaps(box(b.x, b.y, b.alt, range), playerHurtbox(this.player));
+    return this.player.targetable && overlaps({ ...box(b.x, b.y, b.alt, range), height: reach(b) }, playerHurtbox(this.player));
+  }
+
+  /** Whether `b` is out of reach of hits from (or to) this altitude: too high or too low. */
+  outOfReach(b: Boid, alt: number) {
+    return outOfHitHeight(b.alt, alt, reach(b)) !== 0;
   }
 
   /** `b` hits the player; a hit that lands freezes it along with them. */

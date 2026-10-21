@@ -71,6 +71,7 @@ export function isLevelSpec(v: unknown): v is LevelSpec {
     !!s &&
     s.layout in LAYOUTS &&
     s.placement in PLACEMENTS &&
+    s.queenSpot in QUEEN_SPOTS &&
     typeof s.radius === "number" &&
     typeof s.islands === "number" &&
     Array.isArray(s.flocks) &&

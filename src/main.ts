@@ -1939,7 +1939,7 @@ function drawBoid(b: Boid) {
   if (b === combat.queen && b.windup > 0) drawQueenWarning(b);
   ctx.save();
   ctx.translate(pr.x, pr.y);
-  if (outOfHitHeight(b.alt, player.alt)) ctx.globalAlpha = OUT_OF_HEIGHT_ALPHA;
+  if (combat.outOfReach(b, player.alt)) ctx.globalAlpha = OUT_OF_HEIGHT_ALPHA;
   drawBoidBody(ctx, b.type, b, k);
   if (b === combat.queen && combat.queenShielded && b.hp > 0) drawShield(b, k);
   ctx.restore();

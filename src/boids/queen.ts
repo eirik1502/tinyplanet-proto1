@@ -3,7 +3,8 @@ import { fmt, type BaseParams, type BoidType } from "./types";
 
 // The queen: roams the inner planet, flees when the player comes near, and when they get close
 // anyway, gets angry and lets off a blast that throws them out. Her escort flock guards her, and
-// flocks nearby are called in when her guard thins out.
+// flocks nearby are called in when her guard thins out. Her body is tall: attacks reach her (and
+// she reaches the player) from any altitude.
 
 export interface QueenParams extends BaseParams {
   fleeRange: number;
@@ -55,6 +56,8 @@ export const QUEEN: BoidType<QueenParams> = {
     playerLift: ["Lift on the player", 0, 1200, 10],
     cooldown: ["Blast cooldown (s)", 0, 10, 0.1],
   },
+
+  reach: () => Infinity,
 
   update(b, c) {
     const p = b.params;

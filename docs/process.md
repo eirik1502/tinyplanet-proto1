@@ -94,7 +94,7 @@ Power up / skills:
 Improve level design
 - Make planets smaller in general, focus on combat around a queen.
 
-Improve combat mechanics
+✅ Improve combat mechanics
 - Make micro mechanics in combat vs a flock more interesting and skill-based
 - Make opponents more understandable
   - Melee boids: Add a delay between starting and executing an attack (before charging). Visually indicate attack started

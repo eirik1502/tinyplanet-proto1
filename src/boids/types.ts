@@ -73,6 +73,8 @@ export interface BoidType<P extends BaseParams = BaseParams> {
   fight?(b: Boid<P>, c: BoidContext): void;
   /** Attack when fighting and the cooldown is over; true ends the boid's frame. */
   attack?(b: Boid<P>, c: BoidContext): boolean;
+  /** Extra vertical reach of its hurtbox (and its own touch) beyond the usual hit height; Infinity = any altitude. */
+  reach?(b: Boid<P>): number;
   /** Sprite at the origin, facing +x after `heading`, at `k` px per world unit and size 1. */
   draw(ctx: CanvasRenderingContext2D, b: BoidLook<P>, k: number): void;
   card(p: P): CardAbility[];

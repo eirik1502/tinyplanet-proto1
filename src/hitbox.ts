@@ -2,7 +2,8 @@ import { params } from "./tuning";
 
 // Hit detection. Attacks carry hitboxes; whatever can be hit carries a hurtbox. A hit lands when
 // a hitbox overlaps a hurtbox on the game plane and the two are at most `combat.hits.height`
-// apart in altitude; that one rule holds for every attack, from anyone.
+// apart in altitude (plus any extra `height` either has: a tall body); that one rule holds for
+// every attack, from anyone.
 //
 // Both are circles on the game plane around (x, y), at altitude `alt`. A hitbox can be cut down
 // to a sector: then it only hits within `arc` radians either side of its facing (dx, dy), except
@@ -13,6 +14,8 @@ export interface Box {
   y: number;
   alt: number;
   radius: number;
+  /** Extra vertical reach on top of `combat.hits.height` (Infinity: any altitude). */
+  height?: number;
 }
 
 export type Hurtbox = Box;
@@ -30,14 +33,15 @@ export function box(x: number, y: number, alt: number, radius: number): Box {
 }
 
 /** 1 if `alt` is too far above `from` for hits between them, -1 if too far below, else 0. */
-export function outOfHitHeight(alt: number, from: number): -1 | 0 | 1 {
+export function outOfHitHeight(alt: number, from: number, extra = 0): -1 | 0 | 1 {
   const d = alt - from;
-  return d > params.combat.hits.height ? 1 : d < -params.combat.hits.height ? -1 : 0;
+  const h = params.combat.hits.height + extra;
+  return d > h ? 1 : d < -h ? -1 : 0;
 }
 
 /** Whether `hit` overlaps `hurt`. */
 export function overlaps(hit: Hitbox, hurt: Hurtbox): boolean {
-  if (outOfHitHeight(hurt.alt, hit.alt) !== 0) return false;
+  if (outOfHitHeight(hurt.alt, hit.alt, (hit.height ?? 0) + (hurt.height ?? 0)) !== 0) return false;
   const ox = hurt.x - hit.x;
   const oy = hurt.y - hit.y;
   const d = Math.hypot(ox, oy);
