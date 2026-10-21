@@ -112,7 +112,7 @@ export const DEFAULTS = {
       activeTime: 0.18, // Active time (s)
       fadeTime: 0.12,
       cooldown: 0.28, // Cooldown (s)
-      comboWindow: 0.8, // Combo window after a hit (s)
+      comboWindow: 1.2, // Combo window after a hit (s)
     },
     thrust: {
       length: 120, // Reach

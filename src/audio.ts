@@ -327,11 +327,28 @@ export const sfx = {
     noise({ f: 2500, f2: 300, q: 0.7, dur: 0.6, vol: 0.35 * g, pan, filter: "lowpass", wet: 0.6 });
     for (const [i, n] of [79, 75, 72].entries()) tone({ f: midi(n), type: "sine", dur: 0.7, vol: 0.06 * g, pan, at: 0.06 + i * 0.05, wet: 0.8 });
   },
-  /** The sword's smash going off: a short, punchy thump. */
+  /** The thrust's lunge: a swelling whoosh over the `dur` (s) until it strikes. */
+  thrustWhoosh(dur: number) {
+    const d = Math.max(0.1, dur);
+    noise({ f: 600, f2: 2600, q: 1.4, dur: d + 0.08, vol: 0.28, attack: d * 0.85 });
+    tone({ f: 200, f2: 520, type: "triangle", dur: d + 0.05, vol: 0.06, attack: d * 0.8, lp: 1500 });
+  },
+  /** The thrust striking, `at` s from now: a short, ringing clash, brighter with power. */
+  thrustClash(power: number, at = 0) {
+    noise({ f: 2600, f2: 900, q: 1.2, dur: 0.06, vol: 0.28, at });
+    tone({ f: midi(86 + (power >= 1 ? 2 : 0)), type: "triangle", dur: 0.28, vol: 0.12, at, wet: 0.45 });
+    tone({ f: midi(93 + (power >= 1 ? 2 : 0)), type: "sine", dur: 0.22, vol: 0.07, at: at + 0.01, wet: 0.45 });
+  },
+  /** The sword's smash: a heavy hit, then a small, soft explosion with a glint as it fades. */
   smash(at: At = {}) {
     const g = at.gain ?? 1;
-    tone({ f: 180, f2: 50, type: "sine", dur: 0.3, vol: 0.4 * g, pan: at.pan });
-    noise({ f: 2500, f2: 300, q: 0.7, dur: 0.35, vol: 0.25 * g, pan: at.pan, filter: "lowpass", wet: 0.3 });
+    const pan = at.pan;
+    noise({ f: 2000, f2: 600, q: 1, dur: 0.08, vol: 0.35 * g, pan });
+    tone({ f: 320, f2: 140, type: "square", dur: 0.1, vol: 0.09 * g, pan, lp: 1600 });
+    tone({ f: 200, f2: 55, type: "sine", dur: 0.2, vol: 0.4 * g, pan });
+    tone({ f: 110, f2: 35, type: "sine", dur: 0.45, vol: 0.3 * g, pan, at: 0.04 });
+    noise({ f: 2400, f2: 160, q: 0.6, dur: 0.5, vol: 0.28 * g, pan, at: 0.04, filter: "lowpass", wet: 0.4 });
+    tone({ f: midi(84), type: "sine", dur: 0.3, vol: 0.05 * g, pan, at: 0.08, wet: 0.6 });
   },
   explosion(at: At = {}) {
     const g = at.gain ?? 1;

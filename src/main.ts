@@ -1167,14 +1167,19 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
           const speed = params.player.thrust.lungeSpeed;
           if (p.mode === "hang") leaveRim(ax * speed, ay * speed, 0);
           p.lunge = { target, t: 0, angle: aim.angle, power };
-          sfx.lunge();
+          const reach = Math.hypot(target.x - p.x, target.y - p.y) - params.player.thrust.strikeDistance - target.r;
+          sfx.thrustWhoosh(Math.min(params.player.thrust.lungeTime, Math.max(0, reach) / speed));
           avatar.jump();
           return;
         }
         combat.thrust(p.x, p.y, alt, ax, ay, power);
-      } else if (aim.step === 3) combat.smash(p.x, p.y, alt, ax, ay, power);
-      else combat.swing(p.x, p.y, alt, ax, ay, power);
-      sfx.swing(power);
+        sfx.thrustWhoosh(0.1);
+        sfx.thrustClash(power, 0.1);
+      } else if (aim.step === 3) combat.smash(p.x, p.y, alt, ax, ay, power); // its sound comes with its event
+      else {
+        combat.swing(p.x, p.y, alt, ax, ay, power);
+        sfx.swing(power);
+      }
       avatar.strike("sword", aim.angle, power, aim.step === 2);
       p.swordCd = params.player.sword.cooldown;
     } else {
@@ -1207,7 +1212,7 @@ function updateLunge(dt: number, lunge: NonNullable<typeof player.lunge>) {
   p.vx *= 0.35;
   p.vy *= 0.35;
   p.vz = Math.max(0, p.vz * 0.35);
-  sfx.swing(lunge.power);
+  sfx.thrustClash(lunge.power);
   avatar.strike("sword", lunge.angle, lunge.power, true);
   p.swordCd = params.player.sword.cooldown;
 }
