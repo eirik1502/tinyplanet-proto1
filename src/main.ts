@@ -1,8 +1,18 @@
 import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
 import { createTuningPanel, params } from "./tuning";
-import { BLAST_TIME, Combat, hitStop, type Blast, type Boid } from "./combat";
-import { generatePlanet, type Planet, type SpawnKind } from "./planet";
+import { BLAST_TIME, BOID_RADIUS, Combat, hitStop, type Blast, type Boid } from "./combat";
+import { generatePlanet, type Planet, type PlanetOptions, type SpawnKind } from "./planet";
+import {
+  levelRules,
+  MODIFIERS,
+  NO_LEVEL_RULES,
+  planLevel,
+  templateSpec,
+  type LevelPlan,
+  type LevelRules,
+  type LevelTemplate,
+} from "./levels";
 import { applyVolumes, music, sfx, toggleMute, unlockAudio } from "./audio";
 import { Avatar, type AvatarView } from "./avatar";
 import { outOfHitHeight } from "./hitbox";
@@ -287,41 +297,49 @@ const game = { state: "play" as GameState, timer: 0, level: 0, shake: 0, briefin
 const UNLOCKS: Record<Weapon | SpawnKind, number> = { sword: 1, melee: 1, ranged: 2, spear: 3, bomber: 3 };
 const unlocked = (what: Weapon | SpawnKind, level = game.level) => level >= UNLOCKS[what];
 
+/** This level's template and modifiers (from PROGRESSION); a retry keeps them. */
+let plan: LevelPlan | null = null;
+/** What this level's modifiers add up to. */
+let rules: LevelRules = NO_LEVEL_RULES;
+
 /**
- * Planet size and swarm for a level. Levels 1-3 are hand-tuned intros; from level 4 on it's the
- * level 4 values plus a per-level increase. Locked enemies never spawn.
+ * Planet options for a level: the level 4 values plus a per-level increase are the base, which the
+ * level's template shapes (the intro templates use their own hand-tuned values). Locked enemies
+ * never spawn.
  */
-function levelSpec(level: number) {
+function levelSpec(level: number, template: LevelTemplate, seed: number): PlanetOptions {
   const w = params.world;
-  const intro = [w.intro1, w.intro2, w.intro3][level - 1];
   const n = level - 4;
-  const a = intro ?? {
+  const base = {
     radius: w.level4.radius + w.perLevel.radius * n,
     islands: w.level4.islands + w.perLevel.islands * n,
-    melee: w.level4.melee + w.perLevel.melee * n,
-    ranged: w.level4.ranged + w.perLevel.ranged * n,
-    bombers: w.level4.bombers + w.perLevel.bombers * n,
+    budget: w.level4.budget + w.perLevel.budget * n,
+    costs: w.costs,
+    flockSize: params.boids.flocks.startSize,
     escort: params.boids.queen.escort,
     queenHp: params.boids.queen.hp,
   };
-  return {
-    radius: a.radius,
-    islandCount: Math.max(1, Math.round(a.islands)),
-    meleeCount: Math.round(a.melee),
-    rangedCount: unlocked("ranged", level) ? Math.round(a.ranged) : 0,
-    bomberCount: unlocked("bomber", level) ? Math.round(a.bombers) : 0,
-    flockSize: params.boids.flocks.startSize,
-    escortCount: Math.round(a.escort),
-    queenHp: Math.max(1, a.queenHp),
-  };
+  return templateSpec(template, base, w, (k) => unlocked(k, level), seed);
 }
 
 /** Generate a new planet for `level` and show its briefing (a defeat retries on a fresh planet). */
 function restart(level: number, retry = false) {
   game.level = level;
-  planet = generatePlanet(Math.floor(Math.random() * 1e9), levelSpec(level));
+  const lv = params.world.levels;
+  if (!retry || !plan) {
+    plan = planLevel(level, plan?.template ?? null, {
+      force: lv.template,
+      modifiersFrom: lv.modifiersFrom,
+      twoModifiersFrom: lv.twoModifiersFrom,
+    });
+  }
+  const seed = Math.floor(Math.random() * 1e9);
+  planet = generatePlanet(seed, levelSpec(level, plan.template, seed));
   islands = planet.islands;
-  combat.reset(planet);
+  const kinds = [...new Set(planet.flocks.flatMap((f) => f.kinds))];
+  const swarm = planet.escort.length + planet.flocks.reduce((s, f) => s + f.kinds.length, 0);
+  rules = levelRules(plan.modifiers, params.world.modifiers, kinds, swarm, mulberry32(seed ^ 0x68e31da4));
+  combat.reset(planet, rules.swarm);
   music.setSeed(planet.seed);
   resetPlayer();
   game.timer = 0;
@@ -338,9 +356,13 @@ const briefingEl = document.getElementById("briefing")!;
 
 function showBriefing(animate = false) {
   const weapons = (["sword", "spear"] as const).filter((w) => unlocked(w));
-  const enemies = (["melee", "ranged", "bomber"] as const).filter((k) => unlocked(k));
+  // Only the kinds on this planet (a template's mix can leave one out).
+  const present = new Set([...planet.escort, ...planet.flocks.flatMap((f) => f.kinds)]);
+  const enemies = (["melee", "ranged", "bomber"] as const).filter((k) => unlocked(k) && present.has(k));
   briefingEl.innerHTML = briefingHtml({
     level: game.level,
+    template: plan && { name: plan.template.name, blurb: plan.template.blurb, boss: !!plan.template.boss },
+    modifiers: (plan?.modifiers ?? []).map((m) => MODIFIERS[m]),
     reason: game.briefing,
     inputMode,
     padLayout,
@@ -482,7 +504,7 @@ interface Flight { x: number; y: number; alt: number; vx: number; vy: number; vz
 function riseSpeed(height: number) {
   const j = params.move.jump;
   const h = Math.max(0, height);
-  const g = j.gravity;
+  const g = gravity();
   const ga = g * j.apexGravity;
   // Height risen inside the apex band alone.
   const band = (j.apexBand * j.apexBand) / (2 * ga);
@@ -523,10 +545,13 @@ function jumpAngle(dir: Vec): number {
   return out + Math.max(-MAX_JUMP_LEAN, Math.min(MAX_JUMP_LEAN, diff));
 }
 
+/** The level's gravity: the tuned value, scaled by a gravity modifier. */
+const gravity = () => params.move.jump.gravity * rules.gravity;
+
 /** Gravity at vertical speed `vz`: weaker near the apex, so jumps hang there a moment. */
 function gravityAt(vz: number) {
   const j = params.move.jump;
-  return Math.abs(vz) < j.apexBand ? j.gravity * j.apexGravity : j.gravity;
+  return Math.abs(vz) < j.apexBand ? gravity() * j.apexGravity : gravity();
 }
 
 /** The island whose rim is closest to the player. */
@@ -648,6 +673,8 @@ function stepFlight(f: Flight, dt: number, fromIsland: number): { island: number
   const ox = f.x;
   const oy = f.y;
   f.vz -= gravityAt(f.vz) * dt;
+  f.vx += rules.wind.x * dt;
+  f.vy += rules.wind.y * dt;
   // Caps: a rise peaks by the height limit at the latest, and sideways speed stops at the max.
   if (f.vz > 0) f.vz = Math.min(f.vz, riseSpeed(ISLAND_TOP + params.move.limits.maxHeight - f.alt));
   const sp = Math.hypot(f.vx, f.vy);
@@ -795,7 +822,7 @@ function update(dt: number, dtReal: number) {
     p.lostTimer += dt;
     p.vx *= Math.exp(-2 * dt);
     p.vy *= Math.exp(-2 * dt);
-    p.vz = Math.max(p.vz - params.move.jump.gravity * 0.3 * dt, -260);
+    p.vz = Math.max(p.vz - gravity() * 0.3 * dt, -260);
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.alt = Math.max(5, p.alt + p.vz * dt);
@@ -1460,11 +1487,56 @@ function render(time: number) {
   ctx.arc(proj.cx, proj.cy, limb * 1.02, 0, Math.PI * 2);
   ctx.fill();
 
+  drawWind(time);
+  drawFog();
   drawSlowMo();
   drawJumpPreview();
   drawAimIndicator();
   drawQueenPointer();
   drawHud();
+}
+
+/** Streaks blowing past around the camera, on windy levels. */
+function drawWind(time: number) {
+  const w = rules.wind;
+  const strength = Math.hypot(w.x, w.y);
+  if (!strength) return;
+  const dx = w.x / strength;
+  const dy = w.y / strength;
+  const speed = 160 + strength;
+  const span = 1400;
+  ctx.lineCap = "round";
+  for (let i = 0; i < 46; i++) {
+    // Each streak loops along the wind through a fixed lane near the camera.
+    const h1 = Math.sin(i * 127.1) * 43758.5453;
+    const h2 = Math.sin(i * 311.7) * 43758.5453;
+    const lane = (h1 - Math.floor(h1) - 0.5) * span;
+    const run = ((((time * speed) / span + (h2 - Math.floor(h2))) % 1) - 0.5) * span;
+    const x = cam.x + dx * run - dy * lane;
+    const y = cam.y + dy * run + dx * lane;
+    const alt = ISLAND_TOP + 25 + (i % 5) * 18;
+    const a = proj.project(x, y, alt);
+    const b = proj.project(x + dx * 34, y + dy * 34, alt);
+    if (!a.visible || !b.visible) continue;
+    ctx.strokeStyle = `rgba(225,235,255,${0.12 + 0.1 * (i % 3)})`;
+    ctx.lineWidth = 1.4 * a.kt;
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+}
+
+/** On foggy levels, everything beyond the view radius around the player fades into the mist. */
+function drawFog() {
+  if (!rules.fog) return;
+  const pr = proj.project(player.rx, player.ry, player.ralt);
+  const r = rules.fog * pr.kt;
+  const g = ctx.createRadialGradient(pr.x, pr.y, r * 0.5, pr.x, pr.y, r);
+  g.addColorStop(0, "rgba(46,36,78,0)");
+  g.addColorStop(1, "rgba(46,36,78,0.94)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
 }
 
 function drawPlayer() {
@@ -1826,8 +1898,28 @@ function drawBoid(b: Boid) {
   ctx.save();
   ctx.translate(pr.x, pr.y);
   if (outOfHitHeight(b.alt, player.alt)) ctx.globalAlpha = OUT_OF_HEIGHT_ALPHA;
-  drawBoidBody(ctx, b, k);
+  // Elite boids are drawn bigger, by their body size over the usual.
+  const scale = b.r / BOID_RADIUS[b.kind];
+  drawBoidBody(ctx, scale === 1 ? b : { ...b, r: BOID_RADIUS[b.kind] }, k * scale);
+  if (b.kind === "queen" && combat.queenShielded && b.hp > 0) drawShield(b, k);
   ctx.restore();
+}
+
+/** The queen's shield: a shimmering bubble around her. */
+function drawShield(q: Boid, k: number) {
+  const t = performance.now() / 1000;
+  const r = (q.r + 22 + Math.sin(t * 3) * 2) * k;
+  const g = ctx.createRadialGradient(0, 0, r * 0.6, 0, 0, r);
+  g.addColorStop(0, "rgba(140,230,255,0)");
+  g.addColorStop(0.85, "rgba(140,230,255,0.22)");
+  g.addColorStop(1, "rgba(200,245,255,0.55)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = `rgba(200,245,255,${0.5 + 0.3 * Math.sin(t * 5)})`;
+  ctx.lineWidth = 1.5 * k;
+  ctx.stroke();
 }
 
 /** While the queen winds up, the reach of her coming blast closes in around her. */
@@ -2031,13 +2123,19 @@ function drawHud() {
   const bx = (W - bw) / 2;
   ctx.fillStyle = "rgba(20,8,35,0.7)";
   ctx.fillRect(bx - 2, 14, bw + 4, 14);
-  ctx.fillStyle = "#c84cff";
+  ctx.fillStyle = combat.queenShielded ? "#8fe3ff" : "#c84cff";
   ctx.fillRect(bx, 16, bw * Math.max(0, q.hp / q.maxHp), 10);
   ctx.font = "600 12px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillStyle = "#f0dcff";
-  ctx.fillText(`♛ QUEEN · swarm ${combat.boids.length - 1} in ${combat.flocks.length} flocks · level ${game.level} · planet ${planet.seed.toString(36)}`, W / 2, 32);
+  const shield = combat.queenShielded ? ` · shielded: ${combat.shieldLeft} more kills` : "";
+  ctx.fillText(`♛ QUEEN${shield} · swarm ${combat.boids.length - 1} in ${combat.flocks.length} flocks · level ${game.level} · planet ${planet.seed.toString(36)}`, W / 2, 32);
+  const mods = plan?.modifiers.map((m) => MODIFIERS[m].name).join(" · ");
+  if (mods) {
+    ctx.fillStyle = "#8fe3ff";
+    ctx.fillText(mods, W / 2, 48);
+  }
 
   if (game.state === "victory" || game.state === "defeat") {
     const a = Math.min(1, game.timer / 0.6);

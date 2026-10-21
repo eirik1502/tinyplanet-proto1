@@ -24,6 +24,8 @@ export interface Flock {
   engaged: boolean;
   /** Seconds left of staying engaged after a member was hit. */
   provoked: number;
+  /** Always engaged while the player can be targeted (reinforcements come looking for them). */
+  hunting: boolean;
   /** Centre and mean velocity of the members, updated every frame. */
   cx: number;
   cy: number;
@@ -52,6 +54,19 @@ export interface Boid {
   phase: number; // wander / wing-flap phase
   flock: Flock;
 }
+
+/** Level rules the swarm plays by (from the level's modifiers). */
+export interface SwarmRules {
+  /** Share of the starting swarm (escort excluded) to kill before the queen can be hurt; 0 = no shield. */
+  shield: number;
+  /** A new hunting flock arrives from the boundary this often (s), while the swarm is under `cap`; null = never. */
+  reinforce: { every: number; size: number; kinds: SpawnKind[]; cap: number } | null;
+  /** Boids' health and body size multipliers (the queen's excluded). */
+  hp: number;
+  size: number;
+}
+
+export const NO_RULES: SwarmRules = { shield: 0, reinforce: null, hp: 1, size: 1 };
 
 export interface Shot {
   x: number;
@@ -147,7 +162,7 @@ export interface PlayerHit {
 }
 
 /** Hurtbox radius of boids, by kind. A lunging melee boid's hurtbox is also its hitbox. */
-const BOID_RADIUS: Record<BoidKind, number> = { queen: 26, melee: 8, ranged: 9, bomber: 9 };
+export const BOID_RADIUS: Record<BoidKind, number> = { queen: 26, melee: 8, ranged: 9, bomber: 9 };
 
 const boidHurtbox = (b: Boid): Hurtbox => box(b.x, b.y, b.alt, b.r);
 const playerHurtbox = (p: PlayerView): Hurtbox => box(p.x, p.y, p.alt, params.player.hurtbox.radius);
@@ -209,12 +224,26 @@ export class Combat {
   private player: PlayerView = { x: 0, y: 0, alt: 0, targetable: false };
   private hooks: PlayerHooks = { hit: () => false, push: () => {} };
 
+  private rules: SwarmRules = NO_RULES;
+  /** Swarm members (escort and queen excluded) the player must still kill to break the queen's shield. */
+  shieldLeft = 0;
+  /** Seconds until the next reinforcement flock. */
+  private reinforceIn = 0;
+
   get queenDead() {
     return this.queen.hp <= 0;
   }
 
+  get queenShielded() {
+    return this.shieldLeft > 0;
+  }
+
   /** New swarm for a planet: its flocks at their spawn points, the queen and her escort at her home. */
-  reset(planet: Planet) {
+  reset(planet: Planet, rules: SwarmRules = NO_RULES) {
+    this.rules = rules;
+    const swarm = planet.flocks.reduce((n, f) => n + f.kinds.length, 0);
+    this.shieldLeft = Math.ceil(swarm * rules.shield);
+    this.reinforceIn = rules.reinforce?.every ?? 0;
     this.islands = planet.islands;
     this.bounds = planet.bounds;
     this.rand = mulberry32(planet.seed ^ 0x5bd1e995);
@@ -240,7 +269,19 @@ export class Combat {
   }
 
   private newFlock(x: number, y: number): Flock {
-    const f: Flock = { members: [], goalX: x, goalY: y, joining: null, engaged: false, provoked: 0, cx: x, cy: y, vx: 0, vy: 0 };
+    const f: Flock = {
+      members: [],
+      goalX: x,
+      goalY: y,
+      joining: null,
+      engaged: false,
+      provoked: 0,
+      hunting: false,
+      cx: x,
+      cy: y,
+      vx: 0,
+      vy: 0,
+    };
     this.flocks.push(f);
     return f;
   }
@@ -253,7 +294,7 @@ export class Combat {
   }
 
   private spawn(kind: BoidKind, x: number, y: number, flock: Flock): Boid {
-    const hp = kind === "queen" ? 1 : BOID_HP[kind]; // the queen's is set by `reset`
+    const hp = kind === "queen" ? 1 : Math.max(1, Math.round(BOID_HP[kind] * this.rules.hp)); // the queen's is set by `reset`
     const a = this.rand() * Math.PI * 2;
     const b: Boid = {
       id: this.nextId++,
@@ -265,7 +306,7 @@ export class Combat {
       vy: Math.sin(a) * 60,
       hp,
       maxHp: hp,
-      r: BOID_RADIUS[kind],
+      r: BOID_RADIUS[kind] * (kind === "queen" ? 1 : this.rules.size),
       cooldown: this.rand() * 1.5,
       lunge: 0,
       windup: 0,
@@ -328,6 +369,13 @@ export class Combat {
 
   private damage(b: Boid, dmg: number, fromX: number, fromY: number, weapon: PlayerHit["weapon"]) {
     if (b.hp <= 0) return;
+    if (b.kind === "queen" && this.queenShielded) {
+      // The shield turns the hit; it still angers her flock.
+      this.event("block", b.x, b.y, b.alt);
+      this.burst(b.x, b.y, b.alt, 8, "#9fe8ff");
+      b.flock.provoked = params.boids.swarm.provokedTime;
+      return;
+    }
     this.playerHits.push({ weapon, damage: dmg });
     b.freeze = Math.max(b.freeze, hitStop(dmg));
     b.hp -= dmg;
@@ -344,6 +392,8 @@ export class Combat {
     if (b.flock === this.queen.flock) this.callReinforcements();
     this.burst(b.x, b.y, b.alt, b.hp <= 0 ? 18 : 6, BURST_COLORS[b.kind]);
     if (b.hp <= 0 && b.kind === "queen") this.burst(b.x, b.y, b.alt, 60, "#ffe27a");
+    // Each kill wears the queen's shield down.
+    if (b.hp <= 0 && b.kind !== "queen") this.shieldLeft = Math.max(0, this.shieldLeft - 1);
     // Killing a bomber sets it off where it is.
     if (b.hp <= 0 && b.kind === "bomber") this.explode(b);
   }
@@ -430,6 +480,7 @@ export class Combat {
   update(dt: number, dtReal: number, player: PlayerView, hooks: PlayerHooks) {
     this.player = player;
     this.hooks = hooks;
+    this.updateReinforcements(dt);
     this.updateFlocks(dt, player);
     this.updateBoids(dt, dtReal, player);
     this.updateSlashes(dt);
@@ -508,6 +559,22 @@ export class Combat {
   // Flocks
   // -------------------------------------------------------------------------------------------
 
+  /** Every so often a hunting flock flies in from a random point on the boundary, while the swarm is small enough. */
+  private updateReinforcements(dt: number) {
+    const r = this.rules.reinforce;
+    if (!r || this.queenDead) return;
+    this.reinforceIn -= dt;
+    if (this.reinforceIn > 0) return;
+    this.reinforceIn = r.every;
+    if (this.boids.length - 1 >= r.cap || !r.kinds.length) return;
+    const a = this.rand() * Math.PI * 2;
+    const x = this.bounds.x + Math.cos(a) * this.bounds.r * 0.95;
+    const y = this.bounds.y + Math.sin(a) * this.bounds.r * 0.95;
+    const flock = this.newFlock(x, y);
+    flock.hunting = true;
+    for (let i = 0; i < r.size; i++) this.spawnNear(r.kinds[Math.floor(this.rand() * r.kinds.length)]!, x, y, flock);
+  }
+
   /**
    * Flock-level decisions: drop the dead, track centres, engage together, and while idle roam,
    * join other flocks or shed members into new flocks.
@@ -538,7 +605,8 @@ export class Combat {
       f.provoked = Math.max(0, f.provoked - dt);
       f.engaged =
         player.targetable &&
-        (f.provoked > 0 ||
+        (f.hunting ||
+          f.provoked > 0 ||
           near(params.boids.swarm.aggroRange) ||
           (f.engaged && near(params.boids.swarm.disengageRange)));
     }
