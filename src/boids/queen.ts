@@ -34,7 +34,7 @@ export const QUEEN: BoidType<QueenParams> = {
     recruitRange: 900,
     triggerRange: 110,
     windup: 0.8,
-    blastRadius: 150,
+    blastRadius: 105,
     damage: 12,
     playerPush: 950,
     playerLift: 520,
