@@ -1,7 +1,7 @@
 import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
 import { params } from "./tuning";
-import { BLAST_TIME, Combat, hitStop, type Blast, type Boid } from "./combat";
+import { BLAST_TIME, Combat, hitStop, type Blast, type Boid, type ComboStep, type Slash } from "./combat";
 import { generatePlanet, type Planet } from "./planet";
 import {
   levelBase,
@@ -253,8 +253,12 @@ const player = {
   invuln: 0,
   swordCd: 0,
   spearCd: 0,
-  /** Attack being aimed (key held), or null. */
-  aim: null as null | { weapon: Weapon; t: number; angle: number },
+  /** Attack being aimed (key held), or null; `step` is the sword combo's strike it will be. */
+  aim: null as null | { weapon: Weapon; t: number; angle: number; step: ComboStep },
+  /** The sword combo's next strike, open for `left` more seconds after a hit (then back to the 1st). */
+  combo: { step: 1 as ComboStep, left: 0 },
+  /** The thrust lunging at its target (it strikes once near), or null. */
+  lunge: null as null | { target: Boid; t: number; angle: number; power: number },
 };
 
 /** Hang on the rim of the start island, facing its nearest neighbour, at full health. */
@@ -276,6 +280,8 @@ function resetPlayer() {
   player.invuln = 0;
   player.swordCd = player.spearCd = 0;
   player.aim = null;
+  player.combo = { step: 1, left: 0 };
+  player.lunge = null;
 }
 
 /** The player's look and animation. */
@@ -290,7 +296,11 @@ function avatarView(): AvatarView {
     alt: p.ralt,
     facing: p.facing,
     vz: p.vz,
-    aim: p.aim ? { weapon: p.aim.weapon, angle: p.aim.angle, power: aimPower() } : null,
+    aim: p.lunge
+      ? { weapon: "sword", angle: p.lunge.angle, power: p.lunge.power }
+      : p.aim
+        ? { weapon: p.aim.weapon, angle: p.aim.angle, power: aimPower() }
+        : null,
     spearReady: unlocked("spear") && p.spearCd <= 0,
     frozen: p.freeze > 0,
   };
@@ -501,11 +511,18 @@ function pushPlayer(vx: number, vy: number, vz: number, hard = false) {
   const e = islands[p.island]!.pointAt(p.s);
   const along = vx * e.tx + vy * e.ty;
   const out = Math.max(Math.abs(vx * e.nx + vy * e.ny), Math.hypot(vx, vy) * 0.6);
+  leaveRim(e.nx * out + e.tx * along, e.ny * out + e.ty * along, vz);
+}
+
+/** Let go of the rim into the air, from just off it, at this velocity. */
+function leaveRim(vx: number, vy: number, vz: number) {
+  const p = player;
+  const e = islands[p.island]!.pointAt(p.s);
   p.x = e.x + e.nx * 12;
   p.y = e.y + e.ny * 12;
   p.alt = ISLAND_TOP;
-  p.vx = e.nx * out + e.tx * along;
-  p.vy = e.ny * out + e.ty * along;
+  p.vx = vx;
+  p.vy = vy;
   p.vz = vz;
   p.mode = "air";
   p.airTime = 0;
@@ -828,7 +845,8 @@ function update(dt: number, dtReal: number) {
       rumblePad(0.15, 0.2, 60);
     }
 
-    if (!p.aim) steerAir(dir, dt);
+    if (p.lunge) steerLunge(p.lunge.target);
+    else if (!p.aim) steerAir(dir, dt);
     const f: Flight = { x: p.x, y: p.y, alt: p.alt, vx: p.vx, vy: p.vy, vz: p.vz, t: p.airTime };
     const hit = stepFlight(f, dt, p.launchIsland);
     Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vz: f.vz, airTime: f.t });
@@ -889,12 +907,14 @@ function update(dt: number, dtReal: number) {
     push: pushPlayer,
   });
   // Hits in the air refill the double jump and some focus; sword hits also bounce you up.
-  // Sword hits freeze the player too, by damage dealt (the target freezes in Combat).
-  for (const { weapon, damage } of combat.takePlayerHits()) {
+  // Sword hits freeze the player too, by damage dealt (the target freezes in Combat), and open
+  // the window for the combo's next strike.
+  for (const { weapon, damage, step } of combat.takePlayerHits()) {
     if (weapon === "sword" && p.mode !== "lost") {
       p.freeze = Math.max(p.freeze, hitStop(damage));
       p.redirect = p.mode === "air";
     }
+    if (weapon === "sword" && step) p.combo = { step: ((step % 3) + 1) as ComboStep, left: params.player.sword.comboWindow };
     if (p.mode !== "air") continue;
     p.airJumps = 1;
     p.focus = Math.min(1, p.focus + params.player.focus.perHit);
@@ -987,6 +1007,18 @@ function steerAir(dir: Vec, dt: number) {
   p.vy = Math.sin(a) * sp;
 }
 
+/** The thrust's lunge: straight at its target, closing in on its altitude too. */
+function steerLunge(target: Boid) {
+  const p = player;
+  const dx = target.x - p.x;
+  const dy = target.y - p.y;
+  const l = Math.hypot(dx, dy) || 1;
+  const speed = params.player.thrust.lungeSpeed;
+  p.vx = (dx / l) * speed;
+  p.vy = (dy / l) * speed;
+  p.vz = Math.max(-speed / 2, Math.min(speed / 2, (target.alt - p.alt) * 10));
+}
+
 /**
  * Turn an aim angle toward the input direction. The turn rate starts at `turnRate` and falls off
  * as `progress` (0..1 over the aim time) builds, down to `minTurnRate` for fine-tuning.
@@ -1050,7 +1082,9 @@ function clampAimToRim(angle: number): number {
 }
 
 /**
- * Sword (Z / J) and spear (X / K): hold to aim and power up, release to strike.
+ * Sword (Z / J) and spear (X / K): hold to aim and power up, release to strike. The sword strikes
+ * in a combo: a hit opens a short window in which the next strike is the next one along (swipe,
+ * lunging thrust, smash, then the swipe again); otherwise it starts over at the swipe.
  * The aim starts at the closest enemy in range (except in gamepad mode with the stick pushed,
  * which starts along the stick), else straight out from the rim, or along the input / flight in the air, and turns toward the input direction, quickly at first and slower and slower until it locks at full power.
  * In mouse mode the aim simply follows the cursor, and the mouse buttons attack too.
@@ -1059,8 +1093,15 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
   const p = player;
   p.swordCd -= dt;
   p.spearCd -= dt;
+  p.combo.left -= dt;
+  if (p.combo.left <= 0) p.combo.step = 1;
   if (p.mode === "lost") {
     p.aim = null;
+    p.lunge = null;
+    return;
+  }
+  if (p.lunge) {
+    updateLunge(dt, p.lunge);
     return;
   }
   const codes = (w: Weapon) => (inputMode === "mouse" ? [...WEAPON_KEYS[w], WEAPON_BUTTONS[w]] : WEAPON_KEYS[w]);
@@ -1088,7 +1129,8 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
     } else {
       angle = Math.atan2(p.vy, p.vx);
     }
-    p.aim = { weapon, t: 0, angle: clampAimToRim(angle) };
+    const step = weapon === "sword" && p.combo.left > 0 ? p.combo.step : 1;
+    p.aim = { weapon, t: 0, angle: clampAimToRim(angle), step };
     sfx.aim(weapon);
     return;
   }
@@ -1114,10 +1156,26 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
     const ax = Math.cos(aim.angle);
     const ay = Math.sin(aim.angle);
     const alt = p.mode === "hang" ? ISLAND_TOP + 2 : p.alt;
+    p.aim = null;
     if (aim.weapon === "sword") {
-      combat.swing(p.x, p.y, alt, ax, ay, power);
+      // The window is spent: only a hit with this strike opens it again.
+      p.combo = { step: 1, left: 0 };
+      if (aim.step === 2) {
+        // The thrust lunges at the closest enemy in its reach, and strikes once near it.
+        const target = combat.thrustTarget(p.x, p.y, alt, ax, ay, power);
+        if (target) {
+          const speed = params.player.thrust.lungeSpeed;
+          if (p.mode === "hang") leaveRim(ax * speed, ay * speed, 0);
+          p.lunge = { target, t: 0, angle: aim.angle, power };
+          sfx.lunge();
+          avatar.jump();
+          return;
+        }
+        combat.thrust(p.x, p.y, alt, ax, ay, power);
+      } else if (aim.step === 3) combat.smash(p.x, p.y, alt, ax, ay, power);
+      else combat.swing(p.x, p.y, alt, ax, ay, power);
       sfx.swing(power);
-      avatar.strike("sword", aim.angle, power);
+      avatar.strike("sword", aim.angle, power, aim.step === 2);
       p.swordCd = params.player.sword.cooldown;
     } else {
       combat.throwSpear(p.x, p.y, alt, ax, ay, power);
@@ -1125,11 +1183,40 @@ function updateAttacks(dt: number, dtReal: number, dir: Vec) {
       avatar.strike("spear", aim.angle, power);
       p.spearCd = params.player.spear.cooldown;
     }
-    p.aim = null;
   }
 }
 
-/** Aim indicator: a fan showing the sword's reach, or an arrow for the spear; both grow with power. */
+/**
+ * The thrust's lunge: it strikes once within `thrust.strikeDistance` of its target, or when the
+ * target is gone, the lunge runs out of time or it lands on a rim. The strike keeps a little of
+ * the lunge's speed.
+ */
+function updateLunge(dt: number, lunge: NonNullable<typeof player.lunge>) {
+  const p = player;
+  const t = params.player.thrust;
+  const b = lunge.target;
+  lunge.t += dt;
+  if (b.hp > 0) lunge.angle = clampAimToRim(Math.atan2(b.y - p.y, b.x - p.x));
+  const near = Math.hypot(b.x - p.x, b.y - p.y) <= t.strikeDistance + b.r;
+  if (b.hp > 0 && !near && lunge.t < t.lungeTime && p.mode === "air") return;
+  p.lunge = null;
+  const ax = Math.cos(lunge.angle);
+  const ay = Math.sin(lunge.angle);
+  const alt = p.mode === "hang" ? ISLAND_TOP + 2 : p.alt;
+  combat.thrust(p.x, p.y, alt, ax, ay, lunge.power, t.strikeLength);
+  p.vx *= 0.35;
+  p.vy *= 0.35;
+  p.vz = Math.max(0, p.vz * 0.35);
+  sfx.swing(lunge.power);
+  avatar.strike("sword", lunge.angle, lunge.power, true);
+  p.swordCd = params.player.sword.cooldown;
+}
+
+/**
+ * Aim indicator: the reach of the sword's coming strike (a fan for the swipe, a long, thin
+ * rectangle for the thrust, a square and its blast for the smash), or an arrow for the spear;
+ * both grow with power.
+ */
 function drawAimIndicator() {
   const p = player;
   if (!p.aim || p.mode === "lost") return;
@@ -1142,7 +1229,40 @@ function drawAimIndicator() {
   const col = p.aim.weapon === "sword" ? "255,226,150" : "150,230,255";
 
   ctx.lineJoin = "round";
-  if (p.aim.weapon === "sword") {
+  const fillStroke = () => {
+    ctx.fillStyle = `rgba(${col},${(0.1 + 0.18 * power) * pulse})`;
+    ctx.fill();
+    ctx.strokeStyle = `rgba(${col},${(0.45 + 0.4 * power) * pulse})`;
+    ctx.lineWidth = 1.5 + 1.5 * power;
+    ctx.stroke();
+  };
+  const step = p.aim.weapon === "sword" ? p.aim.step : 0;
+  if (step === 2 || step === 3) {
+    const lerp = (x: number, y: number) => x + (y - x) * power;
+    const th = params.player.thrust;
+    const sm = params.player.smash;
+    const len = step === 2 ? lerp(th.length, th.maxLength) : lerp(sm.size, sm.maxSize);
+    const hw = step === 2 ? th.width / 2 : len / 2;
+    rectPath(p.rx, p.ry, alt, Math.cos(a), Math.sin(a), len, hw);
+    fillStroke();
+    if (step === 3) {
+      // The blast's reach, faintly.
+      const cx = p.rx + (Math.cos(a) * len) / 2;
+      const cy = p.ry + (Math.sin(a) * len) / 2;
+      const n = 32;
+      ctx.beginPath();
+      for (let i = 0; i <= n; i++) {
+        const q = proj.project(cx + Math.cos((i / n) * Math.PI * 2) * sm.blastRadius, cy + Math.sin((i / n) * Math.PI * 2) * sm.blastRadius, alt);
+        if (i) ctx.lineTo(q.x, q.y);
+        else ctx.moveTo(q.x, q.y);
+      }
+      ctx.setLineDash([4, 5]);
+      ctx.strokeStyle = `rgba(${col},${0.35 * pulse})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  } else if (step === 1) {
     const R = params.player.sword.range + (params.player.sword.maxRange - params.player.sword.range) * power;
     const n = 16;
     ctx.beginPath();
@@ -1153,11 +1273,7 @@ function drawAimIndicator() {
       ctx.lineTo(q.x, q.y);
     }
     ctx.closePath();
-    ctx.fillStyle = `rgba(${col},${(0.1 + 0.18 * power) * pulse})`;
-    ctx.fill();
-    ctx.strokeStyle = `rgba(${col},${(0.45 + 0.4 * power) * pulse})`;
-    ctx.lineWidth = 1.5 + 1.5 * power;
-    ctx.stroke();
+    fillStroke();
   }
 
   // Arrow along the aim; longer and broader with power.
@@ -1740,6 +1856,7 @@ function playCombatSounds() {
     else if (ev.type === "lunge") sfx.lunge(at);
     else if (ev.type === "windup") sfx.windup(ev.kind!, ev.dur!, at);
     else if (ev.type === "interrupt") sfx.interrupt(at);
+    else if (ev.type === "smash") sfx.smash(at);
     else if (ev.type === "explode") {
       sfx.explosion({ pan: at.pan, gain: Math.max(0.35, at.gain) });
       rumblePad(0.6 * at.gain, 0.3 * at.gain, 200);
@@ -1863,8 +1980,18 @@ function pushCombatDrawables(list: Drawable[], time: number) {
   }
 }
 
-function drawSlash(sl: { x: number; y: number; alt: number; dx: number; dy: number; age: number; range: number; power: number }) {
+/** Path of a rectangle reaching `len` out from (x, y) along (dx, dy), `hw` either side. */
+function rectPath(x: number, y: number, alt: number, dx: number, dy: number, len: number, hw: number, tip = 0) {
+  const at = (u: number, v: number) => proj.project(x + dx * u - dy * v, y + dy * u + dx * v, alt);
+  const pts = tip ? [at(0, -hw * 0.3), at(len - tip, -hw), at(len, 0), at(len - tip, hw), at(0, hw * 0.3)] : [at(0, -hw), at(len, -hw), at(len, hw), at(0, hw)];
+  ctx.beginPath();
+  pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+  ctx.closePath();
+}
+
+function drawSlash(sl: Slash) {
   const t = sl.age / params.player.sword.activeTime;
+  if (sl.step !== 1) return drawStab(sl, t);
   const fade = 1 - Math.min(1, sl.age / (params.player.sword.activeTime + params.player.sword.fadeTime));
   const base = Math.atan2(sl.dy, sl.dx);
   const a0 = base - params.player.sword.arc;
@@ -1886,6 +2013,32 @@ function drawSlash(sl: { x: number; y: number; alt: number; dx: number; dy: numb
   ctx.closePath();
   ctx.fillStyle = sl.power >= 1 ? `rgba(255,236,170,${0.95 * fade})` : `rgba(255,250,235,${0.9 * fade})`;
   ctx.fill();
+}
+
+/** The thrust shoots out a thin spike along its reach; the smash punches out its square. */
+function drawStab(sl: Slash, t: number) {
+  const sw = params.player.sword;
+  const fade = 1 - Math.min(1, sl.age / (sw.activeTime + sw.fadeTime));
+  const grow = 1 - (1 - Math.min(1, t * 1.8)) ** 2;
+  const rgb = sl.power >= 1 ? "255,236,170" : "255,250,235";
+  if (sl.step === 2) {
+    const len = sl.range * grow;
+    rectPath(sl.x, sl.y, sl.alt, sl.dx, sl.dy, len, sl.halfWidth * 0.7, Math.min(len, 24));
+    ctx.fillStyle = `rgba(${rgb},${0.9 * fade})`;
+    ctx.fill();
+    return;
+  }
+  const k = 0.6 + 0.4 * grow;
+  const len = sl.range * k;
+  const hw = sl.halfWidth * k;
+  // Centred on the square however far it has grown.
+  const off = (sl.range - len) / 2;
+  rectPath(sl.x + sl.dx * off, sl.y + sl.dy * off, sl.alt, sl.dx, sl.dy, len, hw);
+  ctx.fillStyle = `rgba(${rgb},${0.55 * fade})`;
+  ctx.fill();
+  ctx.strokeStyle = `rgba(${rgb},${0.95 * fade})`;
+  ctx.lineWidth = 3;
+  ctx.stroke();
 }
 
 /**

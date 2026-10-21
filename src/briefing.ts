@@ -124,7 +124,7 @@ function playerCard(b: BriefingInfo) {
     attacks.push({
       icon: ICONS.sword,
       name: "Sword",
-      text: "Hold to power up. Bounce on aerial hits.",
+      text: "Hold to power up. Bounce on aerial hits. Hit to chain a lunging thrust, then a smash.",
       stats: [`${fmt(sw.damage)}–${fmt(sw.maxDamage)} dmg`, `${fmt(sw.cooldown)}s recharge`],
       input: gamepad ? `${pad("PadB")}${or}${pad("PadRT")}` : mouse ? `${mouseButton("left")}${or}${kbd("Z")}` : `${kbd("Z")}${or}${kbd("J")}`,
       fresh: b.fresh.includes("sword"),

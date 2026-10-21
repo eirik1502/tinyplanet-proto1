@@ -98,6 +98,13 @@ export interface Shot {
   scale: number; // visual / hit size multiplier
 }
 
+/**
+ * The sword's combo: a hit opens a short window in which the next strike is the next one along.
+ * 1 is the swipe (a sector), 2 a long, thin lunging thrust (a rectangle), 3 a small, strong smash
+ * (a square) that also sets off a blast.
+ */
+export type ComboStep = 1 | 2 | 3;
+
 export interface Slash {
   x: number;
   y: number;
@@ -105,7 +112,11 @@ export interface Slash {
   dx: number;
   dy: number;
   age: number;
+  step: ComboStep;
+  /** The swipe's radius, or how far the thrust's or smash's rectangle reaches. */
   range: number;
+  /** Half-width of the thrust's or smash's rectangle. */
+  halfWidth: number;
   damage: number;
   power: number; // 0..1
   hits: Set<Boid>;
@@ -164,7 +175,7 @@ export function hitStop(damage: number) {
 
 /** Something that happened in combat, for sound. */
 export interface CombatEvent {
-  type: "hit" | "shot" | "lunge" | "windup" | "interrupt" | "explode" | "anger" | "queenBlast" | "block" | "thud";
+  type: "hit" | "shot" | "lunge" | "windup" | "interrupt" | "explode" | "smash" | "anger" | "queenBlast" | "block" | "thud";
   x: number;
   y: number;
   alt: number;
@@ -176,8 +187,11 @@ export interface CombatEvent {
 }
 
 export interface PlayerHit {
-  weapon: "sword" | "spear";
+  /** "blast": caught by the smash's blast rather than the blade. */
+  weapon: "sword" | "spear" | "blast";
   damage: number;
+  /** For sword hits: which strike of the combo landed it. */
+  step?: ComboStep;
 }
 
 const reach = (b: Boid) => b.type.reach?.(b) ?? 0;
@@ -188,6 +202,12 @@ const playerHurtbox = (p: PlayerView): Hurtbox => box(p.x, p.y, p.alt, params.pl
 function shotBox(s: Shot): Hitbox & Hurtbox {
   const radius = s.fromPlayer ? params.player.spear.hitRadius * s.scale : s.radius;
   return box(s.x, s.y, s.alt, radius);
+}
+
+/** A sword strike's hitbox: the swipe's sector, or the thrust's or smash's rectangle. */
+function slashHitbox(s: Slash): Hitbox {
+  if (s.step === 1) return { ...box(s.x, s.y, s.alt, s.range), sector: { dx: s.dx, dy: s.dy, arc: params.player.sword.arc } };
+  return { ...box(s.x, s.y, s.alt, s.range), rect: { dx: s.dx, dy: s.dy, length: s.range, halfWidth: s.halfWidth } };
 }
 
 const CRUISE_ALT = ISLAND_TOP + 35;
@@ -343,11 +363,75 @@ export class Combat {
   // Player attacks
   // -------------------------------------------------------------------------------------------
 
-  /** Sword swipe; `power` 0..1 scales reach and damage. */
+  /** Sword swipe (the combo's 1st strike); `power` 0..1 scales reach and damage. */
   swing(x: number, y: number, alt: number, dx: number, dy: number, power: number) {
     const range = lerp(params.player.sword.range, params.player.sword.maxRange, power);
     const damage = lerp(params.player.sword.damage, params.player.sword.maxDamage, power);
-    this.slashes.push({ x, y, alt, dx, dy, age: 0, range, damage, power, hits: new Set() });
+    this.slashes.push({ x, y, alt, dx, dy, age: 0, step: 1, range, halfWidth: 0, damage, power, hits: new Set() });
+  }
+
+  /** The thrust's rectangle from (x, y) along (dx, dy); its full reach unless `length` is given. */
+  thrustBox(x: number, y: number, alt: number, dx: number, dy: number, power: number, length?: number): Hitbox {
+    const t = params.player.thrust;
+    length ??= lerp(t.length, t.maxLength, power);
+    return { ...box(x, y, alt, length), rect: { dx, dy, length, halfWidth: t.width / 2 } };
+  }
+
+  /** The closest live enemy inside the thrust's reach: what the thrust lunges at. */
+  thrustTarget(x: number, y: number, alt: number, dx: number, dy: number, power: number): Boid | null {
+    const hitbox = this.thrustBox(x, y, alt, dx, dy, power);
+    let best: Boid | null = null;
+    let bestD = Infinity;
+    for (const b of this.boids) {
+      if (b.hp <= 0 || !overlaps(hitbox, boidHurtbox(b))) continue;
+      const d = Math.hypot(b.x - x, b.y - y);
+      if (d < bestD) {
+        best = b;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+
+  /** Sword thrust (the 2nd strike): a thin rectangle, its full reach unless `length` is given. */
+  thrust(x: number, y: number, alt: number, dx: number, dy: number, power: number, length?: number) {
+    const t = params.player.thrust;
+    const r = this.thrustBox(x, y, alt, dx, dy, power, length).rect!;
+    const damage = lerp(t.damage, t.maxDamage, power);
+    this.slashes.push({ x, y, alt, dx, dy, age: 0, step: 2, range: r.length, halfWidth: r.halfWidth, damage, power, hits: new Set() });
+  }
+
+  /**
+   * Sword smash (the 3rd strike): a small square just ahead, hitting hard, and a blast from its
+   * centre that hurts and throws back everything else around it, more the closer it is.
+   */
+  smash(x: number, y: number, alt: number, dx: number, dy: number, power: number) {
+    const sm = params.player.smash;
+    const size = lerp(sm.size, sm.maxSize, power);
+    const damage = lerp(sm.damage, sm.maxDamage, power);
+    const slash: Slash = { x, y, alt, dx, dy, age: 0, step: 3, range: size, halfWidth: size / 2, damage, power, hits: new Set() };
+    this.slashes.push(slash);
+
+    const cx = x + dx * size / 2;
+    const cy = y + dy * size / 2;
+    const R = sm.blastRadius;
+    this.event("smash", cx, cy, alt);
+    this.blasts.push({ x: cx, y: cy, alt, age: 0, radius: R, rgb: "255,226,150" });
+    this.burst(cx, cy, alt, 14, "#ffe9a8");
+    const square = slashHitbox(slash);
+    const blast = box(cx, cy, alt, R);
+    for (const b of this.boids) {
+      // Whatever the square itself hits takes that hit instead.
+      if (b.hp <= 0 || overlaps(square, boidHurtbox(b)) || !overlaps(blast, boidHurtbox(b))) continue;
+      const ox = b.x - cx;
+      const oy = b.y - cy;
+      const d = Math.hypot(ox, oy);
+      const near = 1 - Math.min(1, Math.max(0, d - b.r) / R);
+      this.damage(b, sm.blastDamage * near, cx, cy, "blast");
+      const push = sm.blastPush * near * (b === this.queen ? 0.25 : 1);
+      b.vx += (ox / (d || 1)) * push;
+      b.vy += (oy / (d || 1)) * push;
+    }
   }
 
   /** Spear throw; `power` 0..1 scales speed, damage and size. */
@@ -386,8 +470,8 @@ export class Combat {
     this.events.push({ type, x, y, alt, ...extra });
   }
 
-  private damage(b: Boid, dmg: number, fromX: number, fromY: number, weapon: PlayerHit["weapon"]) {
-    if (b.hp <= 0) return;
+  private damage(b: Boid, dmg: number, fromX: number, fromY: number, weapon: PlayerHit["weapon"], step?: ComboStep) {
+    if (b.hp <= 0 || dmg <= 0) return;
     const isQueen = b === this.queen;
     if (isQueen && this.queenShielded) {
       // The shield turns the hit; it still angers her guard.
@@ -396,7 +480,7 @@ export class Combat {
       this.provokeEscort();
       return;
     }
-    this.playerHits.push({ weapon, damage: dmg });
+    this.playerHits.push({ weapon, damage: dmg, step });
     b.freeze = Math.max(b.freeze, hitStop(dmg));
     b.hp -= dmg;
     b.flash = 0.15;
@@ -578,14 +662,11 @@ export class Combat {
     for (const s of this.slashes) {
       s.age += dt;
       if (s.age > params.player.sword.activeTime) continue;
-      const hitbox: Hitbox = {
-        ...box(s.x, s.y, s.alt, s.range),
-        sector: { dx: s.dx, dy: s.dy, arc: params.player.sword.arc },
-      };
+      const hitbox = slashHitbox(s);
       for (const b of this.boids) {
         if (b.hp <= 0 || s.hits.has(b) || !overlaps(hitbox, boidHurtbox(b))) continue;
         s.hits.add(b);
-        this.damage(b, s.damage, s.x, s.y, "sword");
+        this.damage(b, s.damage, s.x, s.y, "sword", s.step);
       }
       // The blade also blocks enemy projectiles passing through the swipe.
       for (const sh of this.shots) {

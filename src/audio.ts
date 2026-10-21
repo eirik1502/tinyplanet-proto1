@@ -327,6 +327,12 @@ export const sfx = {
     noise({ f: 2500, f2: 300, q: 0.7, dur: 0.6, vol: 0.35 * g, pan, filter: "lowpass", wet: 0.6 });
     for (const [i, n] of [79, 75, 72].entries()) tone({ f: midi(n), type: "sine", dur: 0.7, vol: 0.06 * g, pan, at: 0.06 + i * 0.05, wet: 0.8 });
   },
+  /** The sword's smash going off: a short, punchy thump. */
+  smash(at: At = {}) {
+    const g = at.gain ?? 1;
+    tone({ f: 180, f2: 50, type: "sine", dur: 0.3, vol: 0.4 * g, pan: at.pan });
+    noise({ f: 2500, f2: 300, q: 0.7, dur: 0.35, vol: 0.25 * g, pan: at.pan, filter: "lowpass", wet: 0.3 });
+  },
   explosion(at: At = {}) {
     const g = at.gain ?? 1;
     tone({ f: 120, f2: 30, type: "sine", dur: 0.6, vol: 0.5 * g, pan: at.pan });

@@ -84,4 +84,10 @@ Every flight has one double jump; it heads where you aim (the cursor, or the dir
 focus; a sword hit also bounces you up. Slow motion while winding up an air attack drains focus; grabbing a rim refills
 it. The first dip below the rim in a flight springs you back up once.
 
+The sword strikes in a 1-2-3 combo: a hit opens a short window in which the next strike is the next
+one along, else it starts over. 1 is the swipe; 2 a long, thin thrust that lunges at the closest
+enemy in its reach and strikes once near it (off a rim, too); 3 a small, strong smash whose blast
+hurts and throws back everything around it, more the closer it is. The aim indicator shows which
+strike is coming.
+
 Game parameters can be tweaked live from the Tuning section of the dev panel (defaults in `src/params.ts`).

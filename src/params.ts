@@ -112,6 +112,27 @@ export const DEFAULTS = {
       activeTime: 0.18, // Active time (s)
       fadeTime: 0.12,
       cooldown: 0.28, // Cooldown (s)
+      comboWindow: 0.8, // Combo window after a hit (s)
+    },
+    thrust: {
+      length: 120, // Reach
+      maxLength: 170, // Reach at full power
+      width: 22, // Width
+      damage: 3, // Damage
+      maxDamage: 6, // Damage at full power
+      lungeSpeed: 750, // Lunge speed
+      lungeTime: 0.3, // Longest lunge (s)
+      strikeDistance: 34, // Strikes this close to the target
+      strikeLength: 60, // Reach of the strike after a lunge
+    },
+    smash: {
+      size: 46, // Size
+      maxSize: 62, // Size at full power
+      damage: 6, // Damage
+      maxDamage: 12, // Damage at full power
+      blastRadius: 85, // Blast radius
+      blastDamage: 4, // Blast damage (at the centre)
+      blastPush: 520, // Blast knockback (at the centre)
     },
     spear: {
       speed: 720, // Speed

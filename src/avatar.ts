@@ -104,7 +104,8 @@ export class Avatar {
   private flip = 1;
   private hurtT = 0;
   private hurtDir = 0;
-  private strikeAnim: { weapon: AvatarWeapon; angle: number; power: number; t: number } | null = null;
+  /** `thrust`: a straight jab along the angle rather than a sweep across it. */
+  private strikeAnim: { weapon: AvatarWeapon; angle: number; power: number; t: number; thrust: boolean } | null = null;
   private cloak: { x: number; y: number; px: number; py: number }[] = [];
   private ghosts: { x: number; y: number; alt: number; angle: number; life: number }[] = [];
   private ghostAcc = 0;
@@ -138,8 +139,8 @@ export class Avatar {
     this.kick(-0.25);
   }
 
-  strike(weapon: AvatarWeapon, angle: number, power: number) {
-    this.strikeAnim = { weapon, angle, power, t: 0 };
+  strike(weapon: AvatarWeapon, angle: number, power: number, thrust = false) {
+    this.strikeAnim = { weapon, angle, power, t: 0, thrust };
     this.kick(weapon === "sword" ? 0.12 + 0.12 * power : 0.2);
   }
 
@@ -471,7 +472,11 @@ export class Avatar {
     if (v.aim?.weapon === "sword" || strike?.weapon === "sword") {
       let blade: number;
       let reach: number;
-      if (strike?.weapon === "sword") {
+      if (strike?.weapon === "sword" && strike.thrust) {
+        // Jab straight out along the thrust.
+        blade = strikeLocal;
+        reach = 3 + (6 + strike.power * 2) * easeOut(Math.min(1, strike.t / SWING_TIME));
+      } else if (strike?.weapon === "sword") {
         // Sweep through the slash's arc, then ease back.
         const p = easeOut(Math.min(1, strike.t / SWING_TIME));
         blade = strikeLocal - 1.35 + 2.7 * p;

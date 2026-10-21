@@ -7,7 +7,8 @@ import { params } from "./tuning";
 //
 // Both are circles on the game plane around (x, y), at altitude `alt`. A hitbox can be cut down
 // to a sector: then it only hits within `arc` radians either side of its facing (dx, dy), except
-// right at its centre (within SECTOR_CORE), where everything is hit.
+// right at its centre (within SECTOR_CORE), where everything is hit. Or it can be a rectangle
+// reaching out from (x, y) along its facing instead (its radius is then ignored).
 
 export interface Box {
   x: number;
@@ -23,6 +24,8 @@ export type Hurtbox = Box;
 export interface Hitbox extends Box {
   /** Sector: unit facing on the game plane and half-angle (rad). Omitted: the full circle. */
   sector?: { dx: number; dy: number; arc: number };
+  /** Rectangle: unit facing, how far it reaches along it, and its half-width either side. */
+  rect?: { dx: number; dy: number; length: number; halfWidth: number };
 }
 
 /** Within this distance of a sector hitbox's centre, its facing doesn't matter. */
@@ -44,6 +47,15 @@ export function overlaps(hit: Hitbox, hurt: Hurtbox): boolean {
   if (outOfHitHeight(hurt.alt, hit.alt, (hit.height ?? 0) + (hurt.height ?? 0)) !== 0) return false;
   const ox = hurt.x - hit.x;
   const oy = hurt.y - hit.y;
+  const r = hit.rect;
+  if (r) {
+    // Distance from the hurtbox's centre to the nearest point of the rectangle.
+    const u = ox * r.dx + oy * r.dy;
+    const v = -ox * r.dy + oy * r.dx;
+    const cu = u - Math.max(0, Math.min(r.length, u));
+    const cv = v - Math.max(-r.halfWidth, Math.min(r.halfWidth, v));
+    return Math.hypot(cu, cv) <= hurt.radius;
+  }
   const d = Math.hypot(ox, oy);
   if (d > hit.radius + hurt.radius) return false;
   const s = hit.sector;
