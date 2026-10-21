@@ -1,3 +1,4 @@
+import type { FlockSpec } from "./flocks";
 import { DEFAULT_STYLE, Island, mulberry32, type IslandStyle, type Vec } from "./island";
 
 // Procedural planet: islands inside a circular boundary, where the player starts, where the queen
@@ -25,17 +26,14 @@ export interface Planet {
   /** Outer boundary: no islands beyond it, and boids can never leave it. */
   bounds: { x: number; y: number; r: number };
   startIsland: number;
+  /** Where the queen lives (also on planets without her, for flock placement maps). */
   queenHome: { x: number; y: number };
-  /** The queen's escort: they spawn around her and share her flock. */
-  escort: SpawnKind[];
-  /** The other flocks: where each spawns and who is in it, and whether it hunts the player from the start. */
-  flocks: { x: number; y: number; kinds: SpawnKind[]; hunting?: boolean }[];
-  /** 0 = no queen (dev arenas). */
-  queenHp: number;
+  /** The queen, her param overrides and her escort flock; null for none. */
+  queen: { x: number; y: number; params: Record<string, number>; escort: FlockSpec } | null;
+  /** The other flocks and where each spawns. */
+  flocks: { x: number; y: number; spec: FlockSpec }[];
   theme: Theme;
 }
-
-export type SpawnKind = "melee" | "ranged" | "bomber";
 
 /** A spot on the planet: its position, the boundary radius, and its distance from the centre as a fraction of it. */
 export interface Spot {
@@ -88,19 +86,15 @@ export interface SwarmSpots {
 export interface PlanetOptions {
   radius: number;
   layout: Layout;
+  islandCount: number;
   /** Relative chance (0..1) a flock spawns at a spot. Default: anywhere. */
   flockWeight?: (at: Spot, swarm: SwarmSpots) => number;
+  /** Flocks spawn at least this far from the start island's centre. */
+  minFromStart: number;
   queenSpot?: QueenSpot;
   theme?: ThemeHint;
-  islandCount: number;
-  meleeCount: number;
-  rangedCount: number;
-  bomberCount: number;
-  /** Members per flock at the start (the last flock may be smaller). */
-  flockSize: number;
-  /** How many of the swarm escort the queen. */
-  escortCount: number;
-  queenHp: number;
+  queen: { params: Record<string, number>; escort: FlockSpec } | null;
+  flocks: FlockSpec[];
 }
 
 export function generatePlanet(seed: number, opt: PlanetOptions): Planet {
@@ -121,33 +115,23 @@ export function generatePlanet(seed: number, opt: PlanetOptions): Planet {
   const clearOfIslands = (x: number, y: number) =>
     islands.every((i) => Math.hypot(i.cx - x, i.cy - y) > i.radius * 1.35 + 20);
 
-  // Shuffle the swarm, give the queen her escort, and split the rest into flocks.
-  const kinds: SpawnKind[] = [
-    ...Array<SpawnKind>(opt.meleeCount).fill("melee"),
-    ...Array<SpawnKind>(opt.rangedCount).fill("ranged"),
-    ...Array<SpawnKind>(opt.bomberCount).fill("bomber"),
-  ];
-  for (let i = kinds.length - 1; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1));
-    [kinds[i], kinds[j]] = [kinds[j]!, kinds[i]!];
-  }
-  const escort = kinds.splice(0, opt.escortCount);
-  const size = Math.max(1, Math.round(opt.flockSize));
+  // Spread the flocks over open sky, away from the start, following the placement map.
   const flocks: Planet["flocks"] = [];
   const swarm: SwarmSpots = { start: { x: start.cx, y: start.cy }, queen: queenHome, R };
   const tryCount = 8000;
-  for (let tries = 0; kinds.length && tries < tryCount; tries++) {
+  for (let tries = 0; flocks.length < opt.flocks.length && tries < tryCount; tries++) {
     const a = rand() * Math.PI * 2;
     const d = Math.sqrt(rand()) * R * 0.92;
     const x = Math.cos(a) * d;
     const y = Math.sin(a) * d;
-    if (Math.hypot(x - start.cx, y - start.cy) < 520 || !clearOfIslands(x, y)) continue;
+    if (Math.hypot(x - start.cx, y - start.cy) < opt.minFromStart || !clearOfIslands(x, y)) continue;
     // Follow the placement map for the first half of the tries, so a narrow map can't strand flocks.
     if (opt.flockWeight && tries < tryCount / 2 && rand() > opt.flockWeight({ x, y, R, rho: d / R }, swarm)) continue;
-    flocks.push({ x, y, kinds: kinds.splice(0, size) });
+    flocks.push({ x, y, spec: opt.flocks[flocks.length]! });
   }
+  const queen = opt.queen && { ...queenHome, ...opt.queen };
 
-  return { seed, islands, bounds: { x: 0, y: 0, r: R }, startIsland, queenHome, escort, flocks, queenHp: opt.queenHp, theme: generateTheme(rand, opt.theme) };
+  return { seed, islands, bounds: { x: 0, y: 0, r: R }, startIsland, queenHome, queen, flocks, theme: generateTheme(rand, opt.theme) };
 }
 
 /** The widest nominal rim gap that's still a comfortable jump (the gap islands are spaced by). */

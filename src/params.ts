@@ -6,33 +6,6 @@ export const DEFAULTS = {
       modifiersFrom: 9, // Modifiers may appear from level
       twoModifiersFrom: 14, // Up to two modifiers from level
     },
-    intro1: {
-      radius: 450, // Boundary radius
-      islands: 3, // Islands
-      melee: 4, // Melee boids
-      ranged: 0, // Ranged boids
-      bombers: 0, // Bomber boids
-      escort: 4, // Queen's escort
-      queenHp: 6, // Queen health
-    },
-    intro2: {
-      radius: 550, // Boundary radius
-      islands: 5, // Islands
-      melee: 6, // Melee boids
-      ranged: 4, // Ranged boids
-      bombers: 0, // Bomber boids
-      escort: 4, // Queen's escort
-      queenHp: 12, // Queen health
-    },
-    intro3: {
-      radius: 650, // Boundary radius
-      islands: 6, // Islands
-      melee: 8, // Melee boids
-      ranged: 4, // Ranged boids
-      bombers: 3, // Bomber boids
-      escort: 4, // Queen's escort
-      queenHp: 18, // Queen health
-    },
     level4: {
       radius: 700, // Boundary radius
       islands: 7, // Islands
@@ -42,11 +15,6 @@ export const DEFAULTS = {
       radius: 60, // Boundary radius
       islands: 1.6, // Islands
       budget: 9.4, // Swarm budget
-    },
-    costs: {
-      melee: 1, // Melee boid
-      ranged: 1.5, // Ranged boid
-      bomber: 1.5, // Bomber boid
     },
     modifiers: {
       wind: 90, // Wind strength
@@ -157,83 +125,13 @@ export const DEFAULTS = {
       cooldown: 0.45, // Cooldown (s)
     },
   },
-  boids: {
-    swarm: {
-      meleeSpeed: 190, // Melee speed
-      rangedSpeed: 160, // Ranged speed
-      bomberSpeed: 215, // Bomber speed
-      aggroRange: 200, // Aggro range
-      disengageRange: 350, // Disengage range
-      provokedTime: 6, // Hit flock stays engaged (s)
-    },
-    flocking: {
-      neighborRadius: 90, // Neighbour radius
-      separationRadius: 50, // Separation radius
-      separation: 720, // Separation
-      alignment: 0.55, // Alignment
-      cohesion: 0.2, // Cohesion
-      wander: 40, // Wander
-    },
-    flocks: {
-      startSize: 4, // Starting flock size
-      maxSize: 10, // Largest flock from joining
-      roamSpeed: 75, // Roam speed
-      joinChance: 0.08, // Chance to join another flock (per s)
-      joinRange: 700, // Looks for flocks to join within
-      leaveChance: 0.05, // Chance some members leave (per s)
-    },
-    islands: {
-      margin: 26, // Rim clearance
-      avoid: 30, // Avoid strength
-    },
-    queen: {
-      hp: 24, // Health
-      speed: 85, // Speed
-      fleeRange: 320, // Flee range
-      escort: 4, // Escort flock size (at start)
-      threatRadius: 410, // Threat radius
-      recruitRange: 900, // Recruits guards from flocks within
-    },
-  },
   combat: {
     hits: {
       height: 60, // Hits reach up / down
     },
-  },
-  enemyAttacks: {
-    hit: {
-      damage: 2, // Damage per hit (%)
-    },
-    melee: {
-      lungeRange: 95, // Lunge range
-      lungeSpeed: 470, // Lunge speed
-      lungeTime: 0.32, // Lunge time (s)
-      cooldown: 1.3, // Cooldown (s)
-    },
-    ranged: {
-      keepAway: 230, // Keep-away distance
-      range: 420, // Shooting range
-      orbSpeed: 280, // Orb speed
-      orbLife: 2.2, // Orb life (s)
-      orbRadius: 6, // Orb radius
-      cooldown: 1.7, // Cooldown (s)
-    },
-    bomber: {
-      triggerRange: 22, // Trigger range
-      blastRadius: 150, // Blast radius
-      damage: 6, // Damage (%)
-      playerPush: 560, // Push on the player
-      playerLift: 420, // Lift on the player
-      boidPush: 520, // Push on other boids
-    },
-    queen: {
-      triggerRange: 110, // Trigger range
-      windup: 0.8, // Anger before the blast (s)
-      blastRadius: 150, // Blast radius
-      damage: 12, // Damage (%)
-      playerPush: 950, // Push on the player
-      playerLift: 520, // Lift on the player
-      cooldown: 2.5, // Cooldown (s)
+    islands: {
+      margin: 26, // Rim clearance
+      avoid: 30, // Avoid strength
     },
   },
   audio: {

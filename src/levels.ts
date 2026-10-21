@@ -1,48 +1,82 @@
+import type { Weapon } from "./briefing";
+import { BOID_TYPES } from "./boids";
 import type { SwarmRules } from "./combat";
+import { resolveParams } from "./boids/types";
+import {
+  BIG_PACK,
+  BOMBER_RUN,
+  BRUTES,
+  flockCost,
+  MELEE_PACK,
+  MIXED_FLOCK,
+  resolveFlock,
+  ROYAL_GUARD,
+  SKIRMISHERS,
+  type FlockSpec,
+  type FlockTemplate,
+} from "./flocks";
 import { mulberry32, type Vec } from "./island";
-import type { Layout, PlanetOptions, QueenSpot, SpawnKind, Spot, SwarmSpots, ThemeHint } from "./planet";
+import type { Layout, PlanetOptions, QueenSpot, Spot, SwarmSpots, ThemeHint } from "./planet";
 import type { Params } from "./tuning";
 
-// Levels: PROGRESSION says which template each level uses. A template sets how the islands are
-// laid out, how the swarm's budget is split between enemy kinds, where the flocks gather and where
-// the queen lives, plus any modifiers (wind, fog, a shielded queen…). The level number scales the
-// planet and the budget; the template gives the level its character.
+// Levels. Everything about a level is a LevelSpec: plain data (layout, size, queen, flocks,
+// modifiers, weapons) that a planet is generated from. The dev panel's custom levels edit one
+// directly; the game's levels come from templates. PROGRESSION says which template each level
+// uses; a template turns a level number into a spec: the level's size and swarm budget, shaped by
+// the template's layout, flocks and modifiers.
+
+/** A level, fully described: what the planet is generated from. */
+export interface LevelSpec {
+  layout: LayoutId;
+  radius: number;
+  islands: number;
+  theme?: ThemeHint;
+  /** Where the flocks spawn. */
+  placement: PlacementId;
+  queenSpot: QueenSpot;
+  /** The queen, with her param overrides and escort; null for none (then every boid must die). */
+  queen: { params: Record<string, number>; escort: FlockSpec } | null;
+  flocks: FlockSpec[];
+  modifiers: ModifierId[];
+  weapons: Weapon[];
+}
+
+/** One template entry: a flock to always include, `count` times (default once). */
+export interface FlockEntry {
+  flock: FlockTemplate;
+  count?: number;
+}
 
 export interface LevelTemplate {
   name: string;
   /** One line for the briefing. */
   blurb: string;
   boss?: boolean;
-  /** A fresh layout per planet (layouts with a direction or seeds pick them from `rand`). */
-  layout: (rand: () => number) => Layout;
+  layout: LayoutId;
+  /** Fixed size instead of the level's scaled one (the intro levels). */
+  fixed?: { radius: number; islands: number };
   /** Multipliers on the level's boundary radius and island count. */
   size?: number;
   islands?: number;
+  /** Flocks every planet of this template has. */
+  flocks?: FlockEntry[];
+  /** The rest of the level's swarm budget is spent on flocks picked from here (repeat one to weight it). */
+  pool?: FlockTemplate[];
   /** Multiplier on the level's swarm budget (fewer boids when they're tougher). */
   budget?: number;
-  /** Share of the enemy budget spent on each kind (normalised over the unlocked kinds). */
-  mix?: Partial<Record<SpawnKind, number>>;
-  /** Members per flock at the start. Default: the tuning value. */
-  flockSize?: number;
-  flocks?: PlanetOptions["flockWeight"];
+  /** The queen's escort. Default: the royal guard. */
+  escort?: FlockTemplate;
+  placement?: PlacementId;
   queen?: QueenSpot;
   /** Multiplier on the queen's health. */
   queenHp?: number;
+  /** Overrides on the queen's params (after `queenHp`). */
+  queenParams?: Record<string, number>;
+  /** No queen: the level is won when every boid is down. */
+  noQueen?: boolean;
   theme?: ThemeHint;
   /** Modifiers this template always has (bosses); others may be rolled on top. */
   modifiers?: ModifierId[];
-  /** Hand-tuned values instead of the scaled base (the intro levels). */
-  fixed?: (world: Params["world"]) => FixedLevel;
-}
-
-export interface FixedLevel {
-  radius: number;
-  islands: number;
-  melee: number;
-  ranged: number;
-  bombers: number;
-  escort: number;
-  queenHp: number;
 }
 
 /** Base values for a level from the tuning panel (level 4 + per-level increase). */
@@ -50,13 +84,7 @@ export interface LevelBase {
   radius: number;
   islands: number;
   budget: number;
-  costs: Record<SpawnKind, number>;
-  flockSize: number;
-  escort: number;
-  queenHp: number;
 }
-
-const DEFAULT_MIX: Record<SpawnKind, number> = { melee: 0.49, ranged: 0.29, bomber: 0.22 };
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
@@ -194,6 +222,22 @@ function valueNoise(rand: () => number, cells: number) {
   };
 }
 
+
+/** The layouts by name, for templates and the dev panel. */
+export const LAYOUTS = {
+  scatter: { name: "Scatter", make: scatter },
+  ring: { name: "Ring", make: ring },
+  core: { name: "Dense core", make: core },
+  clusters: { name: "Clusters", make: clusters },
+  gauntlet: { name: "Gauntlet", make: gauntlet },
+  gradient: { name: "Gradient", make: gradient },
+  pebbles: { name: "Pebbles", make: pebbles },
+  continents: { name: "Continents", make: continents },
+  longLeaps: { name: "Long leaps", make: longLeaps },
+  wilds: { name: "Wilds", make: wilds },
+} satisfies Record<string, { name: string; make: (rand: () => number) => Layout }>;
+export type LayoutId = keyof typeof LAYOUTS;
+
 // ---------------------------------------------------------------------------------------------
 // Flock placement maps
 // ---------------------------------------------------------------------------------------------
@@ -206,6 +250,25 @@ const middle = (s: Spot) => 1 - smoothstep(0.25, 0.6, s.rho);
 const edges = (s: Spot) => smoothstep(0.55, 0.8, s.rho);
 /** Flocks wait just beyond the start's safe zone. */
 const ambush = (s: Spot, w: SwarmSpots) => Math.exp(-(((Math.hypot(s.x - w.start.x, s.y - w.start.y) - 650) / 250) ** 2));
+/** Flocks wait a short hop from the start: the quickest way to a fight. */
+const nearStart = (s: Spot, w: SwarmSpots) => Math.exp(-(((Math.hypot(s.x - w.start.x, s.y - w.start.y) - 450) / 120) ** 2));
+
+/** Where flocks spawn, by name: a placement map, and how far from the start they keep at least. */
+export const PLACEMENTS = {
+  anywhere: { name: "Anywhere", minFromStart: 520 },
+  middle: { name: "The middle", weight: middle, minFromStart: 520 },
+  edges: { name: "The outskirts", weight: edges, minFromStart: 520 },
+  guardQueen: { name: "Around the queen", weight: guardQueen, minFromStart: 520 },
+  ambush: { name: "Ambush past the start", weight: ambush, minFromStart: 520 },
+  nearStart: { name: "Near the start", weight: nearStart, minFromStart: 300 },
+} satisfies Record<string, { name: string; weight?: (s: Spot, w: SwarmSpots) => number; minFromStart: number }>;
+export type PlacementId = keyof typeof PLACEMENTS;
+
+export const QUEEN_SPOTS: Record<QueenSpot, string> = {
+  far: "Far from the start",
+  centre: "Nearest the centre",
+  crowded: "Most crowded island",
+};
 
 // ---------------------------------------------------------------------------------------------
 // Modifiers
@@ -233,6 +296,8 @@ export const MODIFIERS: Record<ModifierId, Modifier> = {
 };
 
 /** What a level's modifiers add up to, for the player's physics, the view and the swarm. */
+
+/** What a level's modifiers add up to, for the player's physics, the view and the swarm. */
 export interface LevelRules {
   gravity: number;
   /** Sideways push on anything in flight (acceleration). */
@@ -246,36 +311,26 @@ export const NO_LEVEL_RULES: LevelRules = {
   gravity: 1,
   wind: { x: 0, y: 0 },
   fog: 0,
-  swarm: { shield: 0, reinforce: null, hp: 1, size: 1, together: false },
+  swarm: { shield: 0, reinforce: null, hp: 1, size: 1 },
 };
 
-export function levelRules(
-  mods: ModifierId[],
-  cfg: Params["world"]["modifiers"],
-  kinds: SpawnKind[],
-  swarmSize: number,
-  rand: () => number,
-): LevelRules {
-  const has = (m: ModifierId) => mods.includes(m);
+export function levelRules(spec: LevelSpec, cfg: Params["world"]["modifiers"], rand: () => number): LevelRules {
+  const has = (m: ModifierId) => spec.modifiers.includes(m);
   const a = rand() * Math.PI * 2;
   const wind = has("wind") ? cfg.wind : 0;
+  const swarmSize = spec.flocks.reduce((n, f) => n + f.members.reduce((s, m) => s + m.count, 0), 0);
   return {
     gravity: has("lowGravity") ? cfg.lowGravity : has("heavyGravity") ? cfg.heavyGravity : 1,
     wind: { x: Math.cos(a) * wind, y: Math.sin(a) * wind },
     fog: has("fog") ? cfg.fog : 0,
     swarm: {
       shield: has("shield") ? cfg.shield : 0,
-      reinforce: has("reinforcements")
-        ? {
-            every: cfg.reinforceEvery,
-            size: Math.max(1, Math.round(cfg.reinforceSize)),
-            kinds,
-            cap: Math.round(swarmSize * cfg.reinforceCap),
-          }
-        : null,
+      reinforce:
+        has("reinforcements") && spec.flocks.length
+          ? { every: cfg.reinforceEvery, flocks: spec.flocks, cap: Math.round(swarmSize * cfg.reinforceCap) }
+          : null,
       hp: has("elite") ? cfg.eliteHp : 1,
       size: has("elite") ? cfg.eliteSize : 1,
-      together: false,
     },
   };
 }
@@ -287,45 +342,54 @@ export function levelRules(
 const firstFlight: LevelTemplate = {
   name: "First flight",
   blurb: "A small planet and a lightly guarded queen.",
-  layout: scatter,
+  layout: "scatter",
+  fixed: { radius: 450, islands: 3 },
+  escort: { name: "Escort", members: [{ type: "melee", count: 4 }] },
+  queenHp: 0.25,
   theme: { hue: [85, 135] },
-  fixed: (w) => w.intro1,
 };
 
 const crossfire: LevelTemplate = {
   name: "Crossfire",
   blurb: "Ranged boids keep their distance and shoot. Close in fast.",
-  layout: scatter,
-  fixed: (w) => w.intro2,
+  layout: "scatter",
+  fixed: { radius: 550, islands: 5 },
+  escort: { name: "Escort", members: [{ type: "melee", count: 2 }, { type: "ranged", count: 2 }] },
+  flocks: [{ flock: MELEE_PACK }, { flock: SKIRMISHERS }],
+  queenHp: 0.5,
 };
 
 const bombsAway: LevelTemplate = {
   name: "Bombs away",
   blurb: "Bombers blow up on contact. Take them out from range with the spear.",
-  layout: scatter,
-  fixed: (w) => w.intro3,
+  layout: "scatter",
+  fixed: { radius: 650, islands: 6 },
+  flocks: [{ flock: MELEE_PACK }, { flock: SKIRMISHERS }, { flock: BOMBER_RUN }],
+  queenHp: 0.75,
 };
 
 const openSkies: LevelTemplate = {
   name: "Open skies",
   blurb: "Islands scattered far and wide.",
-  layout: scatter,
+  layout: "scatter",
+  pool: [MIXED_FLOCK],
 };
 
 const theRing: LevelTemplate = {
   name: "The ring",
   blurb: "A ring of islands around an empty sky. The swarm gathers in the middle.",
-  layout: ring,
+  layout: "ring",
   size: 1.25,
-  flocks: middle,
+  pool: [MIXED_FLOCK],
+  placement: "middle",
 };
 
 const archipelago: LevelTemplate = {
   name: "Archipelago",
   blurb: "Island groups linked by stepping stones. Fewer, bigger flocks.",
-  layout: clusters,
+  layout: "clusters",
   size: 1.4,
-  flockSize: 6,
+  pool: [BIG_PACK, BIG_PACK, MIXED_FLOCK],
   queen: "crowded",
   theme: { hue: [150, 210] },
 };
@@ -333,71 +397,73 @@ const archipelago: LevelTemplate = {
 const theGauntlet: LevelTemplate = {
   name: "The gauntlet",
   blurb: "One long path to the queen, watched by ranged boids.",
-  layout: gauntlet,
+  layout: "gauntlet",
   size: 1.35,
   islands: 0.8,
-  mix: { melee: 0.35, ranged: 0.45, bomber: 0.2 },
-  flocks: ambush,
+  pool: [SKIRMISHERS, SKIRMISHERS, MELEE_PACK, BOMBER_RUN],
+  placement: "ambush",
 };
 
 const pebbleField: LevelTemplate = {
   name: "Pebbles",
   blurb: "Tiny islands and lots of bombers in small flocks. Keep hopping.",
-  layout: pebbles,
+  layout: "pebbles",
   islands: 1.6,
-  mix: { melee: 0.4, ranged: 0.2, bomber: 0.4 },
-  flockSize: 3,
+  pool: [BOMBER_RUN, BOMBER_RUN, MELEE_PACK, SKIRMISHERS],
 };
 
 const queensCourt: LevelTemplate = {
   name: "Queen's court",
   blurb: "The whole swarm stays close to the queen.",
-  layout: scatter,
-  flocks: guardQueen,
+  layout: "scatter",
+  pool: [MIXED_FLOCK],
+  placement: "guardQueen",
   theme: { hue: [270, 330] },
 };
 
 const citadel: LevelTemplate = {
   name: "The citadel",
   blurb: "The queen holds the heart of a dense island cluster. Patrols circle the outskirts.",
-  layout: core,
+  layout: "core",
   size: 1.2,
+  pool: [MIXED_FLOCK],
   queen: "centre",
-  flocks: edges,
+  placement: "edges",
 };
 
 const thicket: LevelTemplate = {
   name: "The thicket",
   blurb: "Sparse islands at first, crowding together toward the queen.",
-  layout: gradient,
+  layout: "gradient",
   size: 1.2,
-  flocks: guardQueen,
+  pool: [MIXED_FLOCK],
+  placement: "guardQueen",
 };
 
 const continentsTemplate: LevelTemplate = {
   name: "Continents",
-  blurb: "A few huge islands with pebbles between them. Big melee flocks.",
-  layout: continents,
+  blurb: "A few huge islands with pebbles between them. Big melee packs, and brutes.",
+  layout: "continents",
   size: 1.3,
   islands: 0.9,
-  mix: { melee: 0.65, ranged: 0.2, bomber: 0.15 },
-  flockSize: 6,
+  pool: [BIG_PACK, MELEE_PACK, BRUTES],
 };
 
 const leaps: LevelTemplate = {
   name: "Long leaps",
   blurb: "Wide gaps between every island. Save your double jump.",
-  layout: longLeaps,
+  layout: "longLeaps",
   size: 1.2,
   islands: 0.9,
-  mix: { melee: 0.35, ranged: 0.45, bomber: 0.2 },
+  pool: [SKIRMISHERS, SKIRMISHERS, MIXED_FLOCK],
 };
 
 const theWilds: LevelTemplate = {
   name: "The wilds",
   blurb: "Islands bunch up and thin out at random.",
-  layout: wilds,
+  layout: "wilds",
   size: 1.2,
+  pool: [MIXED_FLOCK],
   theme: { hue: [20, 70] },
 };
 
@@ -405,13 +471,14 @@ const theHive: LevelTemplate = {
   name: "The hive",
   blurb: "Boss: a shielded queen at the heart of her hive, and her swarm keeps growing.",
   boss: true,
-  layout: core,
+  layout: "core",
   size: 1.15,
   queen: "centre",
   queenHp: 2,
   // Reinforcements make up the difference.
   budget: 0.8,
-  flocks: guardQueen,
+  pool: [MIXED_FLOCK],
+  placement: "guardQueen",
   modifiers: ["shield", "reinforcements"],
   theme: { hue: [25, 50], sat: [0.5, 0.65] },
 };
@@ -420,14 +487,14 @@ const royalGuard: LevelTemplate = {
   name: "Royal guard",
   blurb: "Boss: an elite swarm guards a shielded queen in the fog.",
   boss: true,
-  layout: clusters,
+  layout: "clusters",
   size: 1.4,
   queen: "crowded",
   queenHp: 2.5,
   // Elite boids have double health: half as many of them.
   budget: 0.5,
-  flocks: guardQueen,
-  flockSize: 5,
+  pool: [MIXED_FLOCK, BRUTES],
+  placement: "guardQueen",
   modifiers: ["elite", "shield", "fog"],
   theme: { hue: [200, 260] },
 };
@@ -436,12 +503,13 @@ const theStorm: LevelTemplate = {
   name: "The storm",
   blurb: "Boss: a gale sweeps the ring while elite reinforcements keep coming.",
   boss: true,
-  layout: ring,
+  layout: "ring",
   size: 1.25,
   queenHp: 3,
   // Elite boids have double health, and reinforcements top the swarm up.
   budget: 0.5,
-  flocks: middle,
+  pool: [MIXED_FLOCK, MELEE_PACK],
+  placement: "middle",
   modifiers: ["wind", "elite", "reinforcements"],
   theme: { hue: [180, 230], sat: [0.25, 0.4] },
 };
@@ -516,47 +584,76 @@ export function planLevel(
   return { template, modifiers };
 }
 
-/** Planet options for a template: the level's base scaled by the template, the budget split by its mix. */
-export function templateSpec(
+/**
+ * The spec for a template on a level: the level's base size scaled by the template (or its fixed
+ * size), its listed flocks, then flocks from its pool until the level's budget (less the listed
+ * flocks and the escort) is spent. Sampled flocks draw from `rand`.
+ */
+export function resolveLevel(
   t: LevelTemplate,
   base: LevelBase,
-  world: Params["world"],
-  unlocked: (k: SpawnKind) => boolean,
-  seed: number,
-): PlanetOptions {
-  const shared = {
-    layout: t.layout(mulberry32(seed ^ 0x2545f491)),
-    flockWeight: t.flocks,
-    queenSpot: t.queen,
-    theme: t.theme,
-    flockSize: t.flockSize ?? base.flockSize,
-  };
-  const fixed = t.fixed?.(world);
-  if (fixed) {
-    return {
-      ...shared,
-      radius: fixed.radius,
-      islandCount: Math.max(1, Math.round(fixed.islands)),
-      meleeCount: unlocked("melee") ? Math.round(fixed.melee) : 0,
-      rangedCount: unlocked("ranged") ? Math.round(fixed.ranged) : 0,
-      bomberCount: unlocked("bomber") ? Math.round(fixed.bombers) : 0,
-      escortCount: Math.round(fixed.escort),
-      queenHp: Math.max(1, fixed.queenHp * (t.queenHp ?? 1)),
-    };
+  opts: { modifiers: ModifierId[]; weapons: Weapon[]; rand?: () => number },
+): LevelSpec {
+  const rand = opts.rand ?? Math.random;
+  const escort = resolveFlock(t.escort ?? ROYAL_GUARD, rand);
+  const flocks: FlockSpec[] = [];
+  for (const e of t.flocks ?? []) for (let i = 0; i < (e.count ?? 1); i++) flocks.push(resolveFlock(e.flock, rand));
+  if (t.pool?.length) {
+    let budget = base.budget * (t.budget ?? 1) - flockCost(escort) - flocks.reduce((s, f) => s + flockCost(f), 0);
+    for (let guard = 0; budget > 0 && guard < 200; guard++) {
+      const f = resolveFlock(t.pool[Math.floor(rand() * t.pool.length)]!, rand);
+      const cost = flockCost(f);
+      // Stop rather than overshoot by more than half a flock.
+      if (cost - budget > cost / 2) break;
+      flocks.push(f);
+      budget -= cost;
+    }
   }
-  const mix = { ...DEFAULT_MIX, ...t.mix };
-  const kinds = (Object.keys(mix) as SpawnKind[]).filter(unlocked);
-  const total = kinds.reduce((s, k) => s + mix[k], 0) || 1;
-  const budget = base.budget * (t.budget ?? 1);
-  const count = (k: SpawnKind) => (kinds.includes(k) ? Math.round((budget * mix[k]) / total / base.costs[k]) : 0);
   return {
-    ...shared,
-    radius: base.radius * (t.size ?? 1),
-    islandCount: Math.max(1, Math.round(base.islands * (t.islands ?? 1))),
-    meleeCount: count("melee"),
-    rangedCount: count("ranged"),
-    bomberCount: count("bomber"),
-    escortCount: Math.round(base.escort),
-    queenHp: Math.max(1, base.queenHp * (t.queenHp ?? 1)),
+    layout: t.layout,
+    radius: t.fixed?.radius ?? base.radius * (t.size ?? 1),
+    islands: Math.max(1, Math.round(t.fixed?.islands ?? base.islands * (t.islands ?? 1))),
+    theme: t.theme,
+    placement: t.placement ?? "anywhere",
+    queenSpot: t.queen ?? "far",
+    queen: t.noQueen
+      ? null
+      : { params: { hp: Math.max(1, Math.round(BOID_TYPES.queen.params.hp * (t.queenHp ?? 1))), ...t.queenParams }, escort },
+    flocks,
+    modifiers: opts.modifiers,
+    weapons: opts.weapons,
   };
 }
+
+/** The level each weapon first appears on in the normal progression. */
+export const WEAPON_UNLOCKS: Record<Weapon, number> = { sword: 1, spear: 3 };
+export const weaponsAt = (level: number): Weapon[] => (["sword", "spear"] as const).filter((w) => level >= WEAPON_UNLOCKS[w]);
+
+/** The base for `level` from the tuning panel: the level 4 values plus a per-level increase. */
+export function levelBase(level: number, w: Params["world"]): LevelBase {
+  const n = level - 4;
+  return {
+    radius: w.level4.radius + w.perLevel.radius * n,
+    islands: w.level4.islands + w.perLevel.islands * n,
+    budget: w.level4.budget + w.perLevel.budget * n,
+  };
+}
+
+/** Planet options for a spec. */
+export function planetOptions(spec: LevelSpec, seed: number): PlanetOptions {
+  const place: { weight?: PlanetOptions["flockWeight"]; minFromStart: number } = PLACEMENTS[spec.placement] ?? PLACEMENTS.anywhere;
+  return {
+    radius: spec.radius,
+    layout: (LAYOUTS[spec.layout] ?? LAYOUTS.scatter).make(mulberry32(seed ^ 0x2545f491)),
+    islandCount: spec.islands,
+    flockWeight: place.weight,
+    minFromStart: place.minFromStart,
+    queenSpot: spec.queenSpot,
+    theme: spec.theme,
+    queen: spec.queen,
+    flocks: spec.flocks,
+  };
+}
+
+/** The queen's health on a spec (her override, else her type's). */
+export const queenHp = (spec: LevelSpec) => (spec.queen ? resolveParams(BOID_TYPES.queen, spec.queen.params).hp : 0);

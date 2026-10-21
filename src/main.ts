@@ -1,25 +1,32 @@
 import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
 import { params } from "./tuning";
-import { BLAST_TIME, BOID_RADIUS, Combat, hitStop, type Blast, type Boid } from "./combat";
-import { generatePlanet, type Planet, type PlanetOptions, type SpawnKind } from "./planet";
+import { BLAST_TIME, Combat, hitStop, type Blast, type Boid } from "./combat";
+import { generatePlanet, type Planet } from "./planet";
 import {
+  levelBase,
   levelRules,
   MODIFIERS,
   NO_LEVEL_RULES,
+  planetOptions,
   planLevel,
-  templateSpec,
+  resolveLevel,
   type LevelPlan,
   type LevelRules,
-  type LevelTemplate,
+  type LevelSpec,
+  WEAPON_UNLOCKS,
+  weaponsAt,
 } from "./levels";
 import { applyVolumes, music, sfx, toggleMute, unlockAudio } from "./audio";
 import { Avatar, type AvatarView } from "./avatar";
 import { outOfHitHeight } from "./hitbox";
 import { drawBoidBody } from "./sprites";
-import { briefingHtml, paintPortraits, type InputMode, type Weapon } from "./briefing";
+import { briefingHtml, paintPortraits, type BriefingEnemy, type InputMode, type Weapon } from "./briefing";
 import { readGamepad, rumble, type PadLayout } from "./gamepad";
-import { describeDevLevel, devPlanet, devTemplate } from "./devlevel";
+import { boidType } from "./boids";
+import type { QueenParams } from "./boids/queen";
+import { resolveParams } from "./boids/types";
+import { describeFlock } from "./flocks";
 import { createDevUI } from "./devui";
 import { currentRun, setRunStatus, type Run } from "./runtime";
 
@@ -297,66 +304,47 @@ const combat = new Combat();
 type GameState = "briefing" | "play" | "victory" | "defeat";
 const game = { state: "play" as GameState, timer: 0, level: 0, shake: 0, briefing: "new" as "new" | "retry" | "pause" };
 
-/** The level each weapon and enemy first appears on. */
-const UNLOCKS: Record<Weapon | SpawnKind, number> = { sword: 1, melee: 1, ranged: 2, spear: 3, bomber: 3 };
+/** The level each weapon and enemy type first appears on in a normal run. */
+const UNLOCKS: Record<string, number> = { ...WEAPON_UNLOCKS, melee: 1, ranged: 2, bomber: 3 };
+
 /** What this session plays: set from the dev panel's Run section (a reload starts what it's set to). */
 let run: Run = currentRun();
-/** The dev level being played, if any: only its opponents, and everything unlocked. */
-const devLevel = () => (run.kind === "dev" ? run.dev : null);
-const unlocked = (what: Weapon | SpawnKind, level = game.level) => !!devLevel() || level >= UNLOCKS[what];
+const custom = () => run.kind === "custom";
 
-/** This level's template and modifiers (from PROGRESSION); a retry keeps them. */
+/** This level's template and modifiers (from PROGRESSION; null on a custom level). A retry keeps them. */
 let plan: LevelPlan | null = null;
+/** This level, fully described; a retry keeps it (same flocks, fresh planet). */
+let spec: LevelSpec | null = null;
 /** What this level's modifiers add up to. */
 let rules: LevelRules = NO_LEVEL_RULES;
+const unlocked = (w: Weapon) => !!spec?.weapons.includes(w);
 
-/**
- * Planet options for a level: the level 4 values plus a per-level increase are the base, which the
- * level's template shapes (the intro templates use their own hand-tuned values). Locked enemies
- * never spawn.
- */
-function levelSpec(level: number, template: LevelTemplate, seed: number): PlanetOptions {
-  const w = params.world;
-  const n = level - 4;
-  const base = {
-    radius: w.level4.radius + w.perLevel.radius * n,
-    islands: w.level4.islands + w.perLevel.islands * n,
-    budget: w.level4.budget + w.perLevel.budget * n,
-    costs: w.costs,
-    flockSize: params.boids.flocks.startSize,
-    escort: params.boids.queen.escort,
-    queenHp: params.boids.queen.hp,
-  };
-  return templateSpec(template, base, w, (k) => unlocked(k, level), seed);
-}
-
-/** Start a run from the dev panel: a progression from its level, or a dev level. */
+/** Start a run from the dev panel: the normal progression from a level, or a custom level. */
 function startRun(r: Run) {
   run = r;
   plan = null;
-  restart(r.kind === "progression" ? r.level : 1);
+  spec = null;
+  restart(r.kind === "normal" ? r.level : 1);
 }
 
 /** Generate a new planet for `level` and show its briefing (a defeat retries on a fresh planet). */
 function restart(level: number, retry = false) {
   game.level = level;
   const lv = params.world.levels;
-  const dev = devLevel();
-  if (dev) plan = { template: devTemplate(dev), modifiers: [] };
-  else if (!retry || !plan) {
+  if (run.kind === "custom") spec = structuredClone(run.spec);
+  else if (!retry || !spec) {
     plan = planLevel(level, plan?.template ?? null, {
-      force: run.kind === "progression" ? run.template : null,
+      force: run.template,
       modifiersFrom: lv.modifiersFrom,
       twoModifiersFrom: lv.twoModifiersFrom,
     });
+    spec = resolveLevel(plan.template, levelBase(level, params.world), { modifiers: plan.modifiers, weapons: weaponsAt(level) });
   }
+  if (!spec) return;
   const seed = Math.floor(Math.random() * 1e9);
-  planet = dev ? devPlanet(seed, dev, plan.template) : generatePlanet(seed, levelSpec(level, plan.template, seed));
+  planet = generatePlanet(seed, planetOptions(spec, seed));
   islands = planet.islands;
-  const kinds = [...new Set(planet.flocks.flatMap((f) => f.kinds))];
-  const swarm = planet.escort.length + planet.flocks.reduce((s, f) => s + f.kinds.length, 0);
-  rules = levelRules(plan.modifiers, params.world.modifiers, kinds, swarm, mulberry32(seed ^ 0x68e31da4));
-  if (dev) rules = { ...rules, swarm: { ...rules.swarm, together: dev.together } };
+  rules = levelRules(spec, params.world.modifiers, mulberry32(seed ^ 0x68e31da4));
   combat.reset(planet, rules.swarm);
   music.setSeed(planet.seed);
   resetPlayer();
@@ -370,10 +358,30 @@ function restart(level: number, retry = false) {
 
 /** What is being played, for the HUD and the dev panel. */
 function where() {
-  const dev = devLevel();
-  if (dev) return `dev level: ${describeDevLevel(dev)}`;
-  const mods = plan?.modifiers.length ? ` (${plan.modifiers.map((m) => MODIFIERS[m].name).join(", ")})` : "";
+  const mods = spec?.modifiers.length ? ` (${spec.modifiers.map((m) => MODIFIERS[m].name).join(", ")})` : "";
+  if (custom()) return `custom level: ${spec?.flocks.map(describeFlock).join(" · ") || "no flocks"}${mods}`;
   return `level ${game.level}${plan ? ` · ${plan.template.name}` : ""}${mods}`;
+}
+
+/** A briefing card per distinct enemy on the planet (type and params, as spawned), the queen first. */
+function briefingEnemies(): BriefingEnemy[] {
+  const out: BriefingEnemy[] = [];
+  const seen = new Set<string>();
+  const add = (e: BriefingEnemy) => {
+    const key = `${e.type.id}:${JSON.stringify(e.params)}`;
+    if (!seen.has(key)) out.push(e);
+    seen.add(key);
+  };
+  if (planet.queen) add({ type: boidType("queen"), params: resolveParams(boidType("queen"), planet.queen.params) });
+  const flocks = [...(planet.queen ? [planet.queen.escort] : []), ...planet.flocks.map((f) => f.spec)];
+  for (const f of flocks)
+    for (const m of f.members) {
+      if (m.count < 1) continue;
+      const type = boidType(m.type);
+      const p = resolveParams(type, m.params);
+      add({ type, params: { ...p, hp: Math.max(1, Math.round(p.hp * rules.swarm.hp)), size: p.size * rules.swarm.size } });
+    }
+  return out;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -384,25 +392,27 @@ const briefingEl = document.getElementById("briefing")!;
 
 function showBriefing(animate = false) {
   const weapons = (["sword", "spear"] as const).filter((w) => unlocked(w));
-  // Only the kinds on this planet (a template's mix can leave one out).
-  const present = new Set([...planet.escort, ...planet.flocks.flatMap((f) => f.kinds)]);
-  const enemies = (["melee", "ranged", "bomber"] as const).filter((k) => unlocked(k) && present.has(k));
+  const enemies = briefingEnemies();
   briefingEl.innerHTML = briefingHtml({
     level: game.level,
-    template: plan && { name: plan.template.name, blurb: plan.template.blurb, boss: !!plan.template.boss },
-    modifiers: (plan?.modifiers ?? []).map((m) => MODIFIERS[m]),
+    template: custom()
+      ? { name: "Custom level", blurb: "Set up in the dev panel.", boss: false }
+      : plan && { name: plan.template.name, blurb: plan.template.blurb, boss: !!plan.template.boss },
+    modifiers: (spec?.modifiers ?? []).map((m) => MODIFIERS[m]),
     reason: game.briefing,
     inputMode,
     padLayout,
     weapons,
     enemies,
-    heading: devLevel() ? "Dev level" : undefined,
-    fresh: game.briefing === "pause" || devLevel() ? [] : [...weapons, ...enemies].filter((x) => UNLOCKS[x] === game.level && game.level > 1),
-    queenHp: combat.queen?.maxHp ?? 0,
+    heading: custom() ? "Dev" : undefined,
+    fresh:
+      game.briefing === "pause" || custom() || game.level < 2
+        ? []
+        : [...weapons, ...enemies.map((e) => e.type.id)].filter((x) => UNLOCKS[x] === game.level),
     animate,
   });
   briefingEl.hidden = false;
-  paintPortraits(briefingEl, weapons);
+  paintPortraits(briefingEl, weapons, enemies);
 }
 
 function openBriefing(reason: typeof game.briefing) {
@@ -900,9 +910,9 @@ function update(dt: number, dtReal: number) {
   if (game.state !== "play") {
     game.timer += dt;
     // Winning moves on to the next level; losing replays the same level on a fresh planet. An
-    // dev level just starts over.
+    // custom level just starts over.
     if (game.timer > 4.5 || (game.timer > 1.2 && anyPressed(["Enter", "PadStart"]))) {
-      restart(game.state === "victory" && !devLevel() ? game.level + 1 : game.level, game.state === "defeat");
+      restart(game.state === "victory" && !custom() ? game.level + 1 : game.level, game.state === "defeat");
     }
   }
 
@@ -1732,7 +1742,7 @@ function playCombatSounds() {
       sfx.explosion({ pan: at.pan, gain: Math.max(0.35, at.gain) });
       rumblePad(0.6 * at.gain, 0.3 * at.gain, 200);
     }
-    else if (ev.type === "anger") sfx.queenAnger(params.enemyAttacks.queen.windup, at);
+    else if (ev.type === "anger") sfx.queenAnger(combat.queen?.params.windup ?? 1, at);
     else if (ev.type === "queenBlast") {
       sfx.queenBlast({ pan: at.pan, gain: Math.max(0.5, at.gain) });
       rumblePad(0.8 * at.gain, 0.5 * at.gain, 260);
@@ -1753,10 +1763,10 @@ function updateSound() {
   // The fight heats up with the number of engaged boids nearby, and when the queen is close.
   let near = 0;
   for (const b of combat.boids) {
-    if (b.hp > 0 && b.kind !== "queen" && b.flock.engaged && Math.hypot(b.x - p.x, b.y - p.y) < 700) near++;
+    if (b.hp > 0 && b !== combat.queen && b.flock.engaged && Math.hypot(b.x - p.x, b.y - p.y) < 700) near++;
   }
   const q = combat.queen;
-  const queenNear = q && q.hp > 0 && Math.hypot(q.x - p.x, q.y - p.y) < params.boids.queen.threatRadius ? 0.5 : 0;
+  const queenNear = q && q.hp > 0 && Math.hypot(q.x - p.x, q.y - p.y) < q.params.threatRadius ? 0.5 : 0;
   const intensity = playing ? Math.min(1, near / 6 + queenNear) : 0;
   music.update(intensity, slow.intensity, playing ? 1 : 0.25);
   applyVolumes();
@@ -1928,10 +1938,8 @@ function drawBoid(b: Boid) {
   ctx.save();
   ctx.translate(pr.x, pr.y);
   if (outOfHitHeight(b.alt, player.alt)) ctx.globalAlpha = OUT_OF_HEIGHT_ALPHA;
-  // Elite boids are drawn bigger, by their body size over the usual.
-  const scale = b.r / BOID_RADIUS[b.kind];
-  drawBoidBody(ctx, scale === 1 ? b : { ...b, r: BOID_RADIUS[b.kind] }, k * scale);
-  if (b.kind === "queen" && combat.queenShielded && b.hp > 0) drawShield(b, k);
+  drawBoidBody(ctx, b.type, b, k);
+  if (b === combat.queen && combat.queenShielded && b.hp > 0) drawShield(b, k);
   ctx.restore();
 }
 
@@ -1954,7 +1962,7 @@ function drawShield(q: Boid, k: number) {
 
 /** While the queen winds up, the reach of her coming blast closes in around her. */
 function drawQueenWarning(q: Boid) {
-  const qa = params.enemyAttacks.queen;
+  const qa = (q as Boid<QueenParams>).params;
   const t = Math.max(0, Math.min(1, 1 - q.windup / qa.windup));
   const n = 32;
   for (const [r, a] of [[qa.blastRadius, 0.25 + 0.35 * t], [qa.blastRadius * (1.6 - 0.6 * t), 0.5 * t]] as const) {
@@ -2162,7 +2170,7 @@ function drawHud() {
   ctx.textBaseline = "top";
   ctx.fillStyle = "#f0dcff";
   const shield = combat.queenShielded ? ` · shielded: ${combat.shieldLeft} more kills` : "";
-  const at = devLevel() ? "dev level" : `level ${game.level}`;
+  const at = custom() ? "custom level" : `level ${game.level}`;
   ctx.fillText(
     `${q ? `♛ QUEEN${shield} · ` : ""}swarm ${combat.boids.length - (q ? 1 : 0)} in ${combat.flocks.length} flocks · ${at} · planet ${planet.seed.toString(36)}`,
     W / 2,
@@ -2184,18 +2192,18 @@ function drawHud() {
     ctx.textBaseline = "middle";
     ctx.font = "800 64px system-ui, sans-serif";
     ctx.fillStyle = win ? "#ffd34d" : "#ff5a6e";
-    ctx.fillText(win ? (devLevel() ? "CLEARED" : `LEVEL ${game.level} CLEARED`) : "DEFEATED", W / 2, H / 2 - 20);
+    ctx.fillText(win ? (custom() ? "CLEARED" : `LEVEL ${game.level} CLEARED`) : "DEFEATED", W / 2, H / 2 - 20);
     ctx.font = "500 18px system-ui, sans-serif";
     ctx.fillStyle = "#f0e8ff";
     ctx.fillText(
-      win ? (combat.queen ? "The queen has fallen." : "Every boid is down.") : `The swarm overwhelmed you${devLevel() ? "" : ` on level ${game.level}`}.`,
+      win ? (combat.queen ? "The queen has fallen." : "Every boid is down.") : `The swarm overwhelmed you${custom() ? "" : ` on level ${game.level}`}.`,
       W / 2,
       H / 2 + 30,
     );
     ctx.font = "13px system-ui, sans-serif";
     ctx.fillStyle = "rgba(240,232,255,0.7)";
     const left = Math.max(0, Math.ceil(4.5 - game.timer));
-    const next = devLevel() ? "Restarting the dev level" : win ? `Level ${game.level + 1}` : `Retrying level ${game.level}`;
+    const next = custom() ? "Restarting the custom level" : win ? `Level ${game.level + 1}` : `Retrying level ${game.level}`;
     ctx.fillText(`${next} in ${left}…  (Enter to continue now)`, W / 2, H / 2 + 60);
     ctx.globalAlpha = 1;
   }

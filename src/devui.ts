@@ -51,7 +51,28 @@ const STYLE = `
   #devui .flock-name { color: #c9b8e8; margin-top: 4px; }
   #devui .check { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; cursor: pointer; }
   #devui .check input { margin: 0; accent-color: #9d86ff; }
-  #devui .actions { display: flex; justify-content: flex-end; margin-top: 10px; }
+  #devui.wide { width: min(430px, calc(100vw - 20px)); }
+  #devui .footer { display: flex; gap: 6px; justify-content: flex-end; padding: 8px 10px; border-top: 1px solid rgba(170, 150, 255, 0.25); }
+  #devui .footer:empty { display: none; }
+  #devui .dim { color: #a99be8; }
+  #devui .row > select { flex: 1; width: auto; }
+  #devui .field { display: grid; grid-template-columns: 110px 1fr; gap: 6px; align-items: center; margin-bottom: 4px; }
+  #devui .field input[type=number] { width: 100%; }
+  #devui .slider { display: grid; grid-template-columns: 1fr auto; row-gap: 1px; margin-bottom: 4px; }
+  #devui details.flock { margin-bottom: 6px; padding: 4px 8px 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(170, 150, 255, 0.18); }
+  #devui details > summary { cursor: pointer; list-style: none; }
+  #devui details > summary::-webkit-details-marker { display: none; }
+  #devui details > summary::before { content: "▸"; display: inline-block; width: 12px; color: #a99be8; }
+  #devui details[open] > summary::before { content: "▾"; }
+  #devui details.flock > summary { display: flex; gap: 6px; align-items: center; padding: 2px 0; }
+  #devui details.flock > summary .summary { color: #a99be8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  #devui details.flock > summary .spacer { flex: 1; }
+  #devui details.sub { margin: 4px 0 4px 6px; }
+  #devui details.sub > summary { color: #c9b8e8; margin-bottom: 4px; }
+  #devui details.params .field { grid-template-columns: 1fr 80px; }
+  #devui .member { margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(170, 150, 255, 0.18); }
+  #devui .member .row > input[type=number] { width: 56px; }
 `;
 
 type SectionId = "run" | "tuning";
@@ -67,7 +88,17 @@ export function createDevUI(onStart: (run: Run) => void) {
   const title = Object.assign(document.createElement("span"), { className: "title", textContent: "Dev" });
   const spacer = Object.assign(document.createElement("span"), { className: "spacer" });
   const toggle = document.createElement("button");
-  const sections: Record<SectionId, HTMLElement> = { run: runSection(onStart), tuning: tuningSection() };
+  // The custom level editor gets a wider panel (the Run section reports its mode as it renders).
+  let runMode = "normal";
+  let sections: Record<SectionId, HTMLElement> | null = null;
+  const widen = () => panel.classList.toggle("wide", !!sections && !sections.run.hidden && runMode === "custom");
+  sections = {
+    run: runSection(onStart, (m) => {
+      runMode = m;
+      widen();
+    }),
+    tuning: tuningSection(),
+  };
   const sectionButtons = (Object.keys(sections) as SectionId[]).map((id) => {
     const b = Object.assign(document.createElement("button"), { textContent: id === "run" ? "Run" : "Tuning" });
     b.addEventListener("click", () => {
@@ -86,6 +117,7 @@ export function createDevUI(onStart: (run: Run) => void) {
       b.classList.toggle("active", s === id);
     }
     setPref("planetproto.devui.section", id);
+    widen();
   };
   show(getPref("planetproto.devui.section") === "tuning" ? "tuning" : "run");
 

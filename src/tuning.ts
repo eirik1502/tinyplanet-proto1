@@ -1,5 +1,6 @@
 import { DEFAULTS } from "./params";
 import { getPref, setPref } from "./prefs";
+import { copyText } from "./ui";
 
 // Live-tweakable game parameters and the dev panel's Tuning section that edits them.
 // `params` mirrors DEFAULTS (tab → group → value); each tab of the panel is one top-level group.
@@ -18,20 +19,14 @@ const TAB_TITLES: Record<keyof Params, string> = {
   move: "Move",
   camera: "Camera",
   player: "Player",
-  boids: "Boids",
   combat: "Combat",
-  enemyAttacks: "Attacks",
   audio: "Audio",
 };
 
 const GROUP_TITLES: Record<string, string> = {
   "world.levels": "Modifiers by level",
-  "world.intro1": "Level 1 (melee, sword)",
-  "world.intro2": "Level 2 (+ ranged boids)",
-  "world.intro3": "Level 3 (+ spear, bombers)",
   "world.level4": "Level 4 (everything unlocked; templates scale this)",
   "world.perLevel": "Added per level after 4",
-  "world.costs": "Swarm budget cost per boid",
   "world.modifiers": "Level modifiers (wind, fog, bosses' shield…)",
   "move.climb": "Climbing",
   "move.jump": "Jumping",
@@ -48,17 +43,8 @@ const GROUP_TITLES: Record<string, string> = {
   "player.hurtbox": "Hurtbox (where the player can be hit)",
   "player.sword": "Sword",
   "player.spear": "Spear",
-  "boids.swarm": "Swarm",
-  "boids.flocking": "Flocking (within a flock)",
-  "boids.flocks": "Flocks",
-  "boids.islands": "Islands",
-  "boids.queen": "Queen",
   "combat.hits": "Hits (every attack, from anyone)",
-  "enemyAttacks.hit": "Damage",
-  "enemyAttacks.melee": "Melee boids",
-  "enemyAttacks.ranged": "Ranged boids",
-  "enemyAttacks.bomber": "Bomber boids",
-  "enemyAttacks.queen": "Queen's blast",
+  "combat.islands": "Boids around islands",
   "audio.volume": "Volume (M mutes)",
 };
 
@@ -77,36 +63,12 @@ const SLIDERS: Record<string, Slider> = {
   "world.modifiers.reinforceCap": ["Swarm cap (× starting swarm)", 0.5, 3, 0.1, true],
   "world.modifiers.eliteHp": ["Elite health (×)", 1, 5, 0.5, true],
   "world.modifiers.eliteSize": ["Elite size (×)", 1, 2, 0.05, true],
-  "world.intro1.radius": ["Boundary radius", 300, 2000, 10, true],
-  "world.intro1.islands": ["Islands", 1, 40, 1, true],
-  "world.intro1.melee": ["Melee boids", 0, 100, 1, true],
-  "world.intro1.ranged": ["Ranged boids", 0, 100, 1, true],
-  "world.intro1.bombers": ["Bomber boids", 0, 100, 1, true],
-  "world.intro1.escort": ["Queen's escort", 0, 20, 1, true],
-  "world.intro1.queenHp": ["Queen health", 1, 200, 1, true],
-  "world.intro2.radius": ["Boundary radius", 300, 2000, 10, true],
-  "world.intro2.islands": ["Islands", 1, 40, 1, true],
-  "world.intro2.melee": ["Melee boids", 0, 100, 1, true],
-  "world.intro2.ranged": ["Ranged boids", 0, 100, 1, true],
-  "world.intro2.bombers": ["Bomber boids", 0, 100, 1, true],
-  "world.intro2.escort": ["Queen's escort", 0, 20, 1, true],
-  "world.intro2.queenHp": ["Queen health", 1, 200, 1, true],
-  "world.intro3.radius": ["Boundary radius", 300, 2000, 10, true],
-  "world.intro3.islands": ["Islands", 1, 40, 1, true],
-  "world.intro3.melee": ["Melee boids", 0, 100, 1, true],
-  "world.intro3.ranged": ["Ranged boids", 0, 100, 1, true],
-  "world.intro3.bombers": ["Bomber boids", 0, 100, 1, true],
-  "world.intro3.escort": ["Queen's escort", 0, 20, 1, true],
-  "world.intro3.queenHp": ["Queen health", 1, 200, 1, true],
   "world.level4.radius": ["Boundary radius", 300, 2000, 10, true],
   "world.level4.islands": ["Islands", 1, 40, 1, true],
   "world.level4.budget": ["Swarm budget", 0, 200, 0.5, true],
   "world.perLevel.radius": ["Boundary radius", 0, 300, 5, true],
   "world.perLevel.islands": ["Islands", 0, 6, 0.1, true],
   "world.perLevel.budget": ["Swarm budget", 0, 50, 0.1, true],
-  "world.costs.melee": ["Melee boid", 0.1, 5, 0.1, true],
-  "world.costs.ranged": ["Ranged boid", 0.1, 5, 0.1, true],
-  "world.costs.bomber": ["Bomber boid", 0.1, 5, 0.1, true],
 
   "move.climb.speed": ["Climb speed", 50, 800, 10],
   "move.jump.speed": ["Jump speed (sideways)", 50, 1000, 10],
@@ -169,58 +131,10 @@ const SLIDERS: Record<string, Slider> = {
   "player.spear.maxScale": ["Size at full power", 1, 4, 0.1],
   "player.spear.cooldown": ["Cooldown (s)", 0, 2, 0.02],
 
-  "boids.swarm.meleeSpeed": ["Melee speed", 20, 600, 5],
-  "boids.swarm.rangedSpeed": ["Ranged speed", 20, 600, 5],
-  "boids.swarm.bomberSpeed": ["Bomber speed", 20, 600, 5],
-  "boids.swarm.aggroRange": ["Aggro range", 0, 1200, 10],
-  "boids.swarm.disengageRange": ["Disengage range", 0, 2000, 10],
-  "boids.swarm.provokedTime": ["Hit flock stays engaged (s)", 0, 30, 0.5],
-  "boids.flocking.neighborRadius": ["Neighbour radius", 10, 400, 5],
-  "boids.flocking.separationRadius": ["Separation radius", 5, 150, 1],
-  "boids.flocking.separation": ["Separation", 0, 3000, 10],
-  "boids.flocking.alignment": ["Alignment", 0, 5, 0.05],
-  "boids.flocking.cohesion": ["Cohesion", 0, 5, 0.05],
-  "boids.flocking.wander": ["Wander", 0, 300, 5],
-  "boids.flocks.startSize": ["Starting flock size", 1, 20, 1, true],
-  "boids.flocks.maxSize": ["Largest flock from joining", 1, 40, 1],
-  "boids.flocks.roamSpeed": ["Roam speed", 0, 300, 5],
-  "boids.flocks.joinChance": ["Chance to join another flock (per s)", 0, 1, 0.01],
-  "boids.flocks.joinRange": ["Looks for flocks to join within", 0, 2000, 10],
-  "boids.flocks.leaveChance": ["Chance some members leave (per s)", 0, 1, 0.01],
-  "boids.islands.margin": ["Rim clearance", 0, 120, 1],
-  "boids.islands.avoid": ["Avoid strength", 0, 200, 1],
-  "boids.queen.hp": ["Health", 1, 200, 1, true],
-  "boids.queen.speed": ["Speed", 0, 400, 5],
-  "boids.queen.fleeRange": ["Flee range", 0, 1000, 10],
-  "boids.queen.escort": ["Escort flock size (at start)", 0, 20, 1, true],
-  "boids.queen.threatRadius": ["Threat radius", 0, 1500, 10],
-  "boids.queen.recruitRange": ["Recruits guards from flocks within", 0, 3000, 50],
 
   "combat.hits.height": ["Hits reach up / down", 0, 200, 1],
-  "enemyAttacks.hit.damage": ["Damage per hit (%)", 0, 50, 0.5],
-  "enemyAttacks.melee.lungeRange": ["Lunge range", 10, 400, 5],
-  "enemyAttacks.melee.lungeSpeed": ["Lunge speed", 50, 1500, 10],
-  "enemyAttacks.melee.lungeTime": ["Lunge time (s)", 0.05, 1.5, 0.01],
-  "enemyAttacks.melee.cooldown": ["Cooldown (s)", 0, 5, 0.05],
-  "enemyAttacks.ranged.keepAway": ["Keep-away distance", 0, 800, 10],
-  "enemyAttacks.ranged.range": ["Shooting range", 50, 1500, 10],
-  "enemyAttacks.ranged.orbSpeed": ["Orb speed", 20, 1500, 10],
-  "enemyAttacks.ranged.orbLife": ["Orb life (s)", 0.2, 6, 0.1],
-  "enemyAttacks.ranged.orbRadius": ["Orb radius", 1, 40, 1],
-  "enemyAttacks.ranged.cooldown": ["Cooldown (s)", 0.1, 6, 0.05],
-  "enemyAttacks.bomber.triggerRange": ["Trigger range", 5, 100, 1],
-  "enemyAttacks.bomber.blastRadius": ["Blast radius", 20, 500, 5],
-  "enemyAttacks.bomber.damage": ["Damage (%)", 0, 50, 0.5],
-  "enemyAttacks.bomber.playerPush": ["Push on the player", 0, 1500, 10],
-  "enemyAttacks.bomber.playerLift": ["Lift on the player", 0, 1200, 10],
-  "enemyAttacks.bomber.boidPush": ["Push on other boids", 0, 1500, 10],
-  "enemyAttacks.queen.triggerRange": ["Trigger range", 10, 400, 5],
-  "enemyAttacks.queen.windup": ["Anger before the blast (s)", 0.1, 3, 0.05],
-  "enemyAttacks.queen.blastRadius": ["Blast radius", 20, 500, 5],
-  "enemyAttacks.queen.damage": ["Damage (%)", 0, 50, 0.5],
-  "enemyAttacks.queen.playerPush": ["Push on the player", 0, 1500, 10],
-  "enemyAttacks.queen.playerLift": ["Lift on the player", 0, 1200, 10],
-  "enemyAttacks.queen.cooldown": ["Cooldown (s)", 0, 10, 0.1],
+  "combat.islands.margin": ["Rim clearance", 0, 120, 1],
+  "combat.islands.avoid": ["Avoid strength", 0, 200, 1],
 
   "audio.volume.master": ["Master", 0, 1, 0.05],
   "audio.volume.music": ["Music", 0, 1, 0.05],
@@ -284,24 +198,6 @@ export function paramsSource(): string {
   }
   out.push("};");
   return out.join("\n") + "\n";
-}
-
-async function copyText(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    // Fallback for contexts without the async clipboard API.
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.opacity = "0";
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand("copy");
-    ta.remove();
-    return ok;
-  }
 }
 
 // ---------------------------------------------------------------------------------------------

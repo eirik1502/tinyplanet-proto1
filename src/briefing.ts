@@ -1,5 +1,5 @@
 import { Avatar, type AvatarView } from "./avatar";
-import { BOID_HP, BURST_COLORS, type BoidKind } from "./combat";
+import type { BaseParams, BoidType } from "./boids/types";
 import { drawBoidBody } from "./sprites";
 import { padLabel, type PadLayout } from "./gamepad";
 import { params } from "./tuning";
@@ -11,6 +11,11 @@ import { params } from "./tuning";
 
 export type InputMode = "keyboard" | "mouse" | "gamepad";
 export type Weapon = "sword" | "spear";
+
+export interface BriefingEnemy {
+  type: BoidType<BaseParams>;
+  params: BaseParams;
+}
 
 export interface BriefingInfo {
   level: number;
@@ -26,11 +31,10 @@ export interface BriefingInfo {
   /** The letters on the gamepad, for gamepad mode. */
   padLayout: PadLayout;
   weapons: Weapon[];
-  enemies: Exclude<BoidKind, "queen">[];
-  /** Weapons and enemies unlocked on this level. */
-  fresh: (Weapon | BoidKind)[];
-  /** 0 = no queen on this planet. */
-  queenHp: number;
+  /** A card per kind of enemy on the planet (the queen first): its type and params. */
+  enemies: BriefingEnemy[];
+  /** Weapons and enemy types (by id) unlocked on this level. */
+  fresh: string[];
   /** Play the appearance animation on new items (on opening, not on re-renders). */
   animate: boolean;
 }
@@ -172,46 +176,24 @@ function playerCard(b: BriefingInfo) {
     </article>`;
 }
 
-function enemyCard(kind: BoidKind, b: BriefingInfo) {
-  const ea = params.enemyAttacks;
-  const hit = fmt(ea.hit.damage);
-  const cards: Record<BoidKind, { name: string; hp: number; abilities: Ability[] }> = {
-    queen: {
-      name: "Queen",
-      hp: b.queenHp,
-      abilities: [{ icon: ICONS.crown, name: "Escorted", text: "Flees. Guarded by her flock.", stats: [] }],
-    },
-    melee: {
-      name: "Melee boid",
-      hp: BOID_HP.melee,
-      abilities: [{ icon: ICONS.lunge, name: "Lunge", text: "Dashes in up close.", stats: [`${hit} dmg`, `${fmt(ea.melee.cooldown)}s recharge`] }],
-    },
-    ranged: {
-      name: "Ranged boid",
-      hp: BOID_HP.ranged,
-      abilities: [{ icon: ICONS.orb, name: "Orb shot", text: "Shoots from a distance.", stats: [`${hit} dmg`, `${fmt(ea.ranged.cooldown)}s recharge`] }],
-    },
-    bomber: {
-      name: "Bomber boid",
-      hp: BOID_HP.bomber,
-      abilities: [
-        { icon: ICONS.blast, name: "Blast", text: "Explodes on contact, or when killed.", stats: [`${fmt(ea.bomber.damage)} dmg`, "knockback"] },
-      ],
-    },
-  };
-  const c = cards[kind];
-  const f = freshMark(b.fresh.includes(kind));
+function enemyCard(e: BriefingEnemy, i: number, b: BriefingInfo) {
+  const { type, params: p } = e;
+  const f = freshMark(b.fresh.includes(type.id));
+  const queen = type.id === "queen";
   return `
-    <article class="unit enemy${kind === "queen" ? " queen" : ""}${f.cls}" style="--c:${BURST_COLORS[kind]};${f.style}">
+    <article class="unit enemy${queen ? " queen" : ""}${f.cls}" style="--c:${type.color};${f.style}">
       ${f.badge}
       <header>
-        <canvas class="portrait" data-portrait="${kind}"></canvas>
+        <canvas class="portrait" data-portrait="${i}"></canvas>
         <div>
-          <h3>${c.name}</h3>
-          <div class="stats">${chip(`${ICONS.heart}${fmt(c.hp)} HP`, "hp")}</div>
+          <h3>${type.name}</h3>
+          <div class="stats">${chip(`${ICONS.heart}${fmt(p.hp)} HP`, "hp")}${p.size !== 1 ? chip(`size ×${fmt(p.size)}`) : ""}</div>
         </div>
       </header>
-      <div class="abilities">${c.abilities.map(ability).join("")}</div>
+      <div class="abilities">${type
+        .card(p)
+        .map((a) => ability({ ...a, icon: ICONS[a.icon] }))
+        .join("")}</div>
     </article>`;
 }
 
@@ -247,7 +229,7 @@ export function briefingHtml(b: BriefingInfo): string {
               ? `<ul class="modifiers">${b.modifiers.map((m) => `<li><b>${m.name}</b> ${m.blurb}</li>`).join("")}</ul>`
               : ""
           }
-          <p class="goal">${ICONS.crown}${b.queenHp > 0 ? "Kill the queen" : "Kill every boid"}</p>
+          <p class="goal">${ICONS.crown}${b.enemies.some((e) => e.type.id === "queen") ? "Kill the queen" : "Kill every boid"}</p>
         </div>
         <div class="modes" role="group" aria-label="Input mode">
           ${modeButton("keyboard", `${ICONS.keyboard}Keyboard`)}
@@ -261,7 +243,7 @@ export function briefingHtml(b: BriefingInfo): string {
       </section>
       <div class="units">
         ${playerCard(b)}
-        <div class="enemies">${((b.queenHp > 0 ? ["queen"] : []) as BoidKind[]).concat(b.enemies).map((k) => enemyCard(k, b)).join("")}</div>
+        <div class="enemies">${b.enemies.map((e, i) => enemyCard(e, i, b)).join("")}</div>
       </div>
       <p class="hint">${mode === "gamepad" ? `${pad("PadBack")} mutes · ${pad("PadStart")} pauses` : `${kbd("M")} mutes · ${kbd("Esc")} pauses`}</p>
       <button class="start" data-start>${b.reason === "pause" ? "Resume" : "Start"} <span>${mode === "gamepad" ? `${pad("PadA")} ${pad("PadStart")}` : `${kbd("Enter")} ${kbd("Space", true)}`}</span></button>
@@ -273,24 +255,24 @@ export function briefingHtml(b: BriefingInfo): string {
 // ---------------------------------------------------------------------------------------------
 
 /** Paint every `canvas[data-portrait]` under `root`. */
-export function paintPortraits(root: HTMLElement, weapons: Weapon[]) {
+export function paintPortraits(root: HTMLElement, weapons: Weapon[], enemies: BriefingEnemy[]) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   for (const c of Array.from(root.querySelectorAll<HTMLCanvasElement>("canvas[data-portrait]"))) {
     const size = c.clientWidth || 64;
     c.width = c.height = Math.round(size * dpr);
     const ctx = c.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const kind = c.dataset.portrait!;
-    if (kind === "player") paintPlayer(ctx, size, weapons);
-    else {
-      const k = (size / 64) * (kind === "queen" ? 1 : 2.6);
+    const which = c.dataset.portrait!;
+    const enemy = enemies[Number(which)];
+    if (which === "player") paintPlayer(ctx, size, weapons);
+    else if (enemy) {
+      const queen = enemy.type.id === "queen";
+      const k = (size / 64) * (queen ? 1 : 2.6);
       // The queen's body sits behind her head: shift her down to centre it.
-      ctx.translate(size / 2, size / 2 + (kind === "queen" ? 6 * k : 0));
-      drawBoidBody(
-        ctx,
-        { kind: kind as BoidKind, id: 1, heading: -Math.PI / 2, phase: 0.06, lunge: 0, cooldown: 0, flash: 0, r: 8, flock: { engaged: true } },
-        k,
-      );
+      ctx.translate(size / 2, size / 2 + (queen ? 6 * k : 0));
+      // Portraits show every variant at the usual size; the card lists its size.
+      const look = { id: 1, heading: -Math.PI / 2, phase: 0.06, lunge: 0, cooldown: 0, windup: 0, flash: 0, flock: { engaged: true } };
+      drawBoidBody(ctx, enemy.type, { ...look, params: { ...enemy.params, size: 1 } }, k);
     }
   }
 }
