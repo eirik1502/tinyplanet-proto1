@@ -244,7 +244,7 @@ export function briefingHtml(b: BriefingInfo): string {
         <div class="enemies">${b.enemies.map((e, i) => enemyCard(e, i, b)).join("")}</div>
       </div>
       <p class="hint">${buttons("mute")} mutes · ${buttons("pause")} pauses</p>
-      <button class="start" data-start>${b.reason === "pause" ? "Resume" : "Start"} <span>${buttons("start", " ")}</span></button>
+      <button class="start" data-start>${b.reason === "pause" ? "Resume" : "Start"} <span>${buttons("confirm", " ")}</span></button>
     </div>`;
 }
 

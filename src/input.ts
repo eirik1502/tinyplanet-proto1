@@ -15,10 +15,10 @@ export type InputMode = "keyboard" | "mouse" | "gamepad";
 export const INPUT_MODES: InputMode[] = ["keyboard", "mouse", "gamepad"];
 
 /**
- * What the player can do with a button. "start" starts / resumes from the briefing, "skip" moves
- * on from the end-of-round screen, "switchMode" cycles the input mode.
+ * What the player can do with a button. "confirm" (the primary button) starts / resumes from the
+ * briefing and moves on from the end-of-round screen; "switchMode" cycles the input mode.
  */
-export type Action = "jump" | "sword" | "spear" | "start" | "pause" | "skip" | "mute" | "switchMode";
+export type Action = "jump" | "sword" | "spear" | "confirm" | "pause" | "mute" | "switchMode";
 
 type Bindings = Partial<Record<Action, string[]>>;
 
@@ -27,9 +27,8 @@ const KEYS: Bindings = {
   jump: ["Space"],
   sword: ["KeyZ", "KeyJ"],
   spear: ["KeyX", "KeyK"],
-  start: ["Enter", "Space"],
+  confirm: ["Enter", "Space"],
   pause: ["Escape"],
-  skip: ["Enter"],
   mute: ["KeyM"],
   switchMode: ["KeyI"],
 };
@@ -43,9 +42,8 @@ const PAD: Bindings = {
   jump: ["PadA"],
   sword: ["PadB", "PadRT"],
   spear: ["PadX", "PadLT"],
-  start: ["PadA", "PadStart"],
+  confirm: ["PadA", "PadStart"],
   pause: ["PadStart"],
-  skip: ["PadStart"],
   mute: ["PadBack"],
 };
 const MOVE_KEYS = { left: ["KeyA", "ArrowLeft"], right: ["KeyD", "ArrowRight"], up: ["KeyW", "ArrowUp"], down: ["KeyS", "ArrowDown"] };

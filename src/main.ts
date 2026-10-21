@@ -348,7 +348,7 @@ briefingEl.addEventListener("click", (e) => {
 /** While the briefing is up the world is paused: only its own keys do anything. */
 function updateBriefing(dtReal: number) {
   game.timer += dtReal;
-  if (game.timer > 0.3 && (pressed("start") || (game.briefing === "pause" && pressed("pause")))) closeBriefing();
+  if (game.timer > 0.3 && (pressed("confirm") || (game.briefing === "pause" && pressed("pause")))) closeBriefing();
   sfx.loops(0, 0);
   music.update(0, 0, 0.25);
   applyVolumes();
@@ -820,7 +820,7 @@ function update(dt: number, dtReal: number) {
     game.timer += dt;
     // Winning moves on to the next level; losing replays the same level on a fresh planet. An
     // custom level just starts over.
-    if (game.timer > 4.5 || (game.timer > 1.2 && pressed("skip"))) {
+    if (game.timer > 4.5 || (game.timer > 1.2 && pressed("confirm"))) {
       restart(game.state === "victory" && !custom() ? game.level + 1 : game.level, game.state === "defeat");
     }
   }
@@ -2249,7 +2249,7 @@ function drawHud() {
     ctx.fillStyle = "rgba(240,232,255,0.7)";
     const left = Math.max(0, Math.ceil(4.5 - game.timer));
     const next = custom() ? "Restarting the custom level" : win ? `Level ${game.level + 1}` : `Retrying level ${game.level}`;
-    ctx.fillText(`${next} in ${left}…  (${promptText("skip")} to continue now)`, W / 2, H / 2 + 60);
+    ctx.fillText(`${next} in ${left}…  (${promptText("confirm")} to continue now)`, W / 2, H / 2 + 60);
     ctx.globalAlpha = 1;
   }
 }
