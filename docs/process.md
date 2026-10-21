@@ -64,6 +64,7 @@ Power up / skills:
 - Spear
   - Beam upgrade: shoot a beam (instant / multihit)
   - Grappling hook upgrade: Hook that connects with island or enemy. Laser rope, kills enemies touched
+  - Explosion upgrade: Explode (push back) surrounding enemies on impact
 - Sword
   - Range upgrade
   - Strength upgrade
@@ -85,7 +86,19 @@ Power up / skills:
 - Set standard height
 - Show what enemies are in height range
 
-Level progression
+✅ Level progression
 - Levels should be more varied
 - E.g. make some templates that scales with level
 - Island generation variation, like: density, clusters, density map (more dense towards edges, etc), and others
+
+Improve level design
+- Make planets smaller in general, focus on combat around a queen.
+
+Improve combat mechanics
+- Micro mechanics in combat vs a flock
+- Make opponents more understandable
+  - Melee boids: Increase time from starting attack to attacking. Visually indicate attack started
+  - Bomb boids: Shorter explosion range (too hard to detonate without being hit)
+  - Ranged boids: Indicate projectile a little time before shooting. Make it more explicit attack: indicate will attack, show attack animation (without moving) then shoot.
+- Flocking
+  - Flocks should stay tight (dont consider radius, always check all members)

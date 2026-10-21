@@ -246,7 +246,7 @@ export const NO_LEVEL_RULES: LevelRules = {
   gravity: 1,
   wind: { x: 0, y: 0 },
   fog: 0,
-  swarm: { shield: 0, reinforce: null, hp: 1, size: 1 },
+  swarm: { shield: 0, reinforce: null, hp: 1, size: 1, together: false },
 };
 
 export function levelRules(
@@ -275,6 +275,7 @@ export function levelRules(
         : null,
       hp: has("elite") ? cfg.eliteHp : 1,
       size: has("elite") ? cfg.eliteSize : 1,
+      together: false,
     },
   };
 }
@@ -474,8 +475,8 @@ function stageAt(level: number): Stage {
   return PROGRESSION[key]!;
 }
 
-/** Every template that appears in a pool, in order: what the tuning panel's "force template" counts through. */
-export const POOL_TEMPLATES: LevelTemplate[] = [...new Set(Object.values(PROGRESSION).flatMap((s) => (Array.isArray(s) ? s : [])))];
+/** Every template in the progression, in order: what the dev panel's template override picks from. */
+export const ALL_TEMPLATES: LevelTemplate[] = [...new Set(Object.values(PROGRESSION).flat())];
 
 export interface LevelPlan {
   template: LevelTemplate;
@@ -484,20 +485,20 @@ export interface LevelPlan {
 
 /**
  * The template and modifiers for `level`. From a pool: anything but the previous level's
- * template, with modifiers rolled on mid and late levels. `force` (1-based, from the tuning panel)
- * picks a pool template outright on pool levels.
+ * template, with modifiers rolled on mid and late levels. `force` (from the dev panel) replaces
+ * the template on any level; its modifiers are rolled as on a pool level.
  */
 export function planLevel(
   level: number,
   prev: LevelTemplate | null,
-  opts: { force: number; modifiersFrom: number; twoModifiersFrom: number },
+  opts: { force: LevelTemplate | null; modifiersFrom: number; twoModifiersFrom: number },
 ): LevelPlan {
   const stage = stageAt(level);
-  if (!Array.isArray(stage)) return { template: stage, modifiers: [...(stage.modifiers ?? [])] };
+  if (!Array.isArray(stage) && !opts.force) return { template: stage, modifiers: [...(stage.modifiers ?? [])] };
 
-  const pool = stage;
+  const pool = Array.isArray(stage) ? stage : [stage];
   let template: LevelTemplate;
-  if (opts.force >= 1) template = POOL_TEMPLATES[Math.min(POOL_TEMPLATES.length, Math.round(opts.force)) - 1]!;
+  if (opts.force) template = opts.force;
   else {
     const fresh = pool.filter((t) => t !== prev);
     const from = fresh.length ? fresh : pool;

@@ -64,9 +64,11 @@ export interface SwarmRules {
   /** Boids' health and body size multipliers (the queen's excluded). */
   hp: number;
   size: number;
+  /** Flocks never join, split or hand over guards: each keeps the members it started with. */
+  together: boolean;
 }
 
-export const NO_RULES: SwarmRules = { shield: 0, reinforce: null, hp: 1, size: 1 };
+export const NO_RULES: SwarmRules = { shield: 0, reinforce: null, hp: 1, size: 1, together: false };
 
 export interface Shot {
   x: number;
@@ -207,7 +209,8 @@ export class Combat {
   sparks: Spark[] = [];
   blasts: Blast[] = [];
   flocks: Flock[] = [];
-  queen!: Boid;
+  /** null on planets without a queen (dev arenas): the swarm is just its flocks. */
+  queen: Boid | null = null;
   /** Where the queen is roaming to while the player isn't close. */
   private queenGoal: { x: number; y: number } | null = null;
   /** The queen's starting escort size: her flock never sheds members below it. */
@@ -230,15 +233,19 @@ export class Combat {
   /** Seconds until the next reinforcement flock. */
   private reinforceIn = 0;
 
-  get queenDead() {
-    return this.queen.hp <= 0;
+  /** The planet is won: the queen is dead, or with no queen, the whole swarm. */
+  get cleared() {
+    return this.queen ? this.queen.hp <= 0 : this.boids.length === 0;
   }
 
   get queenShielded() {
     return this.shieldLeft > 0;
   }
 
-  /** New swarm for a planet: its flocks at their spawn points, the queen and her escort at her home. */
+  /**
+   * New swarm for a planet: its flocks at their spawn points, the queen and her escort at her
+   * home. A planet with no queen health has no queen.
+   */
   reset(planet: Planet, rules: SwarmRules = NO_RULES) {
     this.rules = rules;
     const swarm = planet.flocks.reduce((n, f) => n + f.kinds.length, 0);
@@ -257,13 +264,18 @@ export class Combat {
     this.flocks = [];
     this.queenGoal = null;
     const home = planet.queenHome;
-    const escort = this.newFlock(home.x, home.y);
-    this.queen = this.spawn("queen", home.x, home.y, escort);
-    this.queen.hp = this.queen.maxHp = planet.queenHp;
-    this.escortSize = planet.escort.length;
-    for (const kind of planet.escort) this.spawnNear(kind, home.x, home.y, escort);
+    this.queen = null;
+    this.escortSize = 0;
+    if (planet.queenHp > 0) {
+      const escort = this.newFlock(home.x, home.y);
+      this.queen = this.spawn("queen", home.x, home.y, escort);
+      this.queen.hp = this.queen.maxHp = planet.queenHp;
+      this.escortSize = planet.escort.length;
+      for (const kind of planet.escort) this.spawnNear(kind, home.x, home.y, escort);
+    }
     for (const f of planet.flocks) {
       const flock = this.newFlock(f.x, f.y);
+      flock.hunting = !!f.hunting;
       for (const kind of f.kinds) this.spawnNear(kind, f.x, f.y, flock);
     }
   }
@@ -389,7 +401,7 @@ export class Combat {
     // Hitting any member (the queen too) sets the whole flock on the player; hitting the queen's
     // flock also calls in the flock nearest the player after it.
     b.flock.provoked = params.boids.swarm.provokedTime;
-    if (b.flock === this.queen.flock) this.callReinforcements();
+    if (b.flock === this.queen?.flock) this.callReinforcements();
     this.burst(b.x, b.y, b.alt, b.hp <= 0 ? 18 : 6, BURST_COLORS[b.kind]);
     if (b.hp <= 0 && b.kind === "queen") this.burst(b.x, b.y, b.alt, 60, "#ffe27a");
     // Each kill wears the queen's shield down.
@@ -562,11 +574,11 @@ export class Combat {
   /** Every so often a hunting flock flies in from a random point on the boundary, while the swarm is small enough. */
   private updateReinforcements(dt: number) {
     const r = this.rules.reinforce;
-    if (!r || this.queenDead) return;
+    if (!r || this.cleared) return;
     this.reinforceIn -= dt;
     if (this.reinforceIn > 0) return;
     this.reinforceIn = r.every;
-    if (this.boids.length - 1 >= r.cap || !r.kinds.length) return;
+    if (this.boids.length - (this.queen ? 1 : 0) >= r.cap || !r.kinds.length) return;
     const a = this.rand() * Math.PI * 2;
     const x = this.bounds.x + Math.cos(a) * this.bounds.r * 0.95;
     const y = this.bounds.y + Math.sin(a) * this.bounds.r * 0.95;
@@ -581,7 +593,7 @@ export class Combat {
    */
   private updateFlocks(dt: number, player: PlayerView) {
     const fp = params.boids.flocks;
-    const queenFlock = this.queen.flock;
+    const queenFlock = this.queen?.flock ?? null;
     for (const f of this.flocks) f.members = f.members.filter((b) => b.hp > 0 || b.kind === "queen");
     this.flocks = this.flocks.filter((f) => f.members.length > 0);
 
@@ -611,7 +623,7 @@ export class Combat {
           (f.engaged && near(params.boids.swarm.disengageRange)));
     }
 
-    this.recruitGuards();
+    if (!this.rules.together) this.recruitGuards();
 
     for (const f of [...this.flocks]) {
       if (!this.flocks.includes(f)) continue; // merged away this frame
@@ -628,13 +640,14 @@ export class Combat {
         else if (Math.hypot(o.cx - f.cx, o.cy - f.cy) < params.boids.flocking.neighborRadius) this.merge(f, o);
         continue;
       }
-      if (f === queenFlock) {
+      if (this.queen && f === queenFlock) {
         f.goalX = this.queen.x;
         f.goalY = this.queen.y;
       } else if (Math.hypot(f.goalX - f.cx, f.goalY - f.cy) < 80) {
         this.pickGoal(f);
       }
       // The queen's flock stays with her: others come to it, never the other way round.
+      if (this.rules.together) continue;
       if (f !== queenFlock && this.rand() < fp.joinChance * dt) {
         let best: Flock | null = null;
         let bestD = fp.joinRange;
@@ -658,9 +671,10 @@ export class Combat {
    */
   private recruitGuards() {
     const q = this.queen;
+    if (!q || q.hp <= 0) return;
     const qf = q.flock;
     let missing = this.escortSize - qf.members.filter((b) => b.kind !== "queen").length;
-    if (q.hp <= 0 || missing <= 0) return;
+    if (missing <= 0) return;
     const toQueen = (x: number, y: number) => Math.hypot(x - q.x, y - q.y);
     const donors = this.flocks
       .filter((f) => f !== qf && toQueen(f.cx, f.cy) < params.boids.queen.recruitRange)
@@ -685,7 +699,7 @@ export class Combat {
     let best: Flock | null = null;
     let bestD = Infinity;
     for (const f of this.flocks) {
-      if (f === this.queen.flock) continue;
+      if (f === this.queen?.flock) continue;
       const d = Math.hypot(f.cx - p.x, f.cy - p.y);
       if (d < bestD) {
         best = f;
@@ -697,7 +711,7 @@ export class Combat {
 
   /** `a` joins `b` (the queen's flock always takes the other in). */
   private merge(a: Flock, b: Flock) {
-    if (a === this.queen.flock) [a, b] = [b, a];
+    if (a === this.queen?.flock) [a, b] = [b, a];
     for (const m of a.members) m.flock = b;
     b.members.push(...a.members);
     b.joining = null;
@@ -708,7 +722,7 @@ export class Combat {
   private split(f: Flock) {
     const movers = f.members.filter((b) => b.kind !== "queen");
     // Someone always stays behind; the queen keeps at least her starting escort.
-    const keep = f === this.queen.flock ? Math.max(1, this.escortSize) : 1;
+    const keep = f === this.queen?.flock ? Math.max(1, this.escortSize) : 1;
     if (movers.length <= keep) return;
     const n = 1 + Math.floor(this.rand() * (movers.length - keep));
     for (let i = movers.length - 1; i > 0; i--) {
@@ -747,8 +761,8 @@ export class Combat {
 
   private updateBoids(dt: number, dtReal: number, player: PlayerView) {
     const q = this.queen;
-    const queenAlive = q.hp > 0;
-    const playerToQueen = Math.hypot(player.x - q.x, player.y - q.y);
+    const queenAlive = !!q && q.hp > 0;
+    const playerToQueen = q ? Math.hypot(player.x - q.x, player.y - q.y) : Infinity;
     const queenThreatened = queenAlive && player.targetable && playerToQueen < params.boids.queen.threatRadius;
 
     for (const b of this.boids) {
@@ -774,7 +788,7 @@ export class Combat {
       const flock = b.flock;
       const engaged = flock.engaged;
       // The queen's flock screens her from the player.
-      const guarding = queenThreatened && flock === q.flock;
+      const guarding = q !== null && queenThreatened && flock === q.flock;
 
       // Bombers go off on contact with the player.
       const bp = params.enemyAttacks.bomber;
@@ -890,7 +904,7 @@ export class Combat {
         ax += Math.cos(wa) * params.boids.flocking.wander;
         ay += Math.sin(wa) * params.boids.flocking.wander;
         const roam = params.boids.flocks.roamSpeed * (flock.joining ? 1.5 : 1);
-        if (flock === q.flock && queenAlive) {
+        if (q && flock === q.flock && queenAlive) {
           const a = b.phase * 0.5 + b.id * 2.4;
           const d = q.r + 50 + (b.id % 3) * 20;
           seek(q.x + Math.cos(a) * d, q.y + Math.sin(a) * d, Math.max(roam, 120), 0.8);

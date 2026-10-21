@@ -14,6 +14,24 @@ bun run build      # production build to dist/
 bun run typecheck
 ```
 
+### Dev panel
+
+The **Dev** box in the top-right corner (click it to show or hide) has two sections:
+
+- **Run** holds runtime-only settings: what to play. These aren't copied into `params.ts`. They're
+  saved in your browser, so a reload starts the same run again.
+  - **Progression** plays the normal level progression. Pick the level to start from, and
+    optionally one template to use on every level.
+  - **Dev level** sets up the opponents yourself: any number of flocks, each with its own mix of
+    melee, ranged and bomber boids, and optionally the queen with an escort. Presets cover the
+    common cases (a single melee boid, a melee flock, a mixed flock, the queen). Flocks can hunt
+    you from the start, and can be kept together (no joining or splitting). Every weapon is
+    unlocked and there are no modifiers. Without a queen you win by killing every boid, and
+    clearing a dev level starts it again.
+- **Tuning** holds the game params as sliders, one tab per group. Changes are saved in the
+  browser. **Copy** puts every value on the clipboard as a replacement for `DEFAULTS` in
+  `src/params.ts`.
+
 ## Controls
 
 | Key | Action |
@@ -48,4 +66,4 @@ Every flight has one double jump; it heads where you aim (the cursor, or the dir
 focus; a sword hit also bounces you up. Slow motion while winding up an air attack drains focus; grabbing a rim refills
 it. The first dip below the rim in a flight springs you back up once.
 
-Game parameters can be tweaked live from the in-game slider panel (defaults in `src/params.ts`).
+Game parameters can be tweaked live from the Tuning section of the dev panel (defaults in `src/params.ts`).

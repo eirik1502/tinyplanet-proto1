@@ -1,7 +1,7 @@
-import { POOL_TEMPLATES } from "./levels";
 import { DEFAULTS } from "./params";
+import { getPref, setPref } from "./prefs";
 
-// Live-tweakable game parameters and the tabbed slider panel that edits them.
+// Live-tweakable game parameters and the dev panel's Tuning section that edits them.
 // `params` mirrors DEFAULTS (tab → group → value); each tab of the panel is one top-level group.
 // Values persist in localStorage; "Copy" puts the current values on the clipboard as source for
 // params.ts.
@@ -25,7 +25,7 @@ const TAB_TITLES: Record<keyof Params, string> = {
 };
 
 const GROUP_TITLES: Record<string, string> = {
-  "world.levels": "Levels",
+  "world.levels": "Modifiers by level",
   "world.intro1": "Level 1 (melee, sword)",
   "world.intro2": "Level 2 (+ ranged boids)",
   "world.intro3": "Level 3 (+ spear, bombers)",
@@ -65,8 +65,6 @@ const GROUP_TITLES: Record<string, string> = {
 /** [label, min, max, step, appliesOnRestart?] per slider; values without an entry get no slider. */
 type Slider = [string, number, number, number, boolean?];
 const SLIDERS: Record<string, Slider> = {
-  "world.levels.start": ["Start level (on reload)", 1, 20, 1],
-  "world.levels.template": ["Force template on pool levels (0 = random)", 0, POOL_TEMPLATES.length, 1, true],
   "world.levels.modifiersFrom": ["Modifiers may appear from level", 1, 30, 1, true],
   "world.levels.twoModifiersFrom": ["Up to two modifiers from level", 1, 30, 1, true],
   "world.modifiers.wind": ["Wind strength", 0, 400, 5, true],
@@ -236,21 +234,6 @@ const SLIDERS: Record<string, Slider> = {
 
 const STORAGE_KEY = "planetproto.params";
 
-function getPref(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-function setPref(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Ignore: persistence is a convenience.
-  }
-}
-
 function setPath(path: string, v: unknown) {
   const [t, g, k] = path.split(".") as [string, string, string];
   if (typeof v === "number" && Number.isFinite(v) && typeof defaults[t]?.[g]?.[k] === "number") live[t]![g]![k] = v;
@@ -272,6 +255,8 @@ function load() {
 function save() {
   setPref(STORAGE_KEY, JSON.stringify(params));
 }
+
+load();
 
 // ---------------------------------------------------------------------------------------------
 // Copy as source
@@ -327,64 +312,28 @@ function fmt(v: number, step: number) {
   return step < 1 ? v.toFixed(2).replace(/\.?0+$/, "") : String(Math.round(v));
 }
 
-export function createTuningPanel() {
-  load();
-
-  const style = document.createElement("style");
-  style.textContent = `
-    #tuning { position: fixed; top: 10px; right: 10px; width: 290px; max-height: calc(100vh - 20px);
-      display: flex; flex-direction: column;
-      background: rgba(18, 12, 40, 0.86); color: #e4defc; font: 12px/1.3 system-ui, sans-serif;
-      border: 1px solid rgba(170, 150, 255, 0.25); border-radius: 8px; backdrop-filter: blur(6px); user-select: none; }
-    #tuning header { display: flex; align-items: center; gap: 6px; padding: 7px 10px; cursor: pointer; font-weight: 600; }
-    #tuning header span { flex: 1; }
-    #tuning button { background: rgba(170, 150, 255, 0.18); color: inherit; border: 0; border-radius: 4px;
-      padding: 3px 8px; font: inherit; cursor: pointer; }
-    #tuning button:hover { background: rgba(170, 150, 255, 0.32); }
-    #tuning .tabs { display: flex; gap: 2px; padding: 0 8px; border-bottom: 1px solid rgba(170, 150, 255, 0.25); }
-    #tuning .tabs button { flex: 1; border-radius: 4px 4px 0 0; background: transparent; padding: 5px 2px; color: #a99be8; }
-    #tuning .tabs button.active { background: rgba(170, 150, 255, 0.22); color: #fff; }
-    #tuning .body { padding: 0 10px 8px; overflow-y: auto; }
-    #tuning.collapsed .body, #tuning.collapsed .tabs { display: none; }
-    #tuning h4 { margin: 8px 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: #a99be8; }
-    #tuning label { display: grid; grid-template-columns: 1fr auto; row-gap: 1px; margin-bottom: 4px; }
-    #tuning label small { color: #a99be8; margin-left: 4px; }
-    #tuning output { font-variant-numeric: tabular-nums; color: #fff; }
-    #tuning input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; accent-color: #9d86ff; }
-    #tuning .note { color: #a99be8; margin-top: 6px; font-size: 11px; }
-  `;
-  document.head.appendChild(style);
-
-  const panel = document.createElement("div");
-  panel.id = "tuning";
-  const header = document.createElement("header");
-  const title = document.createElement("span");
-  title.textContent = "Tuning";
+/**
+ * The Tuning section of the dev panel: a tab per top-level group of params, with sliders, and
+ * buttons to copy every value as source for params.ts or reset the open tab.
+ */
+export function tuningSection(): HTMLElement {
+  const section = document.createElement("div");
+  section.className = "section tuning";
+  const toolbar = document.createElement("div");
+  toolbar.className = "toolbar";
   const copy = document.createElement("button");
   copy.textContent = "Copy";
   copy.title = "Copy all values as source for src/params.ts";
   const reset = document.createElement("button");
   reset.textContent = "Reset tab";
-  const toggle = document.createElement("button");
-  header.append(title, copy, reset, toggle);
+  const hint = document.createElement("span");
+  hint.textContent = "Saved in this browser";
+  toolbar.append(hint, copy, reset);
   const tabBar = document.createElement("div");
   tabBar.className = "tabs";
   const body = document.createElement("div");
   body.className = "body";
-  panel.append(header, tabBar, body);
-
-  const setCollapsed = (c: boolean) => {
-    panel.classList.toggle("collapsed", c);
-    toggle.textContent = c ? "Show" : "Hide";
-    reset.hidden = c;
-    setPref("planetproto.tuning.open", c ? "0" : "1");
-  };
-  setCollapsed(getPref("planetproto.tuning.open") !== "1");
-  header.addEventListener("click", (e) => {
-    if (e.target === header || e.target === title || e.target === toggle) {
-      setCollapsed(!panel.classList.contains("collapsed"));
-    }
-  });
+  section.append(toolbar, tabBar, body);
 
   copy.addEventListener("click", async () => {
     const ok = await copyText(paramsSource());
@@ -473,5 +422,5 @@ export function createTuningPanel() {
   });
 
   renderTab();
-  document.body.appendChild(panel);
+  return section;
 }

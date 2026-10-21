@@ -28,8 +28,9 @@ export interface Planet {
   queenHome: { x: number; y: number };
   /** The queen's escort: they spawn around her and share her flock. */
   escort: SpawnKind[];
-  /** The other flocks: where each spawns and who is in it. */
-  flocks: { x: number; y: number; kinds: SpawnKind[] }[];
+  /** The other flocks: where each spawns and who is in it, and whether it hunts the player from the start. */
+  flocks: { x: number; y: number; kinds: SpawnKind[]; hunting?: boolean }[];
+  /** 0 = no queen (dev arenas). */
   queenHp: number;
   theme: Theme;
 }

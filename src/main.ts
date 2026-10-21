@@ -1,6 +1,6 @@
 import { Island, ISLAND_TOP, mulberry32, type Vec } from "./island";
 import { Projector, type Projected } from "./projection";
-import { createTuningPanel, params } from "./tuning";
+import { params } from "./tuning";
 import { BLAST_TIME, BOID_RADIUS, Combat, hitStop, type Blast, type Boid } from "./combat";
 import { generatePlanet, type Planet, type PlanetOptions, type SpawnKind } from "./planet";
 import {
@@ -19,6 +19,9 @@ import { outOfHitHeight } from "./hitbox";
 import { drawBoidBody } from "./sprites";
 import { briefingHtml, paintPortraits, type InputMode, type Weapon } from "./briefing";
 import { readGamepad, rumble, type PadLayout } from "./gamepad";
+import { describeDevLevel, devPlanet, devTemplate } from "./devlevel";
+import { createDevUI } from "./devui";
+import { currentRun, setRunStatus, type Run } from "./runtime";
 
 // ---------------------------------------------------------------------------------------------
 // Setup
@@ -46,8 +49,9 @@ const proj = new Projector();
 let planet: Planet;
 let islands: Island[] = [];
 
-// Game parameters live in `params` (defaults in params.ts) and are editable live from the slider panel.
-createTuningPanel();
+// Game parameters live in `params` (defaults in params.ts) and are editable live from the dev
+// panel, which also picks what to play.
+createDevUI((r) => startRun(r));
 const HANG_ALT = ISLAND_TOP - 9;
 
 // ---------------------------------------------------------------------------------------------
@@ -295,7 +299,11 @@ const game = { state: "play" as GameState, timer: 0, level: 0, shake: 0, briefin
 
 /** The level each weapon and enemy first appears on. */
 const UNLOCKS: Record<Weapon | SpawnKind, number> = { sword: 1, melee: 1, ranged: 2, spear: 3, bomber: 3 };
-const unlocked = (what: Weapon | SpawnKind, level = game.level) => level >= UNLOCKS[what];
+/** What this session plays: set from the dev panel's Run section (a reload starts what it's set to). */
+let run: Run = currentRun();
+/** The dev level being played, if any: only its opponents, and everything unlocked. */
+const devLevel = () => (run.kind === "dev" ? run.dev : null);
+const unlocked = (what: Weapon | SpawnKind, level = game.level) => !!devLevel() || level >= UNLOCKS[what];
 
 /** This level's template and modifiers (from PROGRESSION); a retry keeps them. */
 let plan: LevelPlan | null = null;
@@ -322,30 +330,50 @@ function levelSpec(level: number, template: LevelTemplate, seed: number): Planet
   return templateSpec(template, base, w, (k) => unlocked(k, level), seed);
 }
 
+/** Start a run from the dev panel: a progression from its level, or a dev level. */
+function startRun(r: Run) {
+  run = r;
+  plan = null;
+  restart(r.kind === "progression" ? r.level : 1);
+}
+
 /** Generate a new planet for `level` and show its briefing (a defeat retries on a fresh planet). */
 function restart(level: number, retry = false) {
   game.level = level;
   const lv = params.world.levels;
-  if (!retry || !plan) {
+  const dev = devLevel();
+  if (dev) plan = { template: devTemplate(dev), modifiers: [] };
+  else if (!retry || !plan) {
     plan = planLevel(level, plan?.template ?? null, {
-      force: lv.template,
+      force: run.kind === "progression" ? run.template : null,
       modifiersFrom: lv.modifiersFrom,
       twoModifiersFrom: lv.twoModifiersFrom,
     });
   }
   const seed = Math.floor(Math.random() * 1e9);
-  planet = generatePlanet(seed, levelSpec(level, plan.template, seed));
+  planet = dev ? devPlanet(seed, dev, plan.template) : generatePlanet(seed, levelSpec(level, plan.template, seed));
   islands = planet.islands;
   const kinds = [...new Set(planet.flocks.flatMap((f) => f.kinds))];
   const swarm = planet.escort.length + planet.flocks.reduce((s, f) => s + f.kinds.length, 0);
   rules = levelRules(plan.modifiers, params.world.modifiers, kinds, swarm, mulberry32(seed ^ 0x68e31da4));
+  if (dev) rules = { ...rules, swarm: { ...rules.swarm, together: dev.together } };
   combat.reset(planet, rules.swarm);
   music.setSeed(planet.seed);
   resetPlayer();
   game.timer = 0;
   cam.x = player.x;
   cam.y = player.y;
+  setRunStatus(`Now: ${where()} · planet ${planet.seed.toString(36)}`);
+  document.getElementById("goal")!.textContent = combat.queen ? "Kill the queen ♛" : "Kill every boid";
   openBriefing(retry ? "retry" : "new");
+}
+
+/** What is being played, for the HUD and the dev panel. */
+function where() {
+  const dev = devLevel();
+  if (dev) return `dev level: ${describeDevLevel(dev)}`;
+  const mods = plan?.modifiers.length ? ` (${plan.modifiers.map((m) => MODIFIERS[m].name).join(", ")})` : "";
+  return `level ${game.level}${plan ? ` · ${plan.template.name}` : ""}${mods}`;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -368,8 +396,9 @@ function showBriefing(animate = false) {
     padLayout,
     weapons,
     enemies,
-    fresh: game.briefing === "pause" ? [] : [...weapons, ...enemies].filter((x) => UNLOCKS[x] === game.level && game.level > 1),
-    queenHp: combat.queen.maxHp,
+    heading: devLevel() ? "Dev level" : undefined,
+    fresh: game.briefing === "pause" || devLevel() ? [] : [...weapons, ...enemies].filter((x) => UNLOCKS[x] === game.level && game.level > 1),
+    queenHp: combat.queen?.maxHp ?? 0,
     animate,
   });
   briefingEl.hidden = false;
@@ -867,12 +896,13 @@ function update(dt: number, dtReal: number) {
   }
   playCombatSounds();
   game.shake = Math.max(0, game.shake - dt);
-  if (game.state === "play" && combat.queenDead) endRound("victory");
+  if (game.state === "play" && combat.cleared) endRound("victory");
   if (game.state !== "play") {
     game.timer += dt;
-    // Winning moves on to the next level; losing replays the same level on a fresh planet.
+    // Winning moves on to the next level; losing replays the same level on a fresh planet. An
+    // dev level just starts over.
     if (game.timer > 4.5 || (game.timer > 1.2 && anyPressed(["Enter", "PadStart"]))) {
-      restart(game.state === "victory" ? game.level + 1 : game.level, game.state === "defeat");
+      restart(game.state === "victory" && !devLevel() ? game.level + 1 : game.level, game.state === "defeat");
     }
   }
 
@@ -1726,7 +1756,7 @@ function updateSound() {
     if (b.hp > 0 && b.kind !== "queen" && b.flock.engaged && Math.hypot(b.x - p.x, b.y - p.y) < 700) near++;
   }
   const q = combat.queen;
-  const queenNear = q.hp > 0 && Math.hypot(q.x - p.x, q.y - p.y) < params.boids.queen.threatRadius ? 0.5 : 0;
+  const queenNear = q && q.hp > 0 && Math.hypot(q.x - p.x, q.y - p.y) < params.boids.queen.threatRadius ? 0.5 : 0;
   const intensity = playing ? Math.min(1, near / 6 + queenNear) : 0;
   music.update(intensity, slow.intensity, playing ? 1 : 0.25);
   applyVolumes();
@@ -2119,18 +2149,25 @@ function drawHud() {
 
   // Queen health
   const q = combat.queen;
-  const bw = Math.min(320, W * 0.4);
-  const bx = (W - bw) / 2;
-  ctx.fillStyle = "rgba(20,8,35,0.7)";
-  ctx.fillRect(bx - 2, 14, bw + 4, 14);
-  ctx.fillStyle = combat.queenShielded ? "#8fe3ff" : "#c84cff";
-  ctx.fillRect(bx, 16, bw * Math.max(0, q.hp / q.maxHp), 10);
+  if (q) {
+    const bw = Math.min(320, W * 0.4);
+    const bx = (W - bw) / 2;
+    ctx.fillStyle = "rgba(20,8,35,0.7)";
+    ctx.fillRect(bx - 2, 14, bw + 4, 14);
+    ctx.fillStyle = combat.queenShielded ? "#8fe3ff" : "#c84cff";
+    ctx.fillRect(bx, 16, bw * Math.max(0, q.hp / q.maxHp), 10);
+  }
   ctx.font = "600 12px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillStyle = "#f0dcff";
   const shield = combat.queenShielded ? ` · shielded: ${combat.shieldLeft} more kills` : "";
-  ctx.fillText(`♛ QUEEN${shield} · swarm ${combat.boids.length - 1} in ${combat.flocks.length} flocks · level ${game.level} · planet ${planet.seed.toString(36)}`, W / 2, 32);
+  const at = devLevel() ? "dev level" : `level ${game.level}`;
+  ctx.fillText(
+    `${q ? `♛ QUEEN${shield} · ` : ""}swarm ${combat.boids.length - (q ? 1 : 0)} in ${combat.flocks.length} flocks · ${at} · planet ${planet.seed.toString(36)}`,
+    W / 2,
+    32,
+  );
   const mods = plan?.modifiers.map((m) => MODIFIERS[m].name).join(" · ");
   if (mods) {
     ctx.fillStyle = "#8fe3ff";
@@ -2147,18 +2184,18 @@ function drawHud() {
     ctx.textBaseline = "middle";
     ctx.font = "800 64px system-ui, sans-serif";
     ctx.fillStyle = win ? "#ffd34d" : "#ff5a6e";
-    ctx.fillText(win ? `LEVEL ${game.level} CLEARED` : "DEFEATED", W / 2, H / 2 - 20);
+    ctx.fillText(win ? (devLevel() ? "CLEARED" : `LEVEL ${game.level} CLEARED`) : "DEFEATED", W / 2, H / 2 - 20);
     ctx.font = "500 18px system-ui, sans-serif";
     ctx.fillStyle = "#f0e8ff";
     ctx.fillText(
-      win ? "The queen has fallen." : `The swarm overwhelmed you on level ${game.level}.`,
+      win ? (combat.queen ? "The queen has fallen." : "Every boid is down.") : `The swarm overwhelmed you${devLevel() ? "" : ` on level ${game.level}`}.`,
       W / 2,
       H / 2 + 30,
     );
     ctx.font = "13px system-ui, sans-serif";
     ctx.fillStyle = "rgba(240,232,255,0.7)";
     const left = Math.max(0, Math.ceil(4.5 - game.timer));
-    const next = win ? `Level ${game.level + 1}` : `Retrying level ${game.level}`;
+    const next = devLevel() ? "Restarting the dev level" : win ? `Level ${game.level + 1}` : `Retrying level ${game.level}`;
     ctx.fillText(`${next} in ${left}…  (Enter to continue now)`, W / 2, H / 2 + 60);
     ctx.globalAlpha = 1;
   }
@@ -2168,7 +2205,7 @@ function drawHud() {
 // Loop
 // ---------------------------------------------------------------------------------------------
 
-restart(Math.max(1, Math.round(params.world.levels.start)));
+startRun(run);
 
 let last = performance.now();
 let worldTime = 0;

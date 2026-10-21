@@ -14,6 +14,8 @@ export type Weapon = "sword" | "spear";
 
 export interface BriefingInfo {
   level: number;
+  /** Replaces "Level n" in the title. */
+  heading?: string;
   /** The level's template. */
   template: { name: string; blurb: string; boss: boolean } | null;
   /** The level's modifiers. */
@@ -27,6 +29,7 @@ export interface BriefingInfo {
   enemies: Exclude<BoidKind, "queen">[];
   /** Weapons and enemies unlocked on this level. */
   fresh: (Weapon | BoidKind)[];
+  /** 0 = no queen on this planet. */
   queenHp: number;
   /** Play the appearance animation on new items (on opening, not on re-renders). */
   animate: boolean;
@@ -217,7 +220,11 @@ export function briefingHtml(b: BriefingInfo): string {
   layout = b.padLayout;
   const mode = b.inputMode;
   const title =
-    b.reason === "pause" ? `Paused · Level ${b.level}` : b.reason === "retry" ? `Retry level ${b.level}` : `Level ${b.level}`;
+    b.reason === "pause"
+      ? `Paused · ${b.heading ?? `Level ${b.level}`}`
+      : b.reason === "retry"
+        ? `Retry ${b.heading?.toLowerCase() ?? `level ${b.level}`}`
+        : (b.heading ?? `Level ${b.level}`);
   const moves =
     mode === "gamepad"
       ? [
@@ -240,7 +247,7 @@ export function briefingHtml(b: BriefingInfo): string {
               ? `<ul class="modifiers">${b.modifiers.map((m) => `<li><b>${m.name}</b> ${m.blurb}</li>`).join("")}</ul>`
               : ""
           }
-          <p class="goal">${ICONS.crown}Kill the queen</p>
+          <p class="goal">${ICONS.crown}${b.queenHp > 0 ? "Kill the queen" : "Kill every boid"}</p>
         </div>
         <div class="modes" role="group" aria-label="Input mode">
           ${modeButton("keyboard", `${ICONS.keyboard}Keyboard`)}
@@ -254,7 +261,7 @@ export function briefingHtml(b: BriefingInfo): string {
       </section>
       <div class="units">
         ${playerCard(b)}
-        <div class="enemies">${(["queen", ...b.enemies] as BoidKind[]).map((k) => enemyCard(k, b)).join("")}</div>
+        <div class="enemies">${((b.queenHp > 0 ? ["queen"] : []) as BoidKind[]).concat(b.enemies).map((k) => enemyCard(k, b)).join("")}</div>
       </div>
       <p class="hint">${mode === "gamepad" ? `${pad("PadBack")} mutes · ${pad("PadStart")} pauses` : `${kbd("M")} mutes · ${kbd("Esc")} pauses`}</p>
       <button class="start" data-start>${b.reason === "pause" ? "Resume" : "Start"} <span>${mode === "gamepad" ? `${pad("PadA")} ${pad("PadStart")}` : `${kbd("Enter")} ${kbd("Space", true)}`}</span></button>

@@ -3,8 +3,6 @@
 export const DEFAULTS = {
   world: {
     levels: {
-      start: 1, // Start level (on reload)
-      template: 0, // Force template (0 = random)
       modifiersFrom: 9, // Modifiers may appear from level
       twoModifiersFrom: 14, // Up to two modifiers from level
     },
