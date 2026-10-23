@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "bun --hot ./index.html",
     "build": "bun build ./index.html --outdir dist --minify",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "sim": "bun src/app/headless.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

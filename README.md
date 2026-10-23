@@ -12,7 +12,43 @@ bun install
 bun run dev        # dev server with hot reload
 bun run build      # production build to dist/
 bun run typecheck
+bun run sim        # headless: play without a browser (see below)
 ```
+
+### Architecture
+
+`src/` is split so the simulation never touches the DOM, canvas or audio:
+
+| Folder | What |
+| --- | --- |
+| `core/` | Event bus (`events.ts`), game objects with typed components (`object.ts`), math, seeded RNG |
+| `game/` | `World` (one planet: objects, systems, `step(dt, input)`), `Session` (levels, briefings, rounds), the event catalog, scenarios |
+| `player/` | The player object, its movement controller and flight physics |
+| `attacks/` | Weapons and attacks as data + hooks (`sword.ts`, `spear.ts`), the attack controller (aim, charge, combos, lunges), perks (upgrades) |
+| `combat/` | Hit/hurtboxes, the `Health` / `Hurtable` / `HitVolume` components, and the rules every hit follows |
+| `enemies/` | Boid types (behaviour only), flocks and the swarm |
+| `world/`, `levels/` | Islands and planet generation; level specs, templates, progression |
+| `input/` | `InputFrame` / `InputSource`; the browser source (keyboard, mouse, gamepad) and scripted sources (bot, idle) |
+| `present/` | Presenters that turn world events into sound, rumble, effects, the avatar's animation and the camera |
+| `render/` | The renderer as layers, boid sprites, the avatar, debug layers |
+| `ui/` | HUD components, the briefing, the dev panel's sections |
+| `app/` | Entry points: `browser.ts` and `headless.ts` |
+
+Everything in a world reports on its event bus (`world.events`): `on` listeners react inside the
+step (perks, combos), `after` listeners get events once the step is done (presenters). Listeners can
+narrow to one object (`{ source: id }` / `{ target: id }`) and are removed with their owner.
+
+Extending:
+- **Input device**: an `InputSource` producing `InputFrame`s, plus a presenter for its outputs (see `present/rumble.ts`).
+- **Attack upgrade**: a `Perk` in `attacks/perks.ts` (change stats, or listen to events); levels list them in `LevelSpec.perks`.
+- **Dev UI**: a `DevSection` in `ui/dev/`, a debug layer in `render/debug.ts`, or a HUD widget in `ui/hud/`.
+- **Test setup**: a `Scenario` in `src/scenarios` (fixed planet and enemies). Play it with `?scenario=<id>`, the Run → Scenario tab, or `bun run sim --scenario <id>`.
+
+### Headless
+
+`bun run sim` plays a session with a bot (or `--input idle`) as fast as the machine allows and
+prints each round's outcome and event counts. `--set move.jump.height=90` overrides params,
+`--seed` fixes the planets, `--json` prints machine-readable output; `--help` lists the rest.
 
 ### Dev panel
 
@@ -32,20 +68,23 @@ The **Dev** box in the top-right corner (click it to show or hide) has two secti
     the whole level as a `LevelTemplate` for `levels.ts`.
 - **Tuning** holds the game params as sliders, one tab per group. Changes are saved in the
   browser. **Copy** puts every value on the clipboard as a replacement for `DEFAULTS` in
-  `src/params.ts`.
+  `src/params/defaults.ts`.
+- **Debug** switches debug drawing on (hitboxes, flocks). **Inspect** shows the world's objects,
+  the player's state and components, and a live event log.
 
 ### Enemies, flocks and levels
 
-- **Boid types** live in `src/boids/`, one file per type (melee, ranged, bomber, queen). Each one
-  has its default params, its behaviour, its sprite and its briefing card. A boid is an instance
+- **Boid types** live in `src/enemies/`, one file per type (melee, ranged, bomber, queen). Each one
+  has its default params and its behaviour; its sprite is in `src/render/sprites/` and its
+  briefing card in `src/ui/briefing/cards.ts`. A boid is an instance
   of a type with param overrides, so a level can field, say, bigger and tougher melee boids
   without a new type. The sprite scales with the `size` param.
-- **Flocks** (`src/flocks.ts`) list their members, or sample them by weight to a size range. A
+- **Flocks** (`src/enemies/flocks.ts`) list their members, or sample them by weight to a size range. A
   flock has a style: spread, spacing, tightness, coordination, restlessness, roaming pace, aggro
   and give-up ranges, grudge, and whether it hunts you from the start. Members flock with the
   boids rules, pulled toward the whole flock and leashed past its spread, so a flock stays
   together. When the queen's guard thins out, the nearest whole flock comes to guard her.
-- **Level templates** (`src/levels.ts`) give a layout and size, flocks every planet has, and a
+- **Level templates** (`src/levels/levels.ts`) give a layout and size, flocks every planet has, and a
   pool of flock templates to spend the rest of the level's swarm budget on (each boid type has a
   budget cost). A template on a level resolves to a `LevelSpec`, the plain data a planet is
   generated from. Custom levels edit a `LevelSpec` directly.
@@ -77,7 +116,7 @@ stick is analog: a partly pushed stick climbs, steers and speeds up less. A jump
 button on Xbox, the right one on Switch), B or the right trigger is the sword, the left face button
 (X on Xbox, Y on Switch) or the left trigger is the spear, Start / + pauses and Back / − mutes. The
 briefing shows the letters printed on the pad in use. Using a pad switches to gamepad mode. Pads the
-browser doesn't map itself need a profile in `src/gamepad.ts` (PowerA pads have one). Where the
+browser doesn't map itself need a profile in `src/input/gamepad.ts` (PowerA pads have one). Where the
 browser supports it (Chromium), the pad rumbles on hits, blasts, hard landings and full charges.
 
 Every flight has one double jump; it heads where you aim (the cursor, or the direction held; else along the flight). If that misses every island, it snaps to the edge of an island in a 30° cone around the aim. Air speed and height are capped. Hitting an enemy while airborne refills it (max one) and regains
@@ -90,4 +129,4 @@ enemy in its reach and strikes once near it (off a rim, too); 3 a small, strong 
 hurts and throws back everything around it, more the closer it is. The aim indicator shows which
 strike is coming.
 
-Game parameters can be tweaked live from the Tuning section of the dev panel (defaults in `src/params.ts`).
+Game parameters can be tweaked live from the Tuning section of the dev panel (defaults in `src/params/defaults.ts`).

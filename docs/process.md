@@ -109,3 +109,9 @@ Make combat more flowy
 - reduce delay between melee attacks 1-2-3
 - give shield for xs when attacking
 - Or another way to block damage
+
+Story segway
+- one continous world combined with the queen flees to the next world when "dead". The transition can be a portal going up into the air.
+  It spawns on the queens position as she opens and takes the portal. We follow.
+
+Rotation in air: Rotate towards the input angle (similar to when climbing) 
