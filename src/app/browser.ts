@@ -19,6 +19,7 @@ import { createDevPanel } from "../ui/dev/panel";
 import { currentRun, runSection } from "../ui/dev/run";
 import { tuningDevSection } from "../ui/dev/tuning";
 import { drawHud } from "../ui/hud";
+import { learnedLessons, rememberLesson } from "../ui/hud/lesson";
 import { ISLAND_TOP } from "../world/island";
 
 // The browser game: puts the pieces together. A session runs the game; the browser input source
@@ -41,7 +42,7 @@ const showCursor = () => (canvas.style.cursor = input.pointerAims ? "crosshair" 
 showCursor();
 input.onChange(showCursor);
 
-const session = new Session(liveParams);
+const session = new Session(liveParams, { learned: learnedLessons });
 const view = new PlayerPresenter();
 const camera = new Camera();
 const vfx = new Vfx();
@@ -57,6 +58,7 @@ session.events.on("roundStart", ({ world }) => {
   vfx.attach(world);
   sound.attach(world);
   rumble.attach(world);
+  world.events.after("learned", (e) => rememberLesson(e.id), { owner: world.lifetime });
   document.getElementById("goal")!.textContent = world.swarm.queen ? "Kill the queen ♛" : "Kill every boid";
   for (const fn of roundListeners) fn(world);
 });
@@ -84,6 +86,9 @@ const aimFromScreen = (sx: number, sy: number) => {
   return l > 1 ? { x: dx / l, y: dy / l } : null;
 };
 
+const moveText = () => (input.mode === "gamepad" ? "Stick" : "Arrows");
+const aimText = () => (input.pointerAims ? "Mouse" : moveText());
+
 let last = performance.now();
 let time = 0;
 function frame(now: number) {
@@ -107,7 +112,7 @@ function frame(now: number) {
 
   const scene = { session, world: session.world, view, vfx, camera, time, debug };
   render(painter, scene);
-  drawHud({ ctx: painter.ctx, W: painter.W, H: painter.H, session, proj, camera, promptText: (a) => input.promptText(a) });
+  drawHud({ ctx: painter.ctx, W: painter.W, H: painter.H, session, proj, camera, promptText: (a) => input.promptText(a), moveText, aimText });
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

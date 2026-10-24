@@ -15,6 +15,10 @@ export interface HudContext {
   camera: Camera;
   /** The button for an action, as text ("Enter", "A"). */
   promptText(a: Action): string;
+  /** What moves, as text ("Arrows", "Stick"). */
+  moveText(): string;
+  /** What aims a jump, as text: the move input, or "Mouse". */
+  aimText(): string;
 }
 
 export interface HudWidget {

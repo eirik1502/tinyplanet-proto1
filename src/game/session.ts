@@ -59,6 +59,8 @@ export interface SessionOptions {
   seed?: number;
   /** Go straight to play instead of showing briefings (headless). */
   skipBriefings?: boolean;
+  /** Lessons already learned, asked for each new world (the browser remembers them). */
+  learned?: () => Iterable<string>;
 }
 
 /** After a round ends: move on after this long, or from this long on with confirm (s). */
@@ -124,7 +126,7 @@ export class Session {
       });
     }
     this.world?.dispose();
-    this.world = new World({ spec: this.spec!, seed, params: this.params });
+    this.world = new World({ spec: this.spec!, seed, params: this.params, learned: this.opts.learned?.() });
     this.events.emit("roundStart", { world: this.world });
     this.openBriefing(retry ? "retry" : "new");
   }

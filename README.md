@@ -101,6 +101,11 @@ The **Dev** box in the top-right corner (click it to show or hide) has two secti
 | I | Switch input mode: keyboard only / keyboard + mouse / gamepad |
 | Esc | Pause and show the controls |
 
+While you play, short prompts under the player teach the controls one at a time (climb, jump, aim, steer, double
+jump, sword, combo, spear), each until you've done it, plus a note the first time the safety net catches you or
+you fall into the haze. Learned lessons are remembered in the browser; the dev panel's Debug section shows them all
+again. Lessons live in `src/game/lessons.ts`.
+
 Each level opens with a briefing: pick the input mode, and see the controls and enemies for that
 level. The first levels introduce things one at a time: level 1 has the sword and a small queen
 flock of melee boids, level 2 adds ranged boids, and level 3 adds the spear and bombers. From level

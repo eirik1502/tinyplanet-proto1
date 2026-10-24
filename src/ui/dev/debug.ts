@@ -1,9 +1,11 @@
 import { getPref, setPref } from "../../core/prefs";
 import { DEBUG_LAYERS } from "../../render/debug";
+import { forgetLessons } from "../hud/lesson";
 import { checkbox, el } from "../dom";
 import type { DevSection } from "./panel";
 
-// The dev panel's Debug section: switch the debug render layers on and off (remembered).
+// The dev panel's Debug section: switch the debug render layers on and off (remembered), and
+// show the lessons again.
 
 const KEY = "planetproto.debug";
 
@@ -24,6 +26,9 @@ export const debugSection: DevSection = {
         }),
       ),
       el("div", { className: "note", textContent: "Layers live in src/render/debug.ts; register one to add it here." }),
+      el("h4", { textContent: "Lessons" }),
+      el("button", { textContent: "Show all lessons again", onclick: () => forgetLessons() }),
+      el("div", { className: "note", textContent: "From the next round." }),
     );
     return el("div", { className: "section debug" }, body);
   },

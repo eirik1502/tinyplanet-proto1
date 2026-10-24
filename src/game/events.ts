@@ -86,6 +86,8 @@ export interface GameEvents {
 
   // The round
   roundOver: { outcome: "victory" | "defeat" };
+  /** The player learned a lesson (game/lessons.ts): did what it teaches, or saw an info lesson. */
+  learned: { id: string };
 }
 
 export type GameBus = EventBus<GameEvents>;
