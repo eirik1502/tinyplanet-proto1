@@ -163,7 +163,7 @@ function playerCard(b: BriefingInfo) {
         <canvas class="portrait" data-portrait="player"></canvas>
         <div>
           <h3>You</h3>
-          <div class="stats">${chip(`${ICONS.heart}${h.max} HP`, "hp")}${chip(`Fall: −${fmt(h.fallDamage)}`)}</div>
+          <div class="stats">${chip(`${ICONS.heart}${h.max} HP`, "hp")}${chip(b.noFallDamage ? "Falls don't hurt" : `Fall: −${fmt(h.fallDamage)}`)}</div>
         </div>
       </header>
       <div class="columns">

@@ -5,7 +5,7 @@ import { Health, Hurtable, type HitInfo } from "../combat/components";
 import type { World } from "../game/world";
 import type { InputFrame } from "../input/types";
 import { ISLAND_TOP, type EdgePoint, type Island } from "../world/island";
-import { flightOf, gravity, gravityAt, launch, netBounce, riseSpeed, stepFlight } from "./flight";
+import { flightOf, gravity, gravityAt, launch, netBounce, predict, riseSpeed, stepFlight } from "./flight";
 import { HANG_ALT, LOST_ALT, Player } from "./player";
 import { warpPlayer } from "../game/portal";
 
@@ -16,6 +16,10 @@ import { warpPlayer } from "../game/portal";
 
 /** Most a jump can lean away from straight out of the rim, so it clears the island it leaves. */
 export const MAX_JUMP_LEAN = 1.13;
+/** Longest a jump aimed past the lean limit waits while sliding toward its aim (s). */
+const JUMP_QUEUE_TIME = 0.6;
+/** Steps of the jump assist's search (rad). */
+const ASSIST_STEP = 0.035;
 
 /** The jump the player would make from the rim right now. */
 export interface JumpPlan {
@@ -34,6 +38,8 @@ export class PlayerController {
   readonly health: Health;
   /** While hanging and playing: where a jump would go now, for the jump preview. */
   jumpPlan: JumpPlan | null = null;
+  /** The jump assist's last answer, for the jump it was asked about (it only changes when the jump does). */
+  private assistCache = { key: "", angle: 0 };
 
   constructor(private w: World) {
     const p = (this.player = w.objects.add(new Player()));
@@ -148,6 +154,23 @@ export class PlayerController {
   // Rims
   // -------------------------------------------------------------------------------------------
 
+  /** Jump off the rim as planned. */
+  private jump(plan: JumpPlan) {
+    const w = this.w;
+    const p = this.player;
+    const e = this.rim();
+    const f = launch(w, p.island, p.s, plan.angle, p.slide);
+    Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
+    p.mode = "air";
+    p.airTime = 0;
+    p.launchIsland = p.island;
+    p.jumpHeld = true;
+    p.airJumps = 1;
+    p.slide = 0;
+    p.jumpQueue = null;
+    w.events.emit("jump", { source: p.id, x: e.x, y: e.y, alt: ISLAND_TOP });
+  }
+
   /** Let go of the rim into the air, from just off it, at this velocity. */
   leaveRim(vx: number, vy: number, vz: number) {
     const p = this.player;
@@ -164,6 +187,7 @@ export class PlayerController {
     p.jumpHeld = false;
     p.airJumps = 1;
     p.slide = 0;
+    p.jumpQueue = null;
   }
 
   /** Grab a rim. Arriving fast turns the along-rim part of the velocity into a slide. */
@@ -180,6 +204,7 @@ export class PlayerController {
     p.jumpHeld = false;
     p.airJumps = 0;
     p.netUsed = false;
+    p.jumpQueue = null;
     p.focus = 1;
     p.safeIsland = islandIdx;
     p.safeS = s;
@@ -258,20 +283,25 @@ export class PlayerController {
       p.y = e.y + e.ny * 7;
       p.alt = HANG_ALT;
       p.facing = Math.atan2(-e.ny, -e.nx);
-      const plan = this.planJump(aim ?? dir);
+      const queued = p.jumpQueue;
+      const plan = this.planJump(queued ? queued.dir : (aim ?? dir));
       if (playing) this.jumpPlan = plan;
 
-      // The jump button jumps at once; holding it keeps the jump going full height (see the air section).
-      if (jumpPressed) {
-        const f = launch(w, p.island, p.s, plan.angle, p.slide);
-        Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
-        p.mode = "air";
-        p.airTime = 0;
-        p.launchIsland = p.island;
-        p.jumpHeld = true;
-        p.airJumps = 1;
-        p.slide = 0;
-        w.events.emit("jump", { source: p.id, x: e.x, y: e.y, alt: ISLAND_TOP });
+      // The jump button jumps at once; holding it keeps the jump going full height (see the air
+      // section). Aimed past the lean limit, the player first slides along the rim toward the aim,
+      // and jumps once it's in range (or after a moment, leaning as far as a jump can).
+      if (queued) {
+        queued.left -= dt;
+        if (!playing) p.jumpQueue = null;
+        else if (!plan.clamped || queued.left <= 0) this.jump(plan);
+        else p.slide = queued.side * Math.max(Math.abs(p.slide), prm.move.assist.slideToAim);
+      } else if (jumpPressed) {
+        const to = aim ?? dir;
+        if (plan.clamped && prm.move.assist.slideToAim > 0) {
+          const side = Math.sign(to.x * e.tx + to.y * e.ty) || 1;
+          p.jumpQueue = { dir: { x: to.x, y: to.y }, side, left: JUMP_QUEUE_TIME };
+          p.slide = side * Math.max(Math.abs(p.slide), prm.move.assist.slideToAim);
+        } else this.jump(plan);
       }
     } else if (p.mode === "air") {
       // Releasing jump while still rising cuts the jump short.
@@ -333,7 +363,7 @@ export class PlayerController {
       p.y += p.vy * dt;
       p.alt = Math.max(5, p.alt + p.vz * dt);
       if (p.lostTimer > 1.6) {
-        if (w.playing) {
+        if (w.playing && !w.spec.noFallDamage) {
           this.health.hp = Math.max(0, this.health.hp - prm.player.health.fallDamage);
           if (this.health.hp <= 0) w.end("defeat");
         }
@@ -356,19 +386,52 @@ export class PlayerController {
   /**
    * Jump direction from a rim: toward the input, or without input the way the player is sliding,
    * within MAX_JUMP_LEAN of straight out. Straight out when neither. In mouse mode `dir` points at the cursor.
+   * On levels with the jump assist, a jump that would just miss is nudged onto an island.
    */
   private planJump(dir: Vec): JumpPlan {
     const p = this.player;
     const e = this.rim();
     const out = Math.atan2(e.ny, e.nx);
     if (!dir.x && !dir.y) {
-      if (!p.slide) return { angle: out, out, clamped: false, steered: false };
+      if (!p.slide) return { angle: this.assist(out, out), out, clamped: false, steered: false };
       const side = Math.sign(p.slide);
       dir = { x: e.tx * side, y: e.ty * side };
     }
     const diff = wrapAngle(Math.atan2(dir.y, dir.x) - out);
     const lean = Math.max(-MAX_JUMP_LEAN, Math.min(MAX_JUMP_LEAN, diff));
-    return { angle: out + lean, out, clamped: lean !== diff, steered: true };
+    return { angle: this.assist(out + lean, out), out, clamped: lean !== diff, steered: true };
+  }
+
+  /**
+   * The jump assist: if a full jump at `angle` would land nowhere (or back on its own island),
+   * the nearest angle within the level's assist that lands on another island, else `angle`.
+   */
+  private assist(angle: number, out: number): number {
+    const w = this.w;
+    const p = this.player;
+    const help = w.spec.assist ?? 0;
+    const max = (help * w.params.move.assist.angle * Math.PI) / 180;
+    if (max < ASSIST_STEP) return angle;
+    const key = `${p.island}|${Math.round(p.s)}|${angle.toFixed(2)}|${Math.round(p.slide / 25)}`;
+    if (key === this.assistCache.key) return this.assistCache.angle;
+    const lands = (a: number) => {
+      const r = predict(w, launch(w, p.island, p.s, a, p.slide), p.island, false);
+      return r.island !== null && r.island !== p.island;
+    };
+    let best = angle;
+    if (!lands(angle)) {
+      search: for (let d = ASSIST_STEP; d <= max + 1e-6; d += ASSIST_STEP) {
+        for (const a of [angle + d, angle - d]) {
+          if (Math.abs(wrapAngle(a - out)) > MAX_JUMP_LEAN) continue;
+          if (lands(a)) {
+            best = a;
+            break search;
+          }
+        }
+      }
+    }
+    this.assistCache = { key, angle: best };
+    return best;
   }
 
   /**

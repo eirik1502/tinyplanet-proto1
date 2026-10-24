@@ -85,11 +85,15 @@ export function stepFlight(w: World, f: Flight, dt: number, fromIsland: number):
   for (let i = 0; i < w.islands.length; i++) {
     if (i === fromIsland && f.t < 0.25) continue;
     const isl = w.islands[i]!;
+    // Too far off to touch it this step (outlines wobble up to ~30% past the nominal radius).
+    if (Math.abs(f.x - isl.cx) + Math.abs(f.y - isl.cy) > (isl.radius * 1.35 + 80) * 1.42) continue;
     if (f.alt >= ISLAND_TOP - 4) {
       const s = isl.segmentHit(ox, oy, f.x, f.y);
       if (s !== null) return { island: i, s };
     }
-    if (isl.intersects(f.x, f.y, f.alt, w.params.move.air.grabRadius)) return { island: i, s: isl.closest(f.x, f.y).s };
+    // Falling, the hands reach a little further for a rim.
+    const reach = f.vz < 0 ? w.params.move.air.fallGrab : w.params.move.air.grabRadius;
+    if (isl.intersects(f.x, f.y, f.alt, reach)) return { island: i, s: isl.closest(f.x, f.y).s };
   }
   return null;
 }
@@ -102,6 +106,8 @@ export interface FlightPrediction {
   points: { x: number; y: number; alt: number }[];
   /** At the flight's altitude: it may cross well above the rim. */
   landing: { x: number; y: number; alt: number } | null;
+  /** The island it lands on. */
+  island: number | null;
 }
 
 /** The rest of a flight if nothing steers it, from `fromIsland` with the safety bounce `netUsed` or not. */
@@ -114,12 +120,12 @@ export function predict(w: World, flight: Flight, fromIsland: number, netUsed: b
       const e = w.islands[h.island]!.pointAt(h.s);
       const landing = { x: e.x, y: e.y, alt: Math.max(ISLAND_TOP, f.alt) };
       points.push(landing);
-      return { points, landing };
+      return { points, landing, island: h.island };
     }
     if (netBounce(w, f, netUsed)) netUsed = true;
     if (i % 2 === 1) points.push({ x: f.x, y: f.y, alt: f.alt });
   }
-  return { points, landing: null };
+  return { points, landing: null, island: null };
 }
 
 /** The rest of the player's flight if nothing steers it. */

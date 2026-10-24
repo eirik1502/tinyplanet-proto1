@@ -87,4 +87,6 @@ export const TUTORIAL: LevelSpec = {
   weapons: ["sword"],
   goal: "portal",
   lessons: "all",
+  assist: 1,
+  noFallDamage: true,
 };

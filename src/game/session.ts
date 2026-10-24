@@ -4,7 +4,7 @@ import type { WeaponId } from "../attacks/types";
 import { boidType } from "../enemies";
 import { resolveParams, type BaseParams, type BoidType } from "../enemies/types";
 import { describeFlock } from "../enemies/flocks";
-import { levelBase, MODIFIERS, planLevel, resolveLevel, UNLOCKS, weaponsAt, type LevelPlan, type LevelSpec, type LevelTemplate } from "../levels/levels";
+import { earlyHelp, levelBase, MODIFIERS, planLevel, resolveLevel, UNLOCKS, weaponsAt, type LevelPlan, type LevelSpec, type LevelTemplate } from "../levels/levels";
 import type { Params } from "../params/store";
 import type { InputFrame } from "../input/types";
 import { TUTORIAL, TUTORIAL_BLURB, TUTORIAL_NAME, TUTORIAL_SEED } from "../levels/tutorial";
@@ -47,6 +47,8 @@ export interface BriefingData {
   template: { name: string; blurb: string; boss: boolean } | null;
   /** How to win, in a few words. */
   goal: string;
+  /** Falling into the haze doesn't hurt on this level. */
+  noFallDamage: boolean;
   modifiers: { name: string; blurb: string }[];
   reason: BriefingReason;
   weapons: WeaponId[];
@@ -131,11 +133,14 @@ export class Session {
         twoModifiersFrom: lv.twoModifiersFrom,
         rand: this.rand,
       });
-      this.spec = resolveLevel(this.plan.template, levelBase(level, this.params.world), {
-        modifiers: this.plan.modifiers,
-        weapons: weaponsAt(level),
-        rand: this.rand,
-      });
+      this.spec = {
+        ...resolveLevel(this.plan.template, levelBase(level, this.params.world), {
+          modifiers: this.plan.modifiers,
+          weapons: weaponsAt(level),
+          rand: this.rand,
+        }),
+        ...earlyHelp(level),
+      };
     }
     const arrival = this.world?.portal?.entered && !retry ? "portal" : null;
     this.world?.dispose();
@@ -225,6 +230,7 @@ export class Session {
             ? { name: "Custom level", blurb: "Set up in the dev panel.", boss: false }
             : this.plan && { name: this.plan.template.name, blurb: this.plan.template.blurb, boss: !!this.plan.template.boss },
       goal: w.portal ? "Beat every boid, then take the portal" : w.swarm.queen ? "Beat the queen, then follow her through her portal" : "Kill every boid",
+      noFallDamage: !!spec.noFallDamage,
       modifiers: spec.modifiers.map((m) => MODIFIERS[m]),
       reason: this.briefing,
       weapons,

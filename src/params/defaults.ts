@@ -42,6 +42,11 @@ export const DEFAULTS = {
       turnRate: 2.5, // Air turn rate (rad/s)
       accel: 0, // Speed up / brake (per s)
       grabRadius: 30, // Grab radius
+      fallGrab: 45, // Grab radius when falling
+    },
+    assist: {
+      angle: 14, // Most a jump is nudged toward an island (degrees, at full help)
+      slideToAim: 520, // Slide speed toward a jump aimed past the lean limit
     },
     limits: {
       maxSpeed: 800, // Max air speed (sideways)

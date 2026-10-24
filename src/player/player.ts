@@ -1,3 +1,4 @@
+import type { Vec } from "../core/math";
 import { GameObject } from "../core/object";
 import { ISLAND_TOP } from "../world/island";
 
@@ -41,6 +42,11 @@ export class Player extends GameObject {
   facing = 0;
   /** Invulnerable for this long after a hit (s). */
   invuln = 0;
+  /**
+   * A jump aimed past the lean limit, waiting while the player slides along the rim toward its
+   * direction `dir` (on `side` of the rim's tangent), for at most `left` more seconds.
+   */
+  jumpQueue: { dir: Vec; side: number; left: number } | null = null;
   /** Taken in by the portal: no more control, drawn up and away. */
   warp = false;
 
