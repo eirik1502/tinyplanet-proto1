@@ -104,7 +104,7 @@ export const aimIndicator: Overlay = (p, s) => {
   }
 };
 
-/** A predicted flight as a dashed line: green with a landing ring if it ends on an island, pale if in the haze. */
+/** A predicted flight as a dashed line: green with a landing ring if it ends on an island, red if in the haze. */
 function drawFlight(p: Painter, { points, landing }: FlightPrediction, alpha: number, width: number) {
   const { ctx, proj } = p;
   const pts = points.map((q) => proj.project(q.x, q.y, q.alt));
@@ -113,7 +113,7 @@ function drawFlight(p: Painter, { points, landing }: FlightPrediction, alpha: nu
   ctx.lineCap = "round";
   ctx.setLineDash([7, 7]);
   ctx.lineDashOffset = -performance.now() / 40;
-  ctx.strokeStyle = hit ? `rgba(140,255,170,${alpha})` : `rgba(255,235,210,${alpha * 0.8})`;
+  ctx.strokeStyle = hit ? `rgba(140,255,170,${alpha})` : `rgba(255,140,120,${alpha * 0.8})`;
   ctx.beginPath();
   pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
   ctx.stroke();

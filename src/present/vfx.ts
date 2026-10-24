@@ -53,6 +53,17 @@ export interface Dust {
   life: number;
 }
 
+/** The safety net catching the player: a web that flashes under them. */
+export interface NetLook {
+  x: number;
+  y: number;
+  alt: number;
+  age: number;
+}
+
+/** How long the safety net shows (s). */
+export const NET_TIME = 0.7;
+
 /** How long a shock ring shows (s). */
 export const BLAST_TIME = 0.45;
 
@@ -63,6 +74,7 @@ export class Vfx {
   blasts: BlastRing[] = [];
   strikes: StrikeLook[] = [];
   dust: Dust[] = [];
+  nets: NetLook[] = [];
   private dustAcc = 0;
 
   /** Start over for a new world and follow its events. */
@@ -71,6 +83,7 @@ export class Vfx {
     this.blasts = [];
     this.strikes = [];
     this.dust = [];
+    this.nets = [];
     const on = w.events.after.bind(w.events);
     const owner = { owner: w.lifetime };
     on("hit", (e) => {
@@ -101,7 +114,10 @@ export class Vfx {
     }, owner);
     on("shot", (e) => this.burst(e.x + e.dx * e.r, e.y + e.dy * e.r, e.alt, 8, "#e8ff9a"), owner);
     on("doubleJump", (e) => this.burst(e.x, e.y, e.alt - 6, 10, "#bff4ff"), owner);
-    on("netBounce", (e) => this.burst(e.x, e.y, e.alt, 14, "#9fe8ff"), owner);
+    on("netBounce", (e) => {
+      this.burst(e.x, e.y, e.alt, 14, "#9fe8ff");
+      this.nets.push({ x: e.x, y: e.y, alt: e.alt, age: 0 });
+    }, owner);
     on("hurt", (e) => this.burst(e.x, e.y, e.alt, 10, "#ffd0b0"), owner);
     on("jump", (e) => this.emitDust(e.x, e.y, 6, 1 / 60), owner);
     on("land", (e) => this.emitDust(e.x, e.y, 4 + Math.min(10, e.speed / 80), 1 / 60), owner);
@@ -150,6 +166,8 @@ export class Vfx {
     }
     for (const b of this.blasts) b.age += dt;
     this.blasts = this.blasts.filter((b) => b.age < BLAST_TIME);
+    for (const n of this.nets) n.age += dt;
+    this.nets = this.nets.filter((n) => n.age < NET_TIME);
     const sw = w.params.player.sword;
     for (const s of this.strikes) s.age += dt;
     this.strikes = this.strikes.filter((s) => s.age < sw.activeTime + sw.fadeTime);

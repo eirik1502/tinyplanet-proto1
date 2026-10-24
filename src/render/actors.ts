@@ -23,9 +23,50 @@ export const playerLayer: WorldLayer = (p, s, out) => {
       draw: () => p.drawFlat(BLOBS.shadow, p.proj.project(v.x, v.y, shadowAlt), 12 + hAbove * 0.04, overIsland ? 0.9 : 0.5),
     });
   }
+  if (pl.mode === "air") out.push({ alt: ISLAND_TOP + 0.7, draw: () => drawHeightMarker(p, s) });
   // While hanging, sort above the lip so the hands overlap the grass edge.
   out.push({ alt: pl.mode === "hang" ? ISLAND_TOP + 0.8 : v.alt, draw: () => drawPlayer(p, s) });
 };
+
+/**
+ * In the air, how high the player is: a reticle at rim height under them, wider the higher they
+ * are, closing in as they come down to the rim, with a line dropping to it. Below the rim it turns
+ * warm, and red once the safety net is spent (the next dip is a fall into the haze).
+ */
+function drawHeightMarker(p: Painter, s: Scene) {
+  const { ctx, proj } = p;
+  const v = s.view;
+  const pl = s.world.player;
+  const h = v.alt - ISLAND_TOP;
+  const rgb = h >= 0 ? "190,244,255" : pl.netUsed ? "255,110,100" : "255,196,120";
+  const foot = proj.project(v.x, v.y, ISLAND_TOP);
+  const top = proj.project(v.x, v.y, v.alt);
+  if (!foot.visible) return;
+  const r = 24 + Math.abs(h) * 0.6;
+  const spin = v.anim * 0.8;
+  ctx.save();
+  ctx.strokeStyle = `rgba(${rgb},${h >= 0 ? 0.6 : 0.9})`;
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  for (let q = 0; q < 4; q++) {
+    const from = spin + (q * Math.PI) / 2 - 0.35;
+    for (let i = 0; i <= 6; i++) {
+      const a = from + (0.7 * i) / 6;
+      const pt = proj.project(v.x + Math.cos(a) * r, v.y + Math.sin(a) * r, ISLAND_TOP);
+      if (i) ctx.lineTo(pt.x, pt.y);
+      else ctx.moveTo(pt.x, pt.y);
+    }
+  }
+  ctx.stroke();
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath();
+  ctx.moveTo(foot.x, foot.y);
+  ctx.lineTo(top.x, top.y);
+  ctx.stroke();
+  ctx.restore();
+}
 
 function drawPlayer(p: Painter, s: Scene) {
   const { ctx, proj } = p;

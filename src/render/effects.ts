@@ -1,14 +1,15 @@
-import { BLAST_TIME, type BlastRing, type StrikeLook } from "../present/vfx";
+import { BLAST_TIME, NET_TIME, type BlastRing, type NetLook, type StrikeLook } from "../present/vfx";
 import { BLOBS, type Painter } from "./painter";
 import type { Scene, WorldLayer } from "./scene";
 
-// Effects from present/vfx: sword strikes playing out, shock rings, sparks and dust.
+// Effects from present/vfx: sword strikes playing out, shock rings, the safety net, sparks and dust.
 
 export const effectsLayer: WorldLayer = (p, s, out) => {
   const { ctx, proj } = p;
   const fx = s.vfx;
   for (const st of fx.strikes) out.push({ alt: st.alt + 0.5, draw: () => drawStrike(p, s, st) });
   for (const bl of fx.blasts) out.push({ alt: bl.alt, draw: () => drawBlast(p, bl) });
+  for (const n of fx.nets) out.push({ alt: n.alt - 1, draw: () => drawNet(p, n) });
   for (const sp of fx.sparks) {
     out.push({
       alt: sp.alt,
@@ -121,4 +122,36 @@ function drawBlast(p: Painter, bl: BlastRing) {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
   }
+}
+
+/** The safety net: a glowing web that stretches under the player as it catches them, then fades. */
+function drawNet(p: Painter, n: NetLook) {
+  const { ctx, proj } = p;
+  const t = n.age / NET_TIME;
+  const fade = 1 - t;
+  const r = 34 + 22 * Math.sin(Math.min(1, t * 2.5) * Math.PI * 0.5);
+  const alt = n.alt - 6 * Math.sin(Math.min(1, t * 3) * Math.PI);
+  const spokes = 8;
+  const at = (a: number, d: number) => proj.project(n.x + Math.cos(a) * d, n.y + Math.sin(a) * d, alt);
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = `rgba(159,232,255,${0.85 * fade})`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let i = 0; i < spokes; i++) {
+    const c = at(0, 0);
+    const q = at((i / spokes) * Math.PI * 2, r);
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(q.x, q.y);
+  }
+  for (const ring of [0.35, 0.7, 1]) {
+    for (let i = 0; i <= spokes; i++) {
+      const q = at((i / spokes) * Math.PI * 2, r * ring);
+      if (i) ctx.lineTo(q.x, q.y);
+      else ctx.moveTo(q.x, q.y);
+    }
+  }
+  ctx.stroke();
+  ctx.restore();
 }

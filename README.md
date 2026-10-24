@@ -121,7 +121,9 @@ browser supports it (Chromium), the pad rumbles on hits, blasts, hard landings a
 
 On a rim, a dashed line shows where a jump would go now (at full height): faint until you steer, green with a
 landing ring when it reaches an island. While steering, a fan shows how far a jump can lean from straight out.
-In the air the line traces the rest of the flight.
+In the air the line traces the rest of the flight, red if it ends in the haze. A reticle at rim height under
+you shows how high you are: it closes in as you come down, turns orange below the rim and red once the safety
+net is spent. The net shows as a web when it catches you.
 
 Every flight has one double jump; it heads where you aim (the cursor, or the direction held; else along the flight). If that misses every island, it snaps to the edge of an island in a 30° cone around the aim. Air speed and height are capped. Hitting an enemy while airborne refills it (max one) and regains
 focus; a sword hit also bounces you up. Slow motion while winding up an air attack drains focus; grabbing a rim refills
