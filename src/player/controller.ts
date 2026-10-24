@@ -5,7 +5,7 @@ import { Health, Hurtable, type HitInfo } from "../combat/components";
 import type { World } from "../game/world";
 import type { InputFrame } from "../input/types";
 import { ISLAND_TOP, type EdgePoint, type Island } from "../world/island";
-import { flightOf, gravity, gravityAt, launch, netBounce, predict, riseSpeed, stepFlight } from "./flight";
+import { flightOf, gravity, gravityAt, launch, maxLean, netBounce, predict, riseSpeed, stepFlight } from "./flight";
 import { HANG_ALT, LOST_ALT, Player } from "./player";
 import { warpPlayer } from "../game/portal";
 
@@ -14,8 +14,6 @@ import { warpPlayer } from "../game/portal";
 // falling into the haze and respawning. Also how the player takes hits and shoves, reacts to
 // their own hits landing, and the slow motion while aiming in the air.
 
-/** Most a jump can lean away from straight out of the rim, so it clears the island it leaves. */
-export const MAX_JUMP_LEAN = 1.13;
 /** Spacing of the rim spots tried for a jump (world units). */
 const SPOT_STEP = 4;
 /** Steps of the jump assist's search (rad). */
@@ -156,12 +154,12 @@ export class PlayerController {
   // Rims
   // -------------------------------------------------------------------------------------------
 
-  /** Jump off the rim from spot `s` (where the player is) at `angle`. */
-  private jump({ s, angle }: { s: number; angle: number }) {
+  /** Jump off the rim from spot `s` (where the player is) at `angle`, climbing at `climb` on the press. */
+  private jump({ s, angle, climb }: { s: number; angle: number; climb: number }) {
     const w = this.w;
     const p = this.player;
     const e = this.rim();
-    const f = launch(w, p.island, s, angle, p.slide);
+    const f = launch(w, p.island, s, angle, p.slide, climb);
     Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
     p.mode = "air";
     p.airTime = 0;
@@ -169,6 +167,7 @@ export class PlayerController {
     p.jumpHeld = true;
     p.airJumps = 1;
     p.slide = 0;
+    p.climb = 0;
     p.jumpQueue = null;
     w.events.emit("jump", { source: p.id, x: e.x, y: e.y, alt: ISLAND_TOP });
   }
@@ -280,11 +279,12 @@ export class PlayerController {
         const d = queued.s - p.s;
         const step = prm.move.climb.speed * dt;
         p.s = Math.abs(d) <= step ? queued.s : p.s + Math.sign(d) * step;
+        p.climb = 0;
       } else {
         // Climb toward the rim point that faces the input direction. Aiming an attack takes over
         // the input; an ongoing slide carries on.
-        const climb = w.attacks.aim ? 0 : climbInput(e, dir) * prm.move.climb.speed;
-        p.s += (climb + p.slide) * dt;
+        p.climb = w.attacks.aim ? 0 : climbInput(e, dir) * prm.move.climb.speed;
+        p.s += (p.climb + p.slide) * dt;
       }
       p.slide *= Math.exp(-prm.move.slide.friction * dt);
       if (Math.abs(p.slide) < 5) p.slide = 0;
@@ -304,8 +304,9 @@ export class PlayerController {
         const plan = this.planJump(aim ?? dir);
         if (playing) this.jumpPlan = plan;
         if (jumpPressed) {
-          if (plan.s === p.s) this.jump(plan);
-          else p.jumpQueue = { s: plan.s, angle: plan.angle };
+          const climb = p.climb;
+          if (plan.s === p.s) this.jump({ ...plan, climb });
+          else p.jumpQueue = { s: plan.s, angle: plan.angle, climb };
         }
       }
     } else if (p.mode === "air") {
@@ -390,7 +391,7 @@ export class PlayerController {
 
   /**
    * Jump direction from a rim: toward the input, or without input the way the player is sliding,
-   * within MAX_JUMP_LEAN of straight out. Straight out when neither. In mouse mode `dir` points at the cursor.
+   * within the most a jump leans from straight out (`jump.maxLean`). Straight out when neither. In mouse mode `dir` points at the cursor.
    * On levels with the jump assist, a jump that would just miss is nudged onto an island.
    */
   private planJump(dir: Vec): JumpPlan {
@@ -408,7 +409,8 @@ export class PlayerController {
     if (s !== p.s) e = isl.pointAt(s);
     const out = Math.atan2(e.ny, e.nx);
     const diff = wrapAngle(want - out);
-    const lean = Math.max(-MAX_JUMP_LEAN, Math.min(MAX_JUMP_LEAN, diff));
+    const max = maxLean(this.w);
+    const lean = Math.max(-max, Math.min(max, diff));
     return { angle: this.assist(out + lean, out, s), out, s, clamped: lean !== diff, steered: true };
   }
 
@@ -420,9 +422,10 @@ export class PlayerController {
   private jumpSpot(want: number): number {
     const p = this.player;
     const isl = this.w.islands[p.island]!;
+    const max = maxLean(this.w);
     const short = (s: number) => {
       const e = isl.pointAt(s);
-      return Math.max(0, Math.abs(wrapAngle(want - Math.atan2(e.ny, e.nx))) - MAX_JUMP_LEAN);
+      return Math.max(0, Math.abs(wrapAngle(want - Math.atan2(e.ny, e.nx))) - max);
     };
     let best = p.s;
     let bestShort = short(p.s);
@@ -450,17 +453,17 @@ export class PlayerController {
     const help = w.spec.assist ?? 0;
     const max = (help * w.params.move.assist.angle * Math.PI) / 180;
     if (max < ASSIST_STEP) return angle;
-    const key = `${p.island}|${Math.round(s)}|${angle.toFixed(2)}|${Math.round(p.slide / 25)}`;
+    const key = `${p.island}|${Math.round(s)}|${angle.toFixed(2)}|${Math.round(p.slide / 25)}|${Math.round(p.climb / 25)}`;
     if (key === this.assistCache.key) return this.assistCache.angle;
     const lands = (a: number) => {
-      const r = predict(w, launch(w, p.island, s, a, p.slide), p.island, false);
+      const r = predict(w, launch(w, p.island, s, a, p.slide, p.climb), p.island, false);
       return r.island !== null && r.island !== p.island;
     };
     let best = angle;
     if (!lands(angle)) {
       search: for (let d = ASSIST_STEP; d <= max + 1e-6; d += ASSIST_STEP) {
         for (const a of [angle + d, angle - d]) {
-          if (Math.abs(wrapAngle(a - out)) > MAX_JUMP_LEAN) continue;
+          if (Math.abs(wrapAngle(a - out)) > maxLean(w)) continue;
           if (lands(a)) {
             best = a;
             break search;

@@ -33,6 +33,9 @@ export const DEFAULTS = {
       speed: 260, // Jump speed (sideways)
       height: 70, // Full jump height (Space held)
       slideFactor: 1, // Slide speed added to the jump speed (×)
+      climbFactor: 1, // Climb speed added to the jump speed (×)
+      maxLean: 85, // Most a jump leans from straight out of the rim (degrees)
+      regrab: 0.35, // Can't grab the island jumped from for (s)
       cut: 0.35, // Upward speed kept on early release
       gravity: 900, // Gravity
       apexGravity: 0.45, // Gravity near the apex (×)
@@ -46,7 +49,7 @@ export const DEFAULTS = {
     },
     assist: {
       angle: 14, // Most a jump is nudged toward an island (degrees, at full help)
-      climbToJump: 0.1, // Longest climb to a better spot before a jump (s)
+      climbToJump: 0.2, // Longest climb to a better spot before a jump (s)
     },
     limits: {
       maxSpeed: 800, // Max air speed (sideways)

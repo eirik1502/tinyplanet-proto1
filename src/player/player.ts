@@ -31,6 +31,8 @@ export class Player extends GameObject {
   redirect = false;
   /** Speed along the rim (per s) after a fast grab. */
   slide = 0;
+  /** Climb speed along the rim (per s) from the input this step (not the climb to a jump's spot). */
+  climb = 0;
   launchIsland = -1;
   airTime = 0;
   lostTimer = 0;
@@ -43,9 +45,9 @@ export class Player extends GameObject {
   invuln = 0;
   /**
    * A jump decided on the press, waiting while the player climbs (briefly) to the rim spot `s`
-   * it goes from, at `angle`.
+   * it goes from, at `angle`, with the climb speed `climb` they had on the press.
    */
-  jumpQueue: { s: number; angle: number } | null = null;
+  jumpQueue: { s: number; angle: number; climb: number } | null = null;
   /** Taken in by the portal: no more control, drawn up and away. */
   warp = false;
 

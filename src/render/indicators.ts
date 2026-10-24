@@ -1,6 +1,5 @@
 import type { Projected } from "./projection";
-import { launch, predict, predictFlight, type FlightPrediction } from "../player/flight";
-import { MAX_JUMP_LEAN } from "../player/controller";
+import { launch, maxLean, predict, predictFlight, type FlightPrediction } from "../player/flight";
 import { ISLAND_TOP } from "../world/island";
 import type { Painter } from "./painter";
 import type { Overlay } from "./scene";
@@ -157,10 +156,11 @@ export const rimJumpPreview: Overlay = (p, s) => {
     const r = 46;
     const at = (a: number, d: number) => proj.project(e.x + Math.cos(a) * d, e.y + Math.sin(a) * d, alt);
     const c = at(0, 0);
+    const lean = maxLean(w);
     ctx.beginPath();
     ctx.moveTo(c.x, c.y);
     for (let i = 0; i <= 16; i++) {
-      const q = at(plan.out - MAX_JUMP_LEAN + (2 * MAX_JUMP_LEAN * i) / 16, r);
+      const q = at(plan.out - lean + (2 * lean * i) / 16, r);
       ctx.lineTo(q.x, q.y);
     }
     ctx.closePath();
@@ -178,6 +178,6 @@ export const rimJumpPreview: Overlay = (p, s) => {
     }
   }
 
-  const f = launch(w, pl.island, plan.s, plan.angle, pl.slide);
+  const f = launch(w, pl.island, plan.s, plan.angle, pl.slide, pl.climb);
   drawFlight(p, predict(w, f, pl.island, false), plan.steered ? 0.6 : 0.3, 2);
 };

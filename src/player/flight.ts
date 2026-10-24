@@ -40,14 +40,19 @@ export function riseSpeed(w: World, height: number) {
   return Math.sqrt(j.apexBand * j.apexBand + 2 * g * (h - band));
 }
 
+/** Most a jump leans from straight out of the rim (rad). */
+export const maxLean = (w: World) => (w.params.move.jump.maxLean * Math.PI) / 180;
+
 /**
- * Launch state for a jump from rim parameter `s` in direction `angle`. A slide adds to the jump
- * speed (by `jump.slideFactor`) but not to its direction.
+ * Launch state for a jump from rim parameter `s` in direction `angle`. Moving along the rim adds
+ * to the jump speed but not to its direction: a slide by `jump.slideFactor`, climbing (`climb`,
+ * the climb speed from the input) by `jump.climbFactor`; climbing against a slide takes off it.
  */
-export function launch(w: World, islandIdx: number, s: number, angle: number, slide: number): Flight {
+export function launch(w: World, islandIdx: number, s: number, angle: number, slide: number, climb = 0): Flight {
   const e = w.islands[islandIdx]!.pointAt(s);
   const j = w.params.move.jump;
-  const v = Math.min(w.params.move.limits.maxSpeed, j.speed + Math.abs(slide) * j.slideFactor);
+  const along = Math.abs(slide * j.slideFactor + climb * j.climbFactor);
+  const v = Math.min(w.params.move.limits.maxSpeed, j.speed + along);
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
   return { x: e.x + e.nx * 12, y: e.y + e.ny * 12, alt: ISLAND_TOP, vx: dx * v, vy: dy * v, vz: riseSpeed(w, j.height), t: 0 };
@@ -83,7 +88,7 @@ export function stepFlight(w: World, f: Flight, dt: number, fromIsland: number):
   f.alt += f.vz * dt;
   f.t += dt;
   for (let i = 0; i < w.islands.length; i++) {
-    if (i === fromIsland && f.t < 0.25) continue;
+    if (i === fromIsland && f.t < w.params.move.jump.regrab) continue;
     const isl = w.islands[i]!;
     // Too far off to touch it this step (outlines wobble up to ~30% past the nominal radius).
     if (Math.abs(f.x - isl.cx) + Math.abs(f.y - isl.cy) > (isl.radius * 1.35 + 80) * 1.42) continue;

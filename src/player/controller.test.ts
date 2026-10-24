@@ -3,8 +3,7 @@ import { wrapAngle } from "../core/math";
 import { Session } from "../game/session";
 import { NO_INPUT, type Action, type InputFrame } from "../input/types";
 import { liveParams } from "../params/store";
-import { MAX_JUMP_LEAN } from "./controller";
-import { predict, launch } from "./flight";
+import { launch, maxLean, predict } from "./flight";
 
 // Jumping off a rim: the assist nudging a jump that would just miss, and a jump aimed past the
 // lean limit climbing briefly to a better spot first, as one action.
@@ -61,7 +60,7 @@ test("a jump within the lean limit goes on the press", () => {
   const { s, w } = start(0);
   const p = w.player;
   const e = w.islands[p.island]!.pointAt(p.s);
-  const want = Math.atan2(e.ny, e.nx) + MAX_JUMP_LEAN - 0.1;
+  const want = Math.atan2(e.ny, e.nx) + maxLean(w) - 0.1;
   s.step(1 / 60, aimAt(want, ["jump"]));
   expect(p.mode).toBe("air");
   expect(wrapAngle(Math.atan2(p.vy, p.vx) - want)).toBeCloseTo(0, 5);
@@ -71,7 +70,7 @@ test("a jump aimed a little past the lean limit climbs briefly, then goes along 
   const { s, w } = start(0);
   const p = w.player;
   const e = w.islands[p.island]!.pointAt(p.s);
-  const want = Math.atan2(e.ny, e.nx) + MAX_JUMP_LEAN + 0.15;
+  const want = Math.atan2(e.ny, e.nx) + maxLean(w) + 0.15;
   s.step(1 / 60, aimAt(want, ["jump"]));
   expect(p.mode).toBe("hang");
   expect(p.jumpQueue).not.toBeNull();
@@ -87,6 +86,21 @@ test("a jump aimed a little past the lean limit climbs briefly, then goes along 
   expect(wrapAngle(Math.atan2(p.vy, p.vx) - want)).toBeCloseTo(0, 5);
   // No speed from the climb: a plain jump's.
   expect(Math.hypot(p.vx, p.vy)).toBeCloseTo(liveParams.move.jump.speed, 0);
+});
+
+test("climbing when jumping adds the climb speed to the jump speed", () => {
+  const { s, w } = start(0);
+  const p = w.player;
+  const e = w.islands[p.island]!.pointAt(p.s);
+  // Climb along the rim at full speed (the input points along it, far from where the player faces).
+  s.step(1 / 60, { ...NO_INPUT, move: { x: e.tx, y: e.ty } });
+  expect(Math.abs(p.climb)).toBeCloseTo(liveParams.move.climb.speed, 0);
+  const climb = p.climb;
+  const out = Math.atan2(w.islands[p.island]!.pointAt(p.s).ny, w.islands[p.island]!.pointAt(p.s).nx);
+  s.step(1 / 60, aimAt(out, ["jump"], { x: e.tx, y: e.ty }));
+  expect(p.mode).toBe("air");
+  const j = liveParams.move.jump;
+  expect(Math.hypot(p.vx, p.vy)).toBeCloseTo(Math.min(liveParams.move.limits.maxSpeed, j.speed + Math.abs(climb) * j.climbFactor), 0);
 });
 
 test("falling into the haze doesn't hurt on level 1, and does from level 2", () => {
