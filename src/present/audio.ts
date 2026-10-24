@@ -269,6 +269,17 @@ export const sfx = {
       noise({ f: 4000, f2: 1500, q: 1, dur: 0.25, vol: 0.1 * g, pan, at: 0.03 });
     }
   },
+  /** A portal opening: a rising shimmer. */
+  portalOpen() {
+    tone({ f: 120, f2: 360, type: "sine", dur: 1.2, vol: 0.18, attack: 0.3, wet: 0.7 });
+    for (let i = 0; i < 5; i++) tone({ f: midi(79 + [0, 4, 7, 11, 14][i]!), type: "sine", dur: 0.7, vol: 0.06, at: 0.2 + i * 0.09, wet: 0.8 });
+    noise({ f: 2000, f2: 6000, q: 0.7, dur: 1.2, vol: 0.06, attack: 0.4, wet: 0.6 });
+  },
+  /** Going through the portal: a whoosh up. */
+  portalEnter() {
+    noise({ f: 400, f2: 5000, q: 0.8, dur: 0.8, vol: 0.22, attack: 0.05, wet: 0.5 });
+    tone({ f: 200, f2: 1600, type: "sine", dur: 0.8, vol: 0.15, wet: 0.6 });
+  },
   queenDeath() {
     tone({ f: 330, f2: 60, type: "sawtooth", dur: 1.6, vol: 0.2, lp: 1500, wet: 0.6 });
     noise({ f: 800, f2: 100, q: 0.6, dur: 1.4, vol: 0.25, filter: "lowpass", wet: 0.5 });

@@ -61,6 +61,18 @@ export interface NetLook {
   age: number;
 }
 
+/** The beaten queen escaping into her portal, from where she was. */
+export interface FleeLook {
+  x: number;
+  y: number;
+  alt: number;
+  age: number;
+}
+
+/** How long the queen takes to escape (s), and the portal to close behind an arrival. */
+export const FLEE_TIME = 1.3;
+export const ARRIVAL_TIME = 1.4;
+
 /** How long the safety net shows (s). */
 export const NET_TIME = 0.7;
 
@@ -75,10 +87,19 @@ export class Vfx {
   strikes: StrikeLook[] = [];
   dust: Dust[] = [];
   nets: NetLook[] = [];
+  flee: FleeLook | null = null;
+  /** The flash as the player goes through the portal, 1 → 0. */
+  flash = 0;
+  /** The portal the player came through, closing above the start (age in s). */
+  arrival: { x: number; y: number; age: number } | null = null;
   private dustAcc = 0;
 
-  /** Start over for a new world and follow its events. */
-  attach(w: World) {
+  /** Start over for a new world and follow its events. Arriving by portal, it closes over the start. */
+  attach(w: World, arrival: "portal" | null = null) {
+    this.flee = null;
+    this.flash = 0;
+    const p = w.player;
+    this.arrival = arrival ? { x: p.x, y: p.y, age: 0 } : null;
     this.sparks = [];
     this.blasts = [];
     this.strikes = [];
@@ -114,6 +135,16 @@ export class Vfx {
     }, owner);
     on("shot", (e) => this.burst(e.x + e.dx * e.r, e.y + e.dy * e.r, e.alt, 8, "#e8ff9a"), owner);
     on("doubleJump", (e) => this.burst(e.x, e.y, e.alt - 6, 10, "#bff4ff"), owner);
+    on("queenFlee", (e) => {
+      this.flee = { x: e.x, y: e.y, alt: e.alt, age: 0 };
+      this.burst(e.x, e.y, e.alt, 30, "#aaf0ff");
+    }, owner);
+    on("portalOpen", (e) => this.burst(e.x, e.y, e.alt, 24, "#aaf0ff"), owner);
+    on("portalEnter", (e) => {
+      this.flash = 1;
+      this.burst(e.x, e.y, e.alt, 40, "#ffffff");
+      this.burst(e.x, e.y, e.alt, 30, "#aaf0ff");
+    }, owner);
     on("netBounce", (e) => {
       this.burst(e.x, e.y, e.alt, 14, "#9fe8ff");
       this.nets.push({ x: e.x, y: e.y, alt: e.alt, age: 0 });
@@ -166,6 +197,9 @@ export class Vfx {
     }
     for (const b of this.blasts) b.age += dt;
     this.blasts = this.blasts.filter((b) => b.age < BLAST_TIME);
+    if (this.flee && (this.flee.age += dt) > FLEE_TIME) this.flee = null;
+    if (this.arrival && (this.arrival.age += dt) > ARRIVAL_TIME) this.arrival = null;
+    this.flash = Math.max(0, this.flash - dt / 1.2);
     for (const n of this.nets) n.age += dt;
     this.nets = this.nets.filter((n) => n.age < NET_TIME);
     const sw = w.params.player.sword;

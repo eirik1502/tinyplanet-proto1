@@ -23,7 +23,7 @@ export const playerLayer: WorldLayer = (p, s, out) => {
       draw: () => p.drawFlat(BLOBS.shadow, p.proj.project(v.x, v.y, shadowAlt), 12 + hAbove * 0.04, overIsland ? 0.9 : 0.5),
     });
   }
-  if (pl.mode === "air") out.push({ alt: ISLAND_TOP + 0.7, draw: () => drawHeightMarker(p, s) });
+  if (pl.mode === "air" && s.session.state === "play") out.push({ alt: ISLAND_TOP + 0.7, draw: () => drawHeightMarker(p, s) });
   // While hanging, sort above the lip so the hands overlap the grass edge.
   out.push({ alt: pl.mode === "hang" ? ISLAND_TOP + 0.8 : v.alt, draw: () => drawPlayer(p, s) });
 };

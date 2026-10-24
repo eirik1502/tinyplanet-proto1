@@ -53,14 +53,14 @@ const rumble = new RumblePresenter(heard, () => input.mode === "gamepad");
 const debug = new Set<string>();
 const roundListeners: ((w: World) => void)[] = [];
 
-session.events.on("roundStart", ({ world }) => {
-  view.attach(world);
+session.events.on("roundStart", ({ world, arrival }) => {
+  view.attach(world, arrival);
   camera.attach(world, view);
-  vfx.attach(world);
+  vfx.attach(world, arrival);
   sound.attach(world);
   rumble.attach(world);
   world.events.after("learned", (e) => rememberLesson(e.id), { owner: world.lifetime });
-  document.getElementById("goal")!.textContent = world.portal ? "Beat every boid, then take the portal ◎" : world.swarm.queen ? "Kill the queen ♛" : "Kill every boid";
+  document.getElementById("goal")!.textContent = world.portal ? "Beat every boid, then take the portal ◎" : world.swarm.queen ? "Beat the queen ♛ and follow her through her portal" : "Kill every boid";
   world.events.after("roundOver", (e) => {
     if (e.outcome === "victory" && session.tutorial) setPref(TUTORIAL_DONE, "1");
   }, { owner: world.lifetime });

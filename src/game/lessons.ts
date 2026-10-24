@@ -112,7 +112,7 @@ export const LESSONS: Lesson[] = [
     after: ["sword"],
     info: { on: on("hit", (e, w) => e.source === w.player.id && w.player.mode === "air"), hold: 2.5 },
   },
-  { id: "portal", text: "The portal is open: jump into it", info: { on: on("portalOpen"), hold: 3.5 } },
+  { id: "portal", text: "The portal is open: jump into it to move on", info: { on: on("portalOpen"), hold: 3.5 } },
   {
     id: "spear",
     text: "{spear} throw the spear",

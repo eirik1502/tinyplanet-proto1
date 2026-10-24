@@ -1,6 +1,6 @@
 # TinyPlanet Proto 1
 
-A small browser game prototype set on a procedurally generated tiny planet. Climb islands, jump between them, and kill the queen.
+A small browser game prototype set on a procedurally generated tiny planet. Climb islands, jump between them, beat the queen and follow her through her portal to the next planet.
 ![Ingame_screenshot_1.png](docs/Ingame_screenshot_1.png)
 
 ## Running
@@ -112,6 +112,10 @@ A new player starts with the tutorial, **Learning to fly** (level 0, also the `t
 net bridges and one only a double jump crosses, then two training dummies that don't fight back, and a portal
 that opens once they're beaten. Flying into the portal wins; after that, runs start at level 1. Every lesson
 shows in the tutorial, learned or not.
+
+Beating the queen doesn't kill her: she opens a portal where she is and escapes through it. The portal drifts to
+within a jump of the nearest island; fly into it to win the level and follow her. The next planet starts with you
+dropping in through the portal as it closes. Her swarm keeps fighting until you're through.
 
 Each level opens with a briefing: pick the input mode, and see the controls and enemies for that
 level. The first levels introduce things one at a time: level 1 has the sword and a small queen

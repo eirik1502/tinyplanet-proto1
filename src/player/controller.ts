@@ -7,6 +7,7 @@ import type { InputFrame } from "../input/types";
 import { ISLAND_TOP, type EdgePoint, type Island } from "../world/island";
 import { flightOf, gravity, gravityAt, launch, netBounce, riseSpeed, stepFlight } from "./flight";
 import { HANG_ALT, LOST_ALT, Player } from "./player";
+import { warpPlayer } from "../game/portal";
 
 // The player's movement: hanging on and climbing rims, sliding, jumping (held for full height),
 // steering in the air, the double jump with its snap to an island ahead, the safety bounce,
@@ -225,6 +226,10 @@ export class PlayerController {
     const aim = playing ? input.aim : null;
     const jumpPressed = playing && input.pressed.has("jump");
     this.jumpPlan = null;
+    if (p.warp && w.portal) {
+      warpPlayer(w, w.portal, dt);
+      return;
+    }
 
     if (p.freeze > 0) {
       // Hit-stop: no moving, attacking or animating. After a sword hit in the air, the flight then

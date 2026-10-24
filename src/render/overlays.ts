@@ -128,3 +128,11 @@ export const slowMo: Overlay = (p, s) => {
   ctx.fillRect(0, bar, W, 1);
   ctx.fillRect(0, H - bar - 1, W, 1);
 };
+
+/** A white flash as the player goes through the portal. */
+export const portalFlash: Overlay = (p, s) => {
+  const f = s.vfx.flash;
+  if (f <= 0) return;
+  p.ctx.fillStyle = `rgba(235,250,255,${0.85 * f * f})`;
+  p.ctx.fillRect(0, 0, p.W, p.H);
+};

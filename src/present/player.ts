@@ -5,6 +5,9 @@ import { Avatar, type AvatarView, type AvatarWeapon } from "../render/avatar";
 // animation clock, and the avatar's animation, driven by the world's events. Like everything about
 // the player, it all holds still during hit-stop.
 
+/** How far above the rim the player appears when arriving through a portal. */
+const ARRIVAL_DROP = 260;
+
 export class PlayerPresenter {
   /** Rendered position. */
   x = 0;
@@ -15,9 +18,15 @@ export class PlayerPresenter {
   readonly avatar = new Avatar();
   private w: World | null = null;
 
-  attach(w: World) {
+  /** Coming down through the portal at the start of a level: the drop eases in slower. */
+  private arriving = false;
+
+  /** Follow a new world. Arriving by portal, the player drops in from above. */
+  attach(w: World, arrival: "portal" | null = null) {
     this.w = w;
     this.snap();
+    this.arriving = arrival === "portal";
+    if (this.arriving) this.alt += ARRIVAL_DROP;
     const on = w.events.after.bind(w.events);
     const owner = { owner: w.lifetime };
     const a = this.avatar;
@@ -51,7 +60,9 @@ export class PlayerPresenter {
       const k = p.mode === "hang" ? 1 - Math.exp(-18 * dt) : 1;
       this.x += (p.x - this.x) * k;
       this.y += (p.y - this.y) * k;
-      this.alt += (p.alt - this.alt) * (p.mode === "hang" ? 1 - Math.exp(-10 * dt) : 1);
+      const settle = this.arriving ? 3.5 : 10;
+      this.alt += (p.alt - this.alt) * (p.mode === "hang" ? 1 - Math.exp(-settle * dt) : 1);
+      if (this.arriving && (p.mode !== "hang" || Math.abs(p.alt - this.alt) < 2)) this.arriving = false;
     }
     this.avatar.update(dt, this.view());
   }

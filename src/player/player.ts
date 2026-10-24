@@ -41,6 +41,8 @@ export class Player extends GameObject {
   facing = 0;
   /** Invulnerable for this long after a hit (s). */
   invuln = 0;
+  /** Taken in by the portal: no more control, drawn up and away. */
+  warp = false;
 
   constructor() {
     super("player");

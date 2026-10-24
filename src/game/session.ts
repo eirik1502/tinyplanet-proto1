@@ -28,8 +28,8 @@ export type BriefingReason = "new" | "retry" | "pause";
 
 export interface SessionEvents {
   [type: string]: object;
-  /** A new world: presenters attach to it. */
-  roundStart: { world: World };
+  /** A new world: presenters attach to it. `arrival` "portal": the player followed the queen here. */
+  roundStart: { world: World; arrival: "portal" | null };
   briefingOpen: { reason: BriefingReason };
   briefingClose: object;
 }
@@ -137,10 +137,11 @@ export class Session {
         rand: this.rand,
       });
     }
+    const arrival = this.world?.portal?.entered && !retry ? "portal" : null;
     this.world?.dispose();
     const learned = this.spec!.lessons === "all" ? [] : this.opts.learned?.();
     this.world = new World({ spec: this.spec!, seed, params: this.params, learned });
-    this.events.emit("roundStart", { world: this.world });
+    this.events.emit("roundStart", { world: this.world, arrival });
     this.openBriefing(retry ? "retry" : "new");
   }
 
@@ -223,7 +224,7 @@ export class Session {
           : this.custom
             ? { name: "Custom level", blurb: "Set up in the dev panel.", boss: false }
             : this.plan && { name: this.plan.template.name, blurb: this.plan.template.blurb, boss: !!this.plan.template.boss },
-      goal: w.portal ? "Beat every boid, then take the portal" : w.swarm.queen ? "Kill the queen" : "Kill every boid",
+      goal: w.portal ? "Beat every boid, then take the portal" : w.swarm.queen ? "Beat the queen, then follow her through her portal" : "Kill every boid",
       modifiers: spec.modifiers.map((m) => MODIFIERS[m]),
       reason: this.briefing,
       weapons,

@@ -84,7 +84,9 @@ export interface GameEvents {
   anger: At & { source: number; dur: number };
   queenBlast: At & { source: number; radius: number };
 
-  // The portal (`source`: the portal, or the player going in)
+  // The portal (`source`: the portal, the fleeing queen, or the player going in)
+  /** The beaten queen escapes: she opens a portal where she is and flies into it. */
+  queenFlee: At & { source: number };
   /** The portal opened: nothing left to beat. */
   portalOpen: At & { source: number };
   /** The player flew into the portal (`target`). */

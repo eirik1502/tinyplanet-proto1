@@ -36,6 +36,8 @@ export class SoundPresenter {
       // The smash's sound comes with its blast.
     }, owner);
     on("slowMo", (e) => (e.on ? sfx.slowMoIn() : sfx.slowMoOut()), owner);
+    on("portalOpen", () => sfx.portalOpen(), owner);
+    on("portalEnter", () => sfx.portalEnter(), owner);
     on("roundOver", (e) => (e.outcome === "victory" ? sfx.victory() : sfx.defeat()), owner);
 
     // The player's own hits are always heard at full volume.

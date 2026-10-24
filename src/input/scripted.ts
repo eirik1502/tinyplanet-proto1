@@ -24,8 +24,9 @@ export class ScriptInput implements InputSource {
 }
 
 /**
- * A crude bot: heads for the nearest enemy, hops from island to island toward it, swings the
- * sword when close and throws the spear now and then. Enough to exercise the game, not to win it.
+ * A crude bot: heads for the nearest enemy (or the open portal), hops from island to island toward
+ * it, swings the sword when close and throws the spear now and then. Enough to exercise the game,
+ * not to win it.
  */
 export class BotInput implements InputSource {
   private holds = new Map<Action, number>();
@@ -66,7 +67,10 @@ export class BotInput implements InputSource {
     this.jumpWait -= this.dt;
     if (++this.n % 30 === 0) pressed.add("confirm");
 
-    const target = w.swarm.boids
+    const portal = w.portal?.open ? w.portal : null;
+    const target = portal
+      ? { x: portal.x, y: portal.y, d: Math.hypot(portal.x - p.x, portal.y - p.y) }
+      : w.swarm.boids
       .filter((b) => b.hp > 0)
       .reduce<{ x: number; y: number; d: number } | null>((best, b) => {
         const d = Math.hypot(b.x - p.x, b.y - p.y);
@@ -75,11 +79,11 @@ export class BotInput implements InputSource {
     let move: Vec = { x: 0, y: 0 };
     if (target) move = { x: (target.x - p.x) / (target.d || 1), y: (target.y - p.y) / (target.d || 1) };
 
-    if (target && !this.holds.has("sword") && !this.holds.has("spear")) {
+    if (target && !portal && !this.holds.has("sword") && !this.holds.has("spear")) {
       if (target.d < 150 && w.attacks.ready("sword")) press("sword", 0.1 + this.rand() * 0.4);
       else if (target.d < 450 && w.attacks.ready("spear") && this.rand() < 0.03) press("spear", 0.2 + this.rand() * 0.3);
     }
-    if (p.mode === "hang" && this.jumpWait <= 0 && (!target || target.d > 110)) {
+    if (p.mode === "hang" && this.jumpWait <= 0 && (!target || portal || target.d > 110)) {
       press("jump", 0.2 + this.rand() * 0.3);
       this.jumpWait = 0.5 + this.rand();
     } else if (p.mode === "air" && p.airJumps > 0 && p.vz < 0 && p.alt < ISLAND_TOP + 15 && this.rand() < 0.2) {
