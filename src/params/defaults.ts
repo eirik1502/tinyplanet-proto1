@@ -33,7 +33,7 @@ export const DEFAULTS = {
       speed: 260, // Jump speed (sideways)
       height: 70, // Full jump height (Space held)
       slideFactor: 1, // Slide speed added to the jump speed (×)
-      climbFactor: 1, // Climb speed added to the jump speed (×)
+      climbFactor: 0.5, // Climb speed along the jump added to the jump speed (×)
       maxLean: 85, // Most a jump leans from straight out of the rim (degrees)
       regrab: 0.35, // Can't grab the island jumped from for (s)
       cut: 0.35, // Upward speed kept on early release

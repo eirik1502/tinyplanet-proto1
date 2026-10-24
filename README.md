@@ -138,7 +138,8 @@ browser supports it (Chromium), the pad rumbles on hits, blasts, hard landings a
 On a rim, a dashed line shows where a jump would go now (at full height): faint until you steer, green with a
 landing ring when it reaches an island. While steering, a fan shows how far a jump can lean from straight out.
 A jump leans up to 85° from straight out, and can't grab the island it left for its first 0.35 s. Climbing when
-you jump adds the climb speed to the jump speed, like a slide does. Aim a jump past the fan and it goes from the
+you jump adds half the part of the climb that goes the jump's way to the jump speed (climbing away from it adds
+nothing). Aim a jump past the fan and it goes from the
 spot within a short climb (0.2 s) where it gets closest to the aim:
 the player climbs there and jumps, as one action (other input meanwhile is ignored, and the climb adds no speed). On the
 tutorial and the first levels, a jump that would just miss is nudged onto an island (up to 14° on level 1, less

@@ -45,16 +45,17 @@ export const maxLean = (w: World) => (w.params.move.jump.maxLean * Math.PI) / 18
 
 /**
  * Launch state for a jump from rim parameter `s` in direction `angle`. Moving along the rim adds
- * to the jump speed but not to its direction: a slide by `jump.slideFactor`, climbing (`climb`,
- * the climb speed from the input) by `jump.climbFactor`; climbing against a slide takes off it.
+ * to the jump speed but not to its direction: a slide by `jump.slideFactor`, and climbing (`climb`,
+ * the climb speed along the rim from the input) by `jump.climbFactor` for the part of it that goes
+ * the jump's way (climbing away from it adds nothing).
  */
 export function launch(w: World, islandIdx: number, s: number, angle: number, slide: number, climb = 0): Flight {
   const e = w.islands[islandIdx]!.pointAt(s);
   const j = w.params.move.jump;
-  const along = Math.abs(slide * j.slideFactor + climb * j.climbFactor);
-  const v = Math.min(w.params.move.limits.maxSpeed, j.speed + along);
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
+  const climbing = Math.max(0, climb * (e.tx * dx + e.ty * dy)) * j.climbFactor;
+  const v = Math.min(w.params.move.limits.maxSpeed, j.speed + Math.abs(slide) * j.slideFactor + climbing);
   return { x: e.x + e.nx * 12, y: e.y + e.ny * 12, alt: ISLAND_TOP, vx: dx * v, vy: dy * v, vz: riseSpeed(w, j.height), t: 0 };
 }
 

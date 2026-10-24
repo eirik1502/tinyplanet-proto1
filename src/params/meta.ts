@@ -62,7 +62,7 @@ export const SLIDERS: Record<string, Slider> = {
   "move.jump.speed": ["Jump speed (sideways)", 50, 1000, 10],
   "move.jump.height": ["Full jump height (Space held)", 10, 300, 5],
   "move.jump.slideFactor": ["Slide speed added to the jump speed (×)", 0, 1.5, 0.05],
-  "move.jump.climbFactor": ["Climb speed added to the jump speed (×)", 0, 1.5, 0.05],
+  "move.jump.climbFactor": ["Climb speed along the jump added to the jump speed (×)", 0, 1.5, 0.05],
   "move.jump.maxLean": ["Most a jump leans from straight out of the rim (degrees)", 10, 90, 1],
   "move.jump.regrab": ["Can't grab the island jumped from for (s)", 0, 1, 0.01],
   "move.jump.cut": ["Upward speed kept on early release", 0, 1, 0.05],

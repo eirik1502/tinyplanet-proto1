@@ -88,19 +88,45 @@ test("a jump aimed a little past the lean limit climbs briefly, then goes along 
   expect(Math.hypot(p.vx, p.vy)).toBeCloseTo(liveParams.move.jump.speed, 0);
 });
 
-test("climbing when jumping adds the climb speed to the jump speed", () => {
+test("climbing adds the part of the climb along the jump, scaled, to the jump speed", () => {
+  const { w } = start(0);
+  const j = liveParams.move.jump;
+  const climb = liveParams.move.climb.speed;
+  const isl = w.player.island;
+  const s = w.player.s;
+  const e = w.islands[isl]!.pointAt(s);
+  const out = Math.atan2(e.ny, e.nx);
+  // The way the climb goes along the rim (+s), as an angle; the jump leans 0.5 rad toward it or away.
+  const lean = Math.sign(wrapAngle(Math.atan2(e.ty, e.tx) - out)) * 0.5;
+  const speed = (angle: number) => {
+    const f = launch(w, isl, s, angle, 0, climb);
+    return Math.hypot(f.vx, f.vy);
+  };
+  const along = (angle: number) => e.tx * Math.cos(angle) + e.ty * Math.sin(angle);
+  expect(speed(out)).toBeCloseTo(j.speed + climb * along(out) * j.climbFactor, 6);
+  expect(along(out)).toBeCloseTo(0, 6);
+  expect(speed(out + lean)).toBeCloseTo(j.speed + climb * along(out + lean) * j.climbFactor, 6);
+  expect(along(out + lean)).toBeGreaterThan(0.4);
+  // Climbing away from the jump adds nothing.
+  expect(speed(out - lean)).toBeCloseTo(j.speed, 6);
+});
+
+test("the climb speed on the press goes into the jump", () => {
   const { s, w } = start(0);
   const p = w.player;
   const e = w.islands[p.island]!.pointAt(p.s);
-  // Climb along the rim at full speed (the input points along it, far from where the player faces).
-  s.step(1 / 60, { ...NO_INPUT, move: { x: e.tx, y: e.ty } });
+  const move = { x: e.tx, y: e.ty };
+  s.step(1 / 60, { ...NO_INPUT, move });
   expect(Math.abs(p.climb)).toBeCloseTo(liveParams.move.climb.speed, 0);
-  const climb = p.climb;
-  const out = Math.atan2(w.islands[p.island]!.pointAt(p.s).ny, w.islands[p.island]!.pointAt(p.s).nx);
-  s.step(1 / 60, aimAt(out, ["jump"], { x: e.tx, y: e.ty }));
+  let jumped = 0;
+  w.events.on("jump", () => (jumped = Math.hypot(p.vx, p.vy)));
+  // Jump leaning with the climb, from where the player is (well within the lean limit).
+  const here = w.islands[p.island]!.pointAt(p.s);
+  const out = Math.atan2(here.ny, here.nx);
+  const lean = Math.sign(wrapAngle(Math.atan2(here.ty * Math.sign(p.climb), here.tx * Math.sign(p.climb)) - out)) * 0.5;
+  s.step(1 / 60, aimAt(out + lean, ["jump"], move));
   expect(p.mode).toBe("air");
-  const j = liveParams.move.jump;
-  expect(Math.hypot(p.vx, p.vy)).toBeCloseTo(Math.min(liveParams.move.limits.maxSpeed, j.speed + Math.abs(climb) * j.climbFactor), 0);
+  expect(jumped).toBeGreaterThan(liveParams.move.jump.speed + 50);
 });
 
 test("falling into the haze doesn't hurt on level 1, and does from level 2", () => {
