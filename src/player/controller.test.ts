@@ -3,17 +3,11 @@ import { wrapAngle } from "../core/math";
 import { Session } from "../game/session";
 import { NO_INPUT, type Action, type InputFrame } from "../input/types";
 import { liveParams } from "../params/store";
+import { MAX_JUMP_LEAN } from "./controller";
 import { predict, launch } from "./flight";
 
-// The jump help on the first levels: the assist nudging a jump that would just miss, and a jump
-// aimed past the lean limit sliding along the rim first.
-
-const frame = (move: { x: number; y: number }, pressed: Action[] = []): InputFrame => ({
-  ...NO_INPUT,
-  move,
-  pressed: new Set(pressed),
-  held: new Set(pressed),
-});
+// Jumping off a rim: the assist nudging a jump that would just miss, and a jump aimed past the
+// lean limit climbing briefly to a better spot first, as one action.
 
 /** The tutorial, hanging on the start island, rim facing the next island. */
 function start(assist: number) {
@@ -53,19 +47,46 @@ test("the assist nudges a jump that would just miss onto the next island", () =>
   }
 });
 
-test("a jump aimed past the lean limit slides along the rim, then jumps", () => {
+/** Aim with the pointer (it doesn't climb) at `angle`, pressing `pressed`. */
+const aimAt = (angle: number, pressed: Action[] = [], move = { x: 0, y: 0 }): InputFrame => ({
+  ...NO_INPUT,
+  move,
+  aimMode: "pointer",
+  aim: { x: Math.cos(angle), y: Math.sin(angle) },
+  pressed: new Set(pressed),
+  held: new Set<Action>(["jump"]),
+});
+
+test("a jump within the lean limit goes on the press", () => {
   const { s, w } = start(0);
   const p = w.player;
   const e = w.islands[p.island]!.pointAt(p.s);
-  // Along the rim: as far from straight out as it gets.
-  const along = { x: e.tx, y: e.ty };
-  s.step(1 / 60, frame(along, ["jump"]));
+  const want = Math.atan2(e.ny, e.nx) + MAX_JUMP_LEAN - 0.1;
+  s.step(1 / 60, aimAt(want, ["jump"]));
+  expect(p.mode).toBe("air");
+  expect(wrapAngle(Math.atan2(p.vy, p.vx) - want)).toBeCloseTo(0, 5);
+});
+
+test("a jump aimed a little past the lean limit climbs briefly, then goes along the aim as one action", () => {
+  const { s, w } = start(0);
+  const p = w.player;
+  const e = w.islands[p.island]!.pointAt(p.s);
+  const want = Math.atan2(e.ny, e.nx) + MAX_JUMP_LEAN + 0.15;
+  s.step(1 / 60, aimAt(want, ["jump"]));
   expect(p.mode).toBe("hang");
   expect(p.jumpQueue).not.toBeNull();
-  const s0 = p.s;
-  for (let i = 0; i < 60 && p.mode === "hang"; i++) s.step(1 / 60, frame({ x: 0, y: 0 }));
+  // Other input while climbing to the spot changes nothing, and another jump press isn't a double jump.
+  let frames = 0;
+  while (p.mode === "hang" && frames < 30) {
+    s.step(1 / 60, aimAt(want + 1, frames === 2 ? ["jump"] : [], { x: -e.tx, y: -e.ty }));
+    frames++;
+  }
   expect(p.mode).toBe("air");
-  expect(Math.abs(p.s - s0)).toBeGreaterThan(20);
+  expect(frames / 60).toBeLessThanOrEqual(liveParams.move.assist.climbToJump + 2 / 60);
+  expect(p.airJumps).toBe(1);
+  expect(wrapAngle(Math.atan2(p.vy, p.vx) - want)).toBeCloseTo(0, 5);
+  // No speed from the climb: a plain jump's.
+  expect(Math.hypot(p.vx, p.vy)).toBeCloseTo(liveParams.move.jump.speed, 0);
 });
 
 test("falling into the haze doesn't hurt on level 1, and does from level 2", () => {

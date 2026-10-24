@@ -16,8 +16,8 @@ import { warpPlayer } from "../game/portal";
 
 /** Most a jump can lean away from straight out of the rim, so it clears the island it leaves. */
 export const MAX_JUMP_LEAN = 1.13;
-/** Longest a jump aimed past the lean limit waits while sliding toward its aim (s). */
-const JUMP_QUEUE_TIME = 0.6;
+/** Spacing of the rim spots tried for a jump (world units). */
+const SPOT_STEP = 4;
 /** Steps of the jump assist's search (rad). */
 const ASSIST_STEP = 0.035;
 
@@ -27,7 +27,9 @@ export interface JumpPlan {
   angle: number;
   /** Straight out of the rim. */
   out: number;
-  /** The input pointed further from straight out than a jump can lean. */
+  /** The rim spot it goes from (the player climbs there first when it isn't where they are). */
+  s: number;
+  /** Even from that spot, the input points further from straight out than a jump can lean. */
   clamped: boolean;
   /** The direction came from the input (or a slide), not just straight out. */
   steered: boolean;
@@ -154,12 +156,12 @@ export class PlayerController {
   // Rims
   // -------------------------------------------------------------------------------------------
 
-  /** Jump off the rim as planned. */
-  private jump(plan: JumpPlan) {
+  /** Jump off the rim from spot `s` (where the player is) at `angle`. */
+  private jump({ s, angle }: { s: number; angle: number }) {
     const w = this.w;
     const p = this.player;
     const e = this.rim();
-    const f = launch(w, p.island, p.s, plan.angle, p.slide);
+    const f = launch(w, p.island, s, angle, p.slide);
     Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
     p.mode = "air";
     p.airTime = 0;
@@ -272,10 +274,18 @@ export class PlayerController {
     } else if (p.mode === "hang") {
       const isl = w.islands[p.island]!;
       let e = isl.pointAt(p.s);
-      // Climb toward the rim point that faces the input direction. Aiming an attack takes over
-      // the input; an ongoing slide carries on.
-      const climb = w.attacks.aim ? 0 : climbInput(e, dir) * prm.move.climb.speed;
-      p.s += (climb + p.slide) * dt;
+      const queued = p.jumpQueue;
+      if (queued) {
+        // Climbing to the spot a jump goes from: no other input counts until it's off.
+        const d = queued.s - p.s;
+        const step = prm.move.climb.speed * dt;
+        p.s = Math.abs(d) <= step ? queued.s : p.s + Math.sign(d) * step;
+      } else {
+        // Climb toward the rim point that faces the input direction. Aiming an attack takes over
+        // the input; an ongoing slide carries on.
+        const climb = w.attacks.aim ? 0 : climbInput(e, dir) * prm.move.climb.speed;
+        p.s += (climb + p.slide) * dt;
+      }
       p.slide *= Math.exp(-prm.move.slide.friction * dt);
       if (Math.abs(p.slide) < 5) p.slide = 0;
       e = isl.pointAt(p.s);
@@ -283,25 +293,20 @@ export class PlayerController {
       p.y = e.y + e.ny * 7;
       p.alt = HANG_ALT;
       p.facing = Math.atan2(-e.ny, -e.nx);
-      const queued = p.jumpQueue;
-      const plan = this.planJump(queued ? queued.dir : (aim ?? dir));
-      if (playing) this.jumpPlan = plan;
 
-      // The jump button jumps at once; holding it keeps the jump going full height (see the air
-      // section). Aimed past the lean limit, the player first slides along the rim toward the aim,
-      // and jumps once it's in range (or after a moment, leaning as far as a jump can).
+      // A jump is one action, decided on the press: its direction, and the rim spot within a short
+      // climb it goes from (the one that gets closest to the aim). The player climbs there, then
+      // jumps; holding the button keeps the jump going full height (see the air section).
       if (queued) {
-        queued.left -= dt;
         if (!playing) p.jumpQueue = null;
-        else if (!plan.clamped || queued.left <= 0) this.jump(plan);
-        else p.slide = queued.side * Math.max(Math.abs(p.slide), prm.move.assist.slideToAim);
-      } else if (jumpPressed) {
-        const to = aim ?? dir;
-        if (plan.clamped && prm.move.assist.slideToAim > 0) {
-          const side = Math.sign(to.x * e.tx + to.y * e.ty) || 1;
-          p.jumpQueue = { dir: { x: to.x, y: to.y }, side, left: JUMP_QUEUE_TIME };
-          p.slide = side * Math.max(Math.abs(p.slide), prm.move.assist.slideToAim);
-        } else this.jump(plan);
+        else if (p.s === queued.s) this.jump(queued);
+      } else {
+        const plan = this.planJump(aim ?? dir);
+        if (playing) this.jumpPlan = plan;
+        if (jumpPressed) {
+          if (plan.s === p.s) this.jump(plan);
+          else p.jumpQueue = { s: plan.s, angle: plan.angle };
+        }
       }
     } else if (p.mode === "air") {
       // Releasing jump while still rising cuts the jump short.
@@ -390,32 +395,65 @@ export class PlayerController {
    */
   private planJump(dir: Vec): JumpPlan {
     const p = this.player;
-    const e = this.rim();
-    const out = Math.atan2(e.ny, e.nx);
+    const isl = this.w.islands[p.island]!;
+    let e = this.rim();
+    const here = Math.atan2(e.ny, e.nx);
     if (!dir.x && !dir.y) {
-      if (!p.slide) return { angle: this.assist(out, out), out, clamped: false, steered: false };
+      if (!p.slide) return { angle: this.assist(here, here, p.s), out: here, s: p.s, clamped: false, steered: false };
       const side = Math.sign(p.slide);
       dir = { x: e.tx * side, y: e.ty * side };
     }
-    const diff = wrapAngle(Math.atan2(dir.y, dir.x) - out);
+    const want = Math.atan2(dir.y, dir.x);
+    const s = p.slide ? p.s : this.jumpSpot(want);
+    if (s !== p.s) e = isl.pointAt(s);
+    const out = Math.atan2(e.ny, e.nx);
+    const diff = wrapAngle(want - out);
     const lean = Math.max(-MAX_JUMP_LEAN, Math.min(MAX_JUMP_LEAN, diff));
-    return { angle: this.assist(out + lean, out), out, clamped: lean !== diff, steered: true };
+    return { angle: this.assist(out + lean, out, s), out, s, clamped: lean !== diff, steered: true };
+  }
+
+  /**
+   * Where on the rim to jump toward `want` from: here if a jump can lean that far, else the spot
+   * within a short climb (`move.assist.climbToJump` at climb speed, either way along the rim) from
+   * which a jump gets closest to it; the nearest such spot on a tie.
+   */
+  private jumpSpot(want: number): number {
+    const p = this.player;
+    const isl = this.w.islands[p.island]!;
+    const short = (s: number) => {
+      const e = isl.pointAt(s);
+      return Math.max(0, Math.abs(wrapAngle(want - Math.atan2(e.ny, e.nx))) - MAX_JUMP_LEAN);
+    };
+    let best = p.s;
+    let bestShort = short(p.s);
+    const reach = this.w.params.move.climb.speed * this.w.params.move.assist.climbToJump;
+    for (let d = SPOT_STEP; d <= reach && bestShort > 0; d += SPOT_STEP) {
+      for (const s of [p.s + d, p.s - d]) {
+        const sh = short(s);
+        // Only a clear improvement is worth the climb.
+        if (sh < bestShort - 0.05) {
+          best = s;
+          bestShort = sh;
+        }
+      }
+    }
+    return best;
   }
 
   /**
    * The jump assist: if a full jump at `angle` would land nowhere (or back on its own island),
    * the nearest angle within the level's assist that lands on another island, else `angle`.
    */
-  private assist(angle: number, out: number): number {
+  private assist(angle: number, out: number, s: number): number {
     const w = this.w;
     const p = this.player;
     const help = w.spec.assist ?? 0;
     const max = (help * w.params.move.assist.angle * Math.PI) / 180;
     if (max < ASSIST_STEP) return angle;
-    const key = `${p.island}|${Math.round(p.s)}|${angle.toFixed(2)}|${Math.round(p.slide / 25)}`;
+    const key = `${p.island}|${Math.round(s)}|${angle.toFixed(2)}|${Math.round(p.slide / 25)}`;
     if (key === this.assistCache.key) return this.assistCache.angle;
     const lands = (a: number) => {
-      const r = predict(w, launch(w, p.island, p.s, a, p.slide), p.island, false);
+      const r = predict(w, launch(w, p.island, s, a, p.slide), p.island, false);
       return r.island !== null && r.island !== p.island;
     };
     let best = angle;

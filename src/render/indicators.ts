@@ -140,9 +140,9 @@ export const jumpPreview: Overlay = (p, s) => {
 };
 
 /**
- * On a rim, the jump a press would make now (at full height), fainter until the input steers it.
- * While steering, a fan shows how far a jump can lean from straight out; its edge lights up when
- * the input points past it.
+ * On a rim, the jump a press would make now (at full height, from the spot a short climb away it
+ * would go from), fainter until the input steers it. While steering, a fan shows how far a jump
+ * can lean from straight out there; its edge lights up when the input points past it even so.
  */
 export const rimJumpPreview: Overlay = (p, s) => {
   const { ctx, proj } = p;
@@ -152,7 +152,7 @@ export const rimJumpPreview: Overlay = (p, s) => {
   if (s.session.state !== "play" || pl.mode !== "hang" || !plan || w.attacks.aim) return;
 
   if (plan.steered) {
-    const e = w.islands[pl.island]!.pointAt(pl.s);
+    const e = w.islands[pl.island]!.pointAt(plan.s);
     const alt = ISLAND_TOP + 1;
     const r = 46;
     const at = (a: number, d: number) => proj.project(e.x + Math.cos(a) * d, e.y + Math.sin(a) * d, alt);
@@ -178,6 +178,6 @@ export const rimJumpPreview: Overlay = (p, s) => {
     }
   }
 
-  const f = launch(w, pl.island, pl.s, plan.angle, pl.slide);
+  const f = launch(w, pl.island, plan.s, plan.angle, pl.slide);
   drawFlight(p, predict(w, f, pl.island, false), plan.steered ? 0.6 : 0.3, 2);
 };

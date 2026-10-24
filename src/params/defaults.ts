@@ -46,7 +46,7 @@ export const DEFAULTS = {
     },
     assist: {
       angle: 14, // Most a jump is nudged toward an island (degrees, at full help)
-      slideToAim: 520, // Slide speed toward a jump aimed past the lean limit
+      climbToJump: 0.1, // Longest climb to a better spot before a jump (s)
     },
     limits: {
       maxSpeed: 800, // Max air speed (sideways)

@@ -71,7 +71,7 @@ export const SLIDERS: Record<string, Slider> = {
   "move.air.grabRadius": ["Grab radius", 1, 40, 1],
   "move.air.fallGrab": ["Grab radius when falling", 1, 100, 1],
   "move.assist.angle": ["Most a jump is nudged toward an island (degrees, at full help)", 0, 45, 1],
-  "move.assist.slideToAim": ["Slide speed toward a jump aimed past the lean limit", 0, 1200, 10],
+  "move.assist.climbToJump": ["Longest climb to a better spot before a jump (s)", 0, 0.5, 0.01],
   "move.limits.maxSpeed": ["Max air speed (sideways)", 50, 1500, 10],
   "move.limits.maxHeight": ["Max height above the rims", 20, 600, 5],
   "move.airJump.speed": ["Double jump speed (sideways)", 0, 1000, 10],
