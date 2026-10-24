@@ -21,7 +21,7 @@ export const swarmStatus: HudWidget = {
     ctx.textBaseline = "top";
     ctx.fillStyle = "#f0dcff";
     const shield = swarm.queenShielded ? ` · shielded: ${swarm.shieldLeft} more kills` : "";
-    const at = session.run.kind === "scenario" ? "scenario" : session.custom ? "custom level" : `level ${session.level}`;
+    const at = session.run.kind === "scenario" ? "scenario" : session.custom ? "custom level" : session.tutorial ? "tutorial" : `level ${session.level}`;
     ctx.fillText(
       `${q ? `♛ QUEEN${shield} · ` : ""}swarm ${swarm.boids.length - (q ? 1 : 0)} in ${swarm.flocks.length} flocks · ${at} · planet ${w.planet.seed.toString(36)}`,
       W / 2,

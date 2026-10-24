@@ -7,6 +7,7 @@ import { describeFlock } from "../enemies/flocks";
 import { levelBase, MODIFIERS, planLevel, resolveLevel, UNLOCKS, weaponsAt, type LevelPlan, type LevelSpec, type LevelTemplate } from "../levels/levels";
 import type { Params } from "../params/store";
 import type { InputFrame } from "../input/types";
+import { TUTORIAL, TUTORIAL_BLURB, TUTORIAL_NAME, TUTORIAL_SEED } from "../levels/tutorial";
 import type { Scenario } from "./scenario";
 import { World } from "./world";
 
@@ -16,7 +17,7 @@ import { World } from "./world";
 // win moves on to the next level and a defeat retries the level on a fresh planet. No DOM: the
 // browser shows the briefing when the session says so, and a headless run skips it.
 
-/** What a round plays: the normal progression from a level, a custom level, or a scenario. */
+/** What a round plays: the normal progression from a level (0: the tutorial), a custom level, or a scenario. */
 export type Run =
   | { kind: "normal"; level: number; template: LevelTemplate | null }
   | { kind: "custom"; spec: LevelSpec }
@@ -44,6 +45,8 @@ export interface BriefingData {
   /** Replaces "Level n" in the title. */
   heading?: string;
   template: { name: string; blurb: string; boss: boolean } | null;
+  /** How to win, in a few words. */
+  goal: string;
   modifiers: { name: string; blurb: string }[];
   reason: BriefingReason;
   weapons: WeaponId[];
@@ -94,6 +97,11 @@ export class Session {
     return this.run.kind !== "normal";
   }
 
+  /** The tutorial, as level 0 of a normal run. */
+  get tutorial() {
+    return this.run.kind === "normal" && this.level === 0;
+  }
+
   /** Start a run: the normal progression from a level, a custom level or a scenario. */
   start(run: Run) {
     this.run = run;
@@ -109,7 +117,11 @@ export class Session {
     const lv = this.params.world.levels;
     let seed = nextSeed(this.rand);
     if (run.kind === "custom") this.spec = structuredClone(run.spec);
-    else if (run.kind === "scenario") {
+    else if (run.kind === "normal" && level === 0) {
+      this.plan = null;
+      this.spec = structuredClone(TUTORIAL);
+      seed = TUTORIAL_SEED;
+    } else if (run.kind === "scenario") {
       this.spec = structuredClone(run.scenario.spec);
       seed = run.scenario.seed ?? seed;
     } else if (!retry || !this.spec) {
@@ -126,7 +138,8 @@ export class Session {
       });
     }
     this.world?.dispose();
-    this.world = new World({ spec: this.spec!, seed, params: this.params, learned: this.opts.learned?.() });
+    const learned = this.spec!.lessons === "all" ? [] : this.opts.learned?.();
+    this.world = new World({ spec: this.spec!, seed, params: this.params, learned });
     this.events.emit("roundStart", { world: this.world });
     this.openBriefing(retry ? "retry" : "new");
   }
@@ -189,6 +202,7 @@ export class Session {
     const mods = spec?.modifiers.length ? ` (${spec.modifiers.map((m) => MODIFIERS[m].name).join(", ")})` : "";
     if (this.run.kind === "scenario") return `scenario: ${this.run.scenario.name}${mods}`;
     if (this.custom) return `custom level: ${spec?.flocks.map(describeFlock).join(" · ") || "no flocks"}${mods}`;
+    if (this.tutorial) return "tutorial";
     return `level ${this.level}${this.plan ? ` · ${this.plan.template.name}` : ""}${mods}`;
   }
 
@@ -200,13 +214,16 @@ export class Session {
     const run = this.run;
     return {
       level: this.level,
-      heading: run.kind === "scenario" ? run.scenario.name : this.custom ? "Dev" : undefined,
+      heading: run.kind === "scenario" ? run.scenario.name : this.custom ? "Dev" : this.tutorial ? "Tutorial" : undefined,
       template:
-        run.kind === "scenario"
+        this.tutorial
+          ? { name: TUTORIAL_NAME, blurb: TUTORIAL_BLURB, boss: false }
+          : run.kind === "scenario"
           ? { name: "Scenario", blurb: run.scenario.blurb, boss: false }
           : this.custom
             ? { name: "Custom level", blurb: "Set up in the dev panel.", boss: false }
             : this.plan && { name: this.plan.template.name, blurb: this.plan.template.blurb, boss: !!this.plan.template.boss },
+      goal: w.portal ? "Beat every boid, then take the portal" : w.swarm.queen ? "Kill the queen" : "Kill every boid",
       modifiers: spec.modifiers.map((m) => MODIFIERS[m]),
       reason: this.briefing,
       weapons,

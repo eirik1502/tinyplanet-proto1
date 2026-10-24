@@ -5,6 +5,7 @@ import { effectsLayer } from "./effects";
 import { aimIndicator, jumpPreview, rimJumpPreview } from "./indicators";
 import { boundsLayer, islandsLayer } from "./islands";
 import { fog, slowMo, wind } from "./overlays";
+import { portalLayer } from "./portal";
 import type { Painter } from "./painter";
 import type { Drawable, Overlay, Scene, WorldLayer } from "./scene";
 import { drawSpace, hazeLayer, motesLayer, veil } from "./sky";
@@ -14,7 +15,7 @@ import { drawSpace, hazeLayer, motesLayer, veil } from "./sky";
 // nothing in it.
 
 /** World layers, in no particular order (the drawables are sorted). */
-const WORLD: WorldLayer[] = [hazeLayer, motesLayer, islandsLayer, boundsLayer, playerLayer, boidsLayer, projectilesLayer, effectsLayer];
+const WORLD: WorldLayer[] = [hazeLayer, motesLayer, islandsLayer, boundsLayer, playerLayer, boidsLayer, projectilesLayer, effectsLayer, portalLayer];
 /** Overlays, in drawing order. */
 const OVERLAYS: Overlay[] = [veil, wind, fog, slowMo, rimJumpPreview, jumpPreview, aimIndicator];
 

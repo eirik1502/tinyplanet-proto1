@@ -34,6 +34,8 @@ export interface Planet {
   queen: { x: number; y: number; params: Record<string, number>; escort: FlockSpec } | null;
   /** The other flocks and where each spawns. */
   flocks: { x: number; y: number; spec: FlockSpec }[];
+  /** Where the portal out of a goal level hovers (by the queen's home unless the layout says). */
+  portal: { x: number; y: number };
   theme: Theme;
 }
 
@@ -62,6 +64,12 @@ export interface Layout {
   style?: IslandStyle;
   /** The player starts on the island nearest this point (units of the boundary radius). Default: the one farthest out. */
   start?: Vec;
+  /** Hand-placed islands (world units): when given, nothing is grown and the rest above is unused. */
+  islands?: (Vec & { r: number })[];
+  /** Where the flocks spawn, in order (world units); flocks past the end spawn as usual. */
+  flockSpots?: Vec[];
+  /** Where a goal level's portal hovers (world units). */
+  portal?: Vec;
 }
 
 /**
@@ -120,6 +128,9 @@ export function generatePlanet(seed: number, opt: PlanetOptions): Planet {
   // Spread the flocks over open sky, away from the start, following the placement map.
   const flocks: Planet["flocks"] = [];
   const swarm: SwarmSpots = { start: { x: start.cx, y: start.cy }, queen: queenHome, R };
+  for (const at of opt.layout.flockSpots ?? []) {
+    if (flocks.length < opt.flocks.length) flocks.push({ x: at.x, y: at.y, spec: opt.flocks[flocks.length]! });
+  }
   const tryCount = 8000;
   for (let tries = 0; flocks.length < opt.flocks.length && tries < tryCount; tries++) {
     const a = rand() * Math.PI * 2;
@@ -133,7 +144,8 @@ export function generatePlanet(seed: number, opt: PlanetOptions): Planet {
   }
   const queen = opt.queen && { ...queenHome, ...opt.queen };
 
-  return { seed, islands, bounds: { x: 0, y: 0, r: R }, startIsland, queenHome, queen, flocks, theme: generateTheme(rand, opt.theme) };
+  const portal = opt.layout.portal ?? queenHome;
+  return { seed, islands, bounds: { x: 0, y: 0, r: R }, startIsland, queenHome, queen, flocks, portal, theme: generateTheme(rand, opt.theme) };
 }
 
 /** The widest nominal rim gap that's still a comfortable jump (the gap islands are spaced by). */
@@ -159,6 +171,10 @@ function generateIslands(rand: () => number, seed: number, R: number, count: num
   const add = (x: number, y: number, r: number) => {
     out.push(new Island(x, y, r, seed + out.length * 7919, style));
   };
+  if (layout.islands) {
+    for (const i of layout.islands) add(i.x, i.y, i.r);
+    return out;
+  }
 
   const a0 = rand() * Math.PI * 2;
   for (const s of layout.seeds ?? [{ x: Math.cos(a0) * 0.35, y: Math.sin(a0) * 0.35 }]) {

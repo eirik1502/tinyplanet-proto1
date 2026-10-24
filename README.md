@@ -13,6 +13,7 @@ bun run dev        # dev server with hot reload
 bun run build      # production build to dist/
 bun run typecheck
 bun run sim        # headless: play without a browser (see below)
+bun run test       # tests (the tutorial can be finished)
 ```
 
 ### Architecture
@@ -105,6 +106,12 @@ While you play, short prompts under the player teach the controls one at a time 
 jump, sword, combo, spear), each until you've done it, plus a note the first time the safety net catches you or
 you fall into the haze. Learned lessons are remembered in the browser; the dev panel's Debug section shows them all
 again. Lessons live in `src/game/lessons.ts`.
+
+A new player starts with the tutorial, **Learning to fly** (level 0, also the `tutorial` scenario,
+`src/levels/tutorial.ts`): a hand-made arc of islands whose gaps grow from a tap to a held jump, one the safety
+net bridges and one only a double jump crosses, then two training dummies that don't fight back, and a portal
+that opens once they're beaten. Flying into the portal wins; after that, runs start at level 1. Every lesson
+shows in the tutorial, learned or not.
 
 Each level opens with a briefing: pick the input mode, and see the controls and enemies for that
 level. The first levels introduce things one at a time: level 1 has the sword and a small queen

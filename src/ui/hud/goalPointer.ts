@@ -1,11 +1,14 @@
 import type { HudWidget } from "./types";
 
-/** An arrow at the screen edge pointing toward the queen while she's off screen. */
-export const queenPointer: HudWidget = {
-  id: "queenPointer",
+/** An arrow at the screen edge pointing toward the goal while it's off screen: the open portal, else the queen. */
+export const goalPointer: HudWidget = {
+  id: "goalPointer",
   draw({ ctx, W, H, session, proj, camera }) {
-    const q = session.world.swarm.queen;
-    if (!q || q.hp <= 0 || session.state !== "play") return;
+    const w = session.world;
+    const portal = w.portal?.open ? w.portal : null;
+    const queen = w.swarm.queen && w.swarm.queen.hp > 0 ? w.swarm.queen : null;
+    const q = portal ?? queen;
+    if (!q || session.state !== "play") return;
     const pr = proj.project(q.x, q.y, q.alt);
     const m = 40;
     if (pr.visible && pr.x > m && pr.x < W - m && pr.y > m && pr.y < H - m) return;
@@ -23,13 +26,13 @@ export const queenPointer: HudWidget = {
     ctx.beginPath();
     ctx.arc(0, 0, 17 * pulse, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#ffd34d";
+    ctx.fillStyle = portal ? "#aaf0ff" : "#ffd34d";
     ctx.font = "bold 18px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("♛", 0, 1);
+    ctx.fillText(portal ? "◎" : "♛", 0, 1);
     ctx.rotate(a);
-    ctx.fillStyle = "#e48cff";
+    ctx.fillStyle = portal ? "#aaf0ff" : "#e48cff";
     ctx.beginPath();
     ctx.moveTo(27 * pulse, 0);
     ctx.lineTo(19 * pulse, -7);

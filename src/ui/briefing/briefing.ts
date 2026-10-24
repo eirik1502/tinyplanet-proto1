@@ -218,7 +218,7 @@ export function briefingHtml(b: BriefingInfo): string {
               ? `<ul class="modifiers">${b.modifiers.map((m) => `<li><b>${m.name}</b> ${m.blurb}</li>`).join("")}</ul>`
               : ""
           }
-          <p class="goal">${ICONS.crown}${b.enemies.some((e) => e.type.id === "queen") ? "Kill the queen" : "Kill every boid"}</p>
+          <p class="goal">${ICONS.crown}${b.goal}</p>
         </div>
         <div class="modes" role="group" aria-label="Input mode">
           ${modeButton("keyboard", `${ICONS.keyboard}Keyboard`)}

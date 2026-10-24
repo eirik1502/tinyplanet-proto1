@@ -16,7 +16,8 @@ import { mountBriefing } from "../ui/briefing/controller";
 import { debugSection } from "../ui/dev/debug";
 import { inspectSection } from "../ui/dev/inspect";
 import { createDevPanel } from "../ui/dev/panel";
-import { currentRun, runSection } from "../ui/dev/run";
+import { setPref } from "../core/prefs";
+import { currentRun, runSection, TUTORIAL_DONE } from "../ui/dev/run";
 import { tuningDevSection } from "../ui/dev/tuning";
 import { drawHud } from "../ui/hud";
 import { learnedLessons, rememberLesson } from "../ui/hud/lesson";
@@ -59,7 +60,10 @@ session.events.on("roundStart", ({ world }) => {
   sound.attach(world);
   rumble.attach(world);
   world.events.after("learned", (e) => rememberLesson(e.id), { owner: world.lifetime });
-  document.getElementById("goal")!.textContent = world.swarm.queen ? "Kill the queen ♛" : "Kill every boid";
+  document.getElementById("goal")!.textContent = world.portal ? "Beat every boid, then take the portal ◎" : world.swarm.queen ? "Kill the queen ♛" : "Kill every boid";
+  world.events.after("roundOver", (e) => {
+    if (e.outcome === "victory" && session.tutorial) setPref(TUTORIAL_DONE, "1");
+  }, { owner: world.lifetime });
   for (const fn of roundListeners) fn(world);
 });
 

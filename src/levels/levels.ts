@@ -20,6 +20,7 @@ import {
 } from "../enemies/flocks";
 import type { Params } from "../params/store";
 import type { Layout, PlanetOptions, QueenSpot, Spot, SwarmSpots, ThemeHint } from "../world/planet";
+import { TUTORIAL_LAYOUT } from "./tutorial";
 
 // Levels. Everything about a level is a LevelSpec: plain data (layout, size, queen, flocks,
 // modifiers, weapons) that a planet is generated from. The dev panel's custom levels edit one
@@ -43,6 +44,13 @@ export interface LevelSpec {
   weapons: WeaponId[];
   /** Upgrades the player has (attacks/perks.ts ids). */
   perks?: string[];
+  /**
+   * How the level is won. Default: kill the queen (or every boid, without her). "portal": take
+   * the portal, which opens once every boid is dead.
+   */
+  goal?: "portal";
+  /** "all": show every lesson, even ones learned before (the tutorial). */
+  lessons?: "all";
 }
 
 /** One template entry: a flock to always include, `count` times (default once). */
@@ -229,6 +237,7 @@ export const LAYOUTS = {
   continents: { name: "Continents", make: continents },
   longLeaps: { name: "Long leaps", make: longLeaps },
   wilds: { name: "Wilds", make: wilds },
+  tutorial: { name: "Tutorial (hand-made)", make: () => TUTORIAL_LAYOUT },
 } satisfies Record<string, { name: string; make: (rand: () => number) => Layout }>;
 export type LayoutId = keyof typeof LAYOUTS;
 

@@ -15,6 +15,7 @@ import { generatePlanet, type Planet } from "../world/planet";
 import type { Island } from "../world/island";
 import type { GameBus } from "./events";
 import { Lessons } from "./lessons";
+import { Portal, updatePortal } from "./portal";
 
 // A world: one planet being played. It owns the objects (the player, the boids, attacks in
 // flight), the systems that drive them and the event bus they report on. No DOM, no audio, no
@@ -50,6 +51,8 @@ export class World {
   readonly swarm: Swarm;
   readonly attacks: AttackController;
   readonly lessons: Lessons;
+  /** The way out, on levels won by taking it. */
+  readonly portal: Portal | null;
 
   /** Slow motion: the world's time scale now, how far into slow motion it is (0..1), and whether it's wanted. */
   readonly slow = { scale: 1, intensity: 0, active: false };
@@ -76,6 +79,7 @@ export class World {
     this.attacks = new AttackController(this, this.loadout);
     for (const perk of this.loadout.perks) perk.install?.(this);
     this.lessons = new Lessons(this, o.learned);
+    this.portal = o.spec.goal === "portal" ? this.objects.add(new Portal(this.planet.portal.x, this.planet.portal.y)) : null;
   }
 
   get player(): Player {
@@ -105,7 +109,8 @@ export class World {
     this.combat.update(dt);
     this.swarm.cull();
     this.lessons.update(dt);
-    if (this.playing && this.swarm.cleared) this.end("victory");
+    if (this.portal) updatePortal(this, this.portal, dt);
+    else if (this.playing && this.swarm.cleared) this.end("victory");
     this.objects.sweep();
   }
 

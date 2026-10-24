@@ -23,6 +23,8 @@ interface RunState {
 }
 
 const STORAGE_KEY = "planetproto.runtime";
+/** Set once the tutorial is won: a fresh normal run then starts at level 1 instead of the tutorial. */
+export const TUTORIAL_DONE = "planetproto.tutorialDone";
 const MAX_LEVEL = 30;
 const MODES: [Run["kind"], string][] = [
   ["normal", "Normal run"],
@@ -31,17 +33,19 @@ const MODES: [Run["kind"], string][] = [
 ];
 
 const save = () => setPref(STORAGE_KEY, JSON.stringify(state));
-const clampLevel = (n: number) => (Number.isFinite(n) ? Math.min(MAX_LEVEL, Math.max(1, Math.round(n))) : 1);
+/** Level 0 is the tutorial. */
+const clampLevel = (n: number) => (Number.isFinite(n) ? Math.min(MAX_LEVEL, Math.max(0, Math.round(n))) : 1);
+const levelName = (n: number) => (n === 0 ? "the tutorial" : `level ${n}`);
 
 function load(): RunState {
-  const fallback: RunState = { mode: "normal", level: 1, template: "", custom: { spec: emptyLevel(), from: "", fromLevel: 4 }, scenario: SCENARIOS[0]!.id };
+  const fallback: RunState = { mode: "normal", level: getPref(TUTORIAL_DONE) ? 1 : 0, template: "", custom: { spec: emptyLevel(), from: "", fromLevel: 4 }, scenario: SCENARIOS[0]!.id };
   try {
     const s = { ...fallback, ...(JSON.parse(getPref(STORAGE_KEY) ?? "{}") as Partial<RunState>) };
     if (!MODES.some(([m]) => m === s.mode)) s.mode = "normal";
     s.level = clampLevel(Number(s.level));
     if (!ALL_TEMPLATES.some((t) => t.name === s.template)) s.template = "";
     if (!s.custom || !isLevelSpec(s.custom.spec)) s.custom = fallback.custom;
-    s.custom.fromLevel = clampLevel(Number(s.custom.fromLevel));
+    s.custom.fromLevel = Math.max(1, clampLevel(Number(s.custom.fromLevel)));
     if (!scenario(s.scenario)) s.scenario = fallback.scenario;
     return s;
   } catch {
@@ -96,13 +100,13 @@ export const runSection: DevSection = {
     };
 
     const renderNormal = () => {
-      const go = button(`Start level ${state.level}`, () => {
+      const go = button(`Start ${levelName(state.level)}`, () => {
         save();
         ctx.start(currentRun());
       }, "primary");
-      const level = numberInput(state.level, 1, MAX_LEVEL, 1, (v) => {
+      const level = numberInput(state.level, 0, MAX_LEVEL, 1, (v) => {
         state.level = clampLevel(v ?? 1);
-        go.textContent = `Start level ${state.level}`;
+        go.textContent = `Start ${levelName(state.level)}`;
         save();
       });
       const step = (d: number) => {

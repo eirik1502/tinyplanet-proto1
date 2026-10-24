@@ -84,6 +84,12 @@ export interface GameEvents {
   anger: At & { source: number; dur: number };
   queenBlast: At & { source: number; radius: number };
 
+  // The portal (`source`: the portal, or the player going in)
+  /** The portal opened: nothing left to beat. */
+  portalOpen: At & { source: number };
+  /** The player flew into the portal (`target`). */
+  portalEnter: At & { source: number; target: number };
+
   // The round
   roundOver: { outcome: "victory" | "defeat" };
   /** The player learned a lesson (game/lessons.ts): did what it teaches, or saw an info lesson. */

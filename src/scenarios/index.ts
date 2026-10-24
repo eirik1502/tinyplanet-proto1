@@ -1,5 +1,6 @@
 import { resolveFlock, MELEE_PACK, SKIRMISHERS, BOMBER_RUN, ROYAL_GUARD } from "../enemies/flocks";
 import type { Scenario } from "../game/scenario";
+import { TUTORIAL, TUTORIAL_BLURB, TUTORIAL_NAME, TUTORIAL_SEED } from "../levels/tutorial";
 
 // Scenarios for testing: a fixed planet with fixed enemies. Add one by adding an entry here.
 
@@ -73,6 +74,9 @@ const perks: Scenario = {
   },
 };
 
-export const SCENARIOS: Scenario[] = [movement, meleeDrill, mixed, perks];
+/** The tutorial on its own (it's also level 0 of a normal run). */
+const tutorial: Scenario = { id: "tutorial", name: TUTORIAL_NAME, blurb: TUTORIAL_BLURB, seed: TUTORIAL_SEED, spec: TUTORIAL };
+
+export const SCENARIOS: Scenario[] = [movement, meleeDrill, mixed, perks, tutorial];
 
 export const scenario = (id: string) => SCENARIOS.find((s) => s.id === id) ?? null;
