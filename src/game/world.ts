@@ -103,7 +103,7 @@ export class World {
 
     const frozen = this.player.freeze > 0;
     this.playerCtl.update(dt, dtReal, input);
-    if (playing && !frozen) this.attacks.update(dt, dtReal, input);
+    if (playing) this.attacks.update(dt, dtReal, input, frozen);
     this.playerCtl.afterAttacks(dt);
     this.swarm.update(dt, dtReal);
     this.combat.update(dt);

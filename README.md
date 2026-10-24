@@ -156,6 +156,7 @@ The sword strikes in a 1-2-3 combo: a hit opens a short window in which the next
 one along, else it starts over. 1 is the swipe; 2 a long, thin thrust that lunges at the closest
 enemy in its reach and strikes once near it (off a rim, too); 3 a small, strong smash whose blast
 hurts and throws back everything around it, more the closer it is. The aim indicator shows which
-strike is coming.
+strike is coming. Strikes can follow each other every 0.16 s (real time, so hit stop and
+slow motion don't stretch it), and a press that comes too early (up to 0.3 s) goes off as soon as it can.
 
 Game parameters can be tweaked live from the Tuning section of the dev panel (defaults in `src/params/defaults.ts`).

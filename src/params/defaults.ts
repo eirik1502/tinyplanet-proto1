@@ -115,7 +115,7 @@ export const DEFAULTS = {
       maxDamage: 5, // Damage at full power
       activeTime: 0.18, // Active time (s)
       fadeTime: 0.12,
-      cooldown: 0.28, // Cooldown (s)
+      cooldown: 0.16, // Cooldown (s)
       comboWindow: 1.2, // Combo window after a hit (s)
     },
     thrust: {

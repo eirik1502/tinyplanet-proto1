@@ -13,6 +13,9 @@ import type { AttackContext, AttackDef, Loadout, StatGroup, Stats, Weapon, Weapo
 // full power. With a pointer the aim simply follows it. Combos, cooldowns and lunges are handled
 // here for any weapon; what an attack does is its own.
 
+/** How long a press made too early waits to go off (real s). */
+const QUEUE_TIME = 0.3;
+
 export interface AimState {
   weapon: Weapon;
   attack: AttackDef;
@@ -43,6 +46,8 @@ export class AttackController {
   lunge: LungeState | null = null;
   readonly weapons: Weapon[];
   private cooldowns = new Map<WeaponId, number>();
+  /** A press that came too early (cooldown, hit stop, another attack): it goes off once it can. */
+  private queued: { id: WeaponId; left: number } | null = null;
   /** Per combo weapon: the next attack (1-based) while `left` > 0, else the first. */
   private combos = new Map<WeaponId, { step: number; left: number }>();
 
@@ -91,10 +96,18 @@ export class AttackController {
     return { attack: weapon.attacks[step - 1] ?? weapon.attacks[0]!, step };
   }
 
-  update(dt: number, dtReal: number, input: InputFrame) {
+  /**
+   * `frozen`: the hit stop holds the player; presses are only remembered. Cooldowns run on real
+   * time, so neither the hit stop nor slow motion stretches the gap between strikes.
+   */
+  update(dt: number, dtReal: number, input: InputFrame, frozen = false) {
     const w = this.w;
     const p = w.player;
-    for (const [id, cd] of this.cooldowns) this.cooldowns.set(id, cd - dt);
+    for (const [id, cd] of this.cooldowns) this.cooldowns.set(id, cd - dtReal);
+    if (this.queued && (this.queued.left -= dtReal) <= 0) this.queued = null;
+    const press = this.weapons.find((x) => input.pressed.has(x.id));
+    if (press) this.queued = { id: press.id, left: QUEUE_TIME };
+    if (frozen) return;
     for (const c of this.combos.values()) {
       c.left -= dt;
       if (c.left <= 0) c.step = 1;
@@ -102,6 +115,7 @@ export class AttackController {
     if (p.mode === "lost") {
       this.aim = null;
       this.lunge = null;
+      this.queued = null;
       return;
     }
     if (this.lunge) {
@@ -113,8 +127,9 @@ export class AttackController {
     const toPointer = input.aim;
 
     if (!this.aim) {
-      const weapon = this.weapons.find((x) => input.pressed.has(x.id) && this.ready(x.id));
+      const weapon = this.weapons.find((x) => x.id === this.queued?.id && this.ready(x.id));
       if (!weapon) return;
+      this.queued = null;
       // Aim assist, except when the move input steers the aim and is pushed.
       const steering = (dir.x || dir.y) && input.aimMode === "move";
       const target = pointer || steering ? null : this.closestEnemy();
