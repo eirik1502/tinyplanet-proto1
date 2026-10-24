@@ -1,5 +1,5 @@
 import type { Projected } from "./projection";
-import { launch, maxLean, predict, predictFlight, type FlightPrediction } from "../player/flight";
+import { launch, predict, predictFlight, type FlightPrediction } from "../player/flight";
 import { ISLAND_TOP } from "../world/island";
 import type { Painter } from "./painter";
 import type { Overlay } from "./scene";
@@ -140,43 +140,13 @@ export const jumpPreview: Overlay = (p, s) => {
 
 /**
  * On a rim, the jump a press would make now (at full height, from the spot a short climb away it
- * would go from), fainter until the input steers it. While steering, a fan shows how far a jump
- * can lean from straight out there; its edge lights up when the input points past it even so.
+ * would go from), fainter until the input steers it.
  */
 export const rimJumpPreview: Overlay = (p, s) => {
-  const { ctx, proj } = p;
   const w = s.world;
   const plan = w.playerCtl.jumpPlan;
   const pl = w.player;
   if (s.session.state !== "play" || pl.mode !== "hang" || !plan || w.attacks.aim) return;
-
-  if (plan.steered) {
-    const e = w.islands[pl.island]!.pointAt(plan.s);
-    const alt = ISLAND_TOP + 1;
-    const r = 46;
-    const at = (a: number, d: number) => proj.project(e.x + Math.cos(a) * d, e.y + Math.sin(a) * d, alt);
-    const c = at(0, 0);
-    const lean = maxLean(w);
-    ctx.beginPath();
-    ctx.moveTo(c.x, c.y);
-    for (let i = 0; i <= 16; i++) {
-      const q = at(plan.out - lean + (2 * lean * i) / 16, r);
-      ctx.lineTo(q.x, q.y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = "rgba(200,240,255,0.08)";
-    ctx.fill();
-    if (plan.clamped) {
-      const q = at(plan.angle, r + 10);
-      ctx.strokeStyle = "rgba(255,210,140,0.85)";
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(c.x, c.y);
-      ctx.lineTo(q.x, q.y);
-      ctx.stroke();
-    }
-  }
 
   const f = launch(w, pl.island, plan.s, plan.angle, pl.slide, pl.climb);
   drawFlight(p, predict(w, f, pl.island, false), plan.steered ? 0.6 : 0.3, 2);

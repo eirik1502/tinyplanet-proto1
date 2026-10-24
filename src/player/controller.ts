@@ -392,7 +392,7 @@ export class PlayerController {
   /**
    * Jump direction from a rim: toward the input, or without input the way the player is sliding,
    * within the most a jump leans from straight out (`jump.maxLean`). Straight out when neither. In mouse mode `dir` points at the cursor.
-   * On levels with the jump assist, a jump that would just miss is nudged onto an island.
+   * With the jump assist, a jump that would just miss is nudged onto an island.
    */
   private planJump(dir: Vec): JumpPlan {
     const p = this.player;
@@ -445,12 +445,12 @@ export class PlayerController {
 
   /**
    * The jump assist: if a full jump at `angle` would land nowhere (or back on its own island),
-   * the nearest angle within the level's assist that lands on another island, else `angle`.
+   * the nearest angle within the assist that lands on another island, else `angle`.
    */
   private assist(angle: number, out: number, s: number): number {
     const w = this.w;
     const p = this.player;
-    const help = w.spec.assist ?? 0;
+    const help = w.spec.assist ?? 1;
     const max = (help * w.params.move.assist.angle * Math.PI) / 180;
     if (max < ASSIST_STEP) return angle;
     const key = `${p.island}|${Math.round(s)}|${angle.toFixed(2)}|${Math.round(p.slide / 25)}|${Math.round(p.climb / 25)}`;

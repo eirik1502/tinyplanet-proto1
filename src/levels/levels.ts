@@ -51,7 +51,7 @@ export interface LevelSpec {
   goal?: "portal";
   /** "all": show every lesson, even ones learned before (the tutorial). */
   lessons?: "all";
-  /** Help for new players, 0..1: how strongly a jump that would just miss is nudged onto an island. */
+  /** How strongly a jump that would just miss is nudged onto an island, 0..1 (default 1). */
   assist?: number;
   /** Falling into the haze doesn't hurt. */
   noFallDamage?: boolean;
@@ -633,11 +633,8 @@ export function resolveLevel(
 export const WEAPON_UNLOCKS: Record<WeaponId, number> = { sword: 1, spear: 3 };
 export const weaponsAt = (level: number): WeaponId[] => (["sword", "spear"] as const).filter((w) => level >= WEAPON_UNLOCKS[w]);
 
-/** Help on the first levels of a normal run: the jump assist fades out by level 4; level 1 falls don't hurt. */
-export const earlyHelp = (level: number): Pick<LevelSpec, "assist" | "noFallDamage"> => ({
-  assist: Math.max(0, Math.min(1, (4 - level) / 3)),
-  noFallDamage: level <= 1,
-});
+/** Help on the first levels of a normal run: level 1 falls don't hurt. */
+export const earlyHelp = (level: number): Pick<LevelSpec, "noFallDamage"> => ({ noFallDamage: level <= 1 });
 
 /** The level each weapon and enemy type first appears on in a normal run (the briefing tags them new). */
 export const UNLOCKS: Record<string, number> = { ...WEAPON_UNLOCKS, melee: 1, ranged: 2, bomber: 3 };
