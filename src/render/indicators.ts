@@ -1,6 +1,8 @@
 import type { Projected } from "./projection";
-import { predictFlight } from "../player/flight";
+import { launch, predict, predictFlight, type FlightPrediction } from "../player/flight";
+import { MAX_JUMP_LEAN } from "../player/controller";
 import { ISLAND_TOP } from "../world/island";
+import type { Painter } from "./painter";
 import type { Overlay } from "./scene";
 
 // Indicators that help aim: the reach of the attack being charged, and the rest of a flight.
@@ -102,23 +104,16 @@ export const aimIndicator: Overlay = (p, s) => {
   }
 };
 
-/**
- * In the air, a dashed line traces the rest of the flight. It turns green if it ends on an island,
- * and stays pale if it ends in the haze.
- */
-export const jumpPreview: Overlay = (p, s) => {
+/** A predicted flight as a dashed line: green with a landing ring if it ends on an island, pale if in the haze. */
+function drawFlight(p: Painter, { points, landing }: FlightPrediction, alpha: number, width: number) {
   const { ctx, proj } = p;
-  const w = s.world;
-  if (s.session.state !== "play" || w.player.mode !== "air") return;
-  const { points, landing } = predictFlight(w, w.player);
   const pts = points.map((q) => proj.project(q.x, q.y, q.alt));
   const hit = !!landing;
-  const a = 0.8;
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = width;
   ctx.lineCap = "round";
   ctx.setLineDash([7, 7]);
   ctx.lineDashOffset = -performance.now() / 40;
-  ctx.strokeStyle = hit ? `rgba(140,255,170,${a})` : `rgba(255,235,210,${a * 0.8})`;
+  ctx.strokeStyle = hit ? `rgba(140,255,170,${alpha})` : `rgba(255,235,210,${alpha * 0.8})`;
   ctx.beginPath();
   pts.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
   ctx.stroke();
@@ -135,4 +130,54 @@ export const jumpPreview: Overlay = (p, s) => {
     ctx.arc(end.x, end.y, 10 + Math.sin(performance.now() / 120) * 2, 0, Math.PI * 2);
     ctx.stroke();
   }
+}
+
+/** In the air, a dashed line traces the rest of the flight. */
+export const jumpPreview: Overlay = (p, s) => {
+  const w = s.world;
+  if (s.session.state !== "play" || w.player.mode !== "air") return;
+  drawFlight(p, predictFlight(w, w.player), 0.8, 2.5);
+};
+
+/**
+ * On a rim, the jump a press would make now (at full height), fainter until the input steers it.
+ * While steering, a fan shows how far a jump can lean from straight out; its edge lights up when
+ * the input points past it.
+ */
+export const rimJumpPreview: Overlay = (p, s) => {
+  const { ctx, proj } = p;
+  const w = s.world;
+  const plan = w.playerCtl.jumpPlan;
+  const pl = w.player;
+  if (s.session.state !== "play" || pl.mode !== "hang" || !plan || w.attacks.aim) return;
+
+  if (plan.steered) {
+    const e = w.islands[pl.island]!.pointAt(pl.s);
+    const alt = ISLAND_TOP + 1;
+    const r = 46;
+    const at = (a: number, d: number) => proj.project(e.x + Math.cos(a) * d, e.y + Math.sin(a) * d, alt);
+    const c = at(0, 0);
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    for (let i = 0; i <= 16; i++) {
+      const q = at(plan.out - MAX_JUMP_LEAN + (2 * MAX_JUMP_LEAN * i) / 16, r);
+      ctx.lineTo(q.x, q.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = "rgba(200,240,255,0.08)";
+    ctx.fill();
+    if (plan.clamped) {
+      const q = at(plan.angle, r + 10);
+      ctx.strokeStyle = "rgba(255,210,140,0.85)";
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(c.x, c.y);
+      ctx.lineTo(q.x, q.y);
+      ctx.stroke();
+    }
+  }
+
+  const f = launch(w, pl.island, pl.s, plan.angle, pl.slide);
+  drawFlight(p, predict(w, f, pl.island, false), plan.steered ? 0.6 : 0.3, 2);
 };

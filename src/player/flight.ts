@@ -97,16 +97,19 @@ export function stepFlight(w: World, f: Flight, dt: number, fromIsland: number):
 /** The player's flight as it stands. */
 export const flightOf = (p: Player): Flight => ({ x: p.x, y: p.y, alt: p.alt, vx: p.vx, vy: p.vy, vz: p.vz, t: p.airTime });
 
-/**
- * The rest of the player's flight if nothing steers it: points along it (every other step), and
- * where it lands, if on a rim (at the flight's altitude: it may cross well above the rim).
- */
-export function predictFlight(w: World, p: Player): { points: { x: number; y: number; alt: number }[]; landing: { x: number; y: number; alt: number } | null } {
-  const f = flightOf(p);
-  let netUsed = p.netUsed;
+/** Where a flight goes: points along it (every other step), and where it lands, if on a rim. */
+export interface FlightPrediction {
+  points: { x: number; y: number; alt: number }[];
+  /** At the flight's altitude: it may cross well above the rim. */
+  landing: { x: number; y: number; alt: number } | null;
+}
+
+/** The rest of a flight if nothing steers it, from `fromIsland` with the safety bounce `netUsed` or not. */
+export function predict(w: World, flight: Flight, fromIsland: number, netUsed: boolean): FlightPrediction {
+  const f = { ...flight };
   const points = [{ x: f.x, y: f.y, alt: f.alt }];
   for (let i = 0; i < 300 && f.alt > LOST_ALT; i++) {
-    const h = stepFlight(w, f, 1 / 60, p.launchIsland);
+    const h = stepFlight(w, f, 1 / 60, fromIsland);
     if (h) {
       const e = w.islands[h.island]!.pointAt(h.s);
       const landing = { x: e.x, y: e.y, alt: Math.max(ISLAND_TOP, f.alt) };
@@ -118,3 +121,6 @@ export function predictFlight(w: World, p: Player): { points: { x: number; y: nu
   }
   return { points, landing: null };
 }
+
+/** The rest of the player's flight if nothing steers it. */
+export const predictFlight = (w: World, p: Player) => predict(w, flightOf(p), p.launchIsland, p.netUsed);

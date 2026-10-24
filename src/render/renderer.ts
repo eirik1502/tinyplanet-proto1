@@ -2,7 +2,7 @@ import { ISLAND_TOP } from "../world/island";
 import { boidsLayer, playerLayer, projectilesLayer } from "./actors";
 import { DEBUG_LAYERS } from "./debug";
 import { effectsLayer } from "./effects";
-import { aimIndicator, jumpPreview } from "./indicators";
+import { aimIndicator, jumpPreview, rimJumpPreview } from "./indicators";
 import { boundsLayer, islandsLayer } from "./islands";
 import { fog, slowMo, wind } from "./overlays";
 import type { Painter } from "./painter";
@@ -16,7 +16,7 @@ import { drawSpace, hazeLayer, motesLayer, veil } from "./sky";
 /** World layers, in no particular order (the drawables are sorted). */
 const WORLD: WorldLayer[] = [hazeLayer, motesLayer, islandsLayer, boundsLayer, playerLayer, boidsLayer, projectilesLayer, effectsLayer];
 /** Overlays, in drawing order. */
-const OVERLAYS: Overlay[] = [veil, wind, fog, slowMo, jumpPreview, aimIndicator];
+const OVERLAYS: Overlay[] = [veil, wind, fog, slowMo, rimJumpPreview, jumpPreview, aimIndicator];
 
 export function render(p: Painter, s: Scene) {
   const { ctx, proj, W, H, dpr } = p;

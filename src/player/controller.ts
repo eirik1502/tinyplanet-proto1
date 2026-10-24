@@ -14,11 +14,25 @@ import { HANG_ALT, LOST_ALT, Player } from "./player";
 // their own hits landing, and the slow motion while aiming in the air.
 
 /** Most a jump can lean away from straight out of the rim, so it clears the island it leaves. */
-const MAX_JUMP_LEAN = 1.13;
+export const MAX_JUMP_LEAN = 1.13;
+
+/** The jump the player would make from the rim right now. */
+export interface JumpPlan {
+  /** The jump's direction (world angle). */
+  angle: number;
+  /** Straight out of the rim. */
+  out: number;
+  /** The input pointed further from straight out than a jump can lean. */
+  clamped: boolean;
+  /** The direction came from the input (or a slide), not just straight out. */
+  steered: boolean;
+}
 
 export class PlayerController {
   readonly player: Player;
   readonly health: Health;
+  /** While hanging and playing: where a jump would go now, for the jump preview. */
+  jumpPlan: JumpPlan | null = null;
 
   constructor(private w: World) {
     const p = (this.player = w.objects.add(new Player()));
@@ -210,6 +224,7 @@ export class PlayerController {
     const dir = playing ? input.move : { x: 0, y: 0 };
     const aim = playing ? input.aim : null;
     const jumpPressed = playing && input.pressed.has("jump");
+    this.jumpPlan = null;
 
     if (p.freeze > 0) {
       // Hit-stop: no moving, attacking or animating. After a sword hit in the air, the flight then
@@ -238,10 +253,12 @@ export class PlayerController {
       p.y = e.y + e.ny * 7;
       p.alt = HANG_ALT;
       p.facing = Math.atan2(-e.ny, -e.nx);
+      const plan = this.planJump(aim ?? dir);
+      if (playing) this.jumpPlan = plan;
 
       // The jump button jumps at once; holding it keeps the jump going full height (see the air section).
       if (jumpPressed) {
-        const f = launch(w, p.island, p.s, this.jumpAngle(aim ?? dir), p.slide);
+        const f = launch(w, p.island, p.s, plan.angle, p.slide);
         Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vx: f.vx, vy: f.vy, vz: f.vz });
         p.mode = "air";
         p.airTime = 0;
@@ -335,17 +352,18 @@ export class PlayerController {
    * Jump direction from a rim: toward the input, or without input the way the player is sliding,
    * within MAX_JUMP_LEAN of straight out. Straight out when neither. In mouse mode `dir` points at the cursor.
    */
-  private jumpAngle(dir: Vec): number {
+  private planJump(dir: Vec): JumpPlan {
     const p = this.player;
     const e = this.rim();
     const out = Math.atan2(e.ny, e.nx);
     if (!dir.x && !dir.y) {
-      if (!p.slide) return out;
+      if (!p.slide) return { angle: out, out, clamped: false, steered: false };
       const side = Math.sign(p.slide);
       dir = { x: e.tx * side, y: e.ty * side };
     }
     const diff = wrapAngle(Math.atan2(dir.y, dir.x) - out);
-    return out + Math.max(-MAX_JUMP_LEAN, Math.min(MAX_JUMP_LEAN, diff));
+    const lean = Math.max(-MAX_JUMP_LEAN, Math.min(MAX_JUMP_LEAN, diff));
+    return { angle: out + lean, out, clamped: lean !== diff, steered: true };
   }
 
   /**

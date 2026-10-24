@@ -119,6 +119,10 @@ briefing shows the letters printed on the pad in use. Using a pad switches to ga
 browser doesn't map itself need a profile in `src/input/gamepad.ts` (PowerA pads have one). Where the
 browser supports it (Chromium), the pad rumbles on hits, blasts, hard landings and full charges.
 
+On a rim, a dashed line shows where a jump would go now (at full height): faint until you steer, green with a
+landing ring when it reaches an island. While steering, a fan shows how far a jump can lean from straight out.
+In the air the line traces the rest of the flight.
+
 Every flight has one double jump; it heads where you aim (the cursor, or the direction held; else along the flight). If that misses every island, it snaps to the edge of an island in a 30° cone around the aim. Air speed and height are capped. Hitting an enemy while airborne refills it (max one) and regains
 focus; a sword hit also bounces you up. Slow motion while winding up an air attack drains focus; grabbing a rim refills
 it. The first dip below the rim in a flight springs you back up once.
