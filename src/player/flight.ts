@@ -68,7 +68,8 @@ export function netBounce(w: World, f: { alt: number; vz: number }, used: boolea
 
 /**
  * Advance a flight by dt, within the air limits. Returns the island and rim parameter if it hit one: either by crossing a
- * rim (from above or level with it, so you can't jump over an island) or by touching the body below.
+ * rim (from above or level with it, so you can't jump over an island) or by touching the body below. High up and fast
+ * (`air.overHeight` above the rims at `air.overSpeed`, as after a hard knockback), a flight passes over islands.
  */
 export function stepFlight(w: World, f: Flight, dt: number, fromIsland: number): { island: number; s: number } | null {
   const ox = f.x;
@@ -88,6 +89,8 @@ export function stepFlight(w: World, f: Flight, dt: number, fromIsland: number):
   f.y += f.vy * dt;
   f.alt += f.vz * dt;
   f.t += dt;
+  const air = w.params.move.air;
+  if (f.alt > ISLAND_TOP + air.overHeight && Math.hypot(f.vx, f.vy) >= air.overSpeed) return null;
   for (let i = 0; i < w.islands.length; i++) {
     if (i === fromIsland && f.t < w.params.move.jump.regrab) continue;
     const isl = w.islands[i]!;
@@ -98,7 +101,7 @@ export function stepFlight(w: World, f: Flight, dt: number, fromIsland: number):
       if (s !== null) return { island: i, s };
     }
     // Falling, the hands reach a little further for a rim.
-    const reach = f.vz < 0 ? w.params.move.air.fallGrab : w.params.move.air.grabRadius;
+    const reach = f.vz < 0 ? air.fallGrab : air.grabRadius;
     if (isl.intersects(f.x, f.y, f.alt, reach)) return { island: i, s: isl.closest(f.x, f.y).s };
   }
   return null;

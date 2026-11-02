@@ -154,6 +154,11 @@ lands, or just after (0.15 s), and you backflip: a short hold (0.12 s, no attack
 the speed it had (`move.turn` in the tuning panel). Slow motion while winding up an air attack drains focus; grabbing a rim refills
 it. The first dip below the rim in a flight springs you back up once.
 
+Getting hit stuns you (stars circle your head): no climbing, jumping or attacking for 0.2 s, plus 0.1 s per 100 of
+knockback speed (up to 1.5 s), so a hard throw like the queen's blast keeps you helpless for the flight it starts.
+Steering in the air still works. High up and fast (80 above the rims at 550 or more), a flight passes over islands
+instead of grabbing them (`player.stun` and `move.air` in the tuning panel).
+
 The sword strikes in a 1-2-3 combo: a hit opens a short window in which the next strike is the next
 one along, else it starts over. 1 is the swipe; 2 a long, thin thrust that lunges at the closest
 enemy in its reach and strikes once near it (off a rim, too); 3 a small, strong smash whose blast

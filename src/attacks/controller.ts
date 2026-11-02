@@ -112,7 +112,8 @@ export class AttackController {
       c.left -= dt;
       if (c.left <= 0) c.step = 1;
     }
-    if (p.mode === "lost") {
+    if (p.mode === "lost" || p.stun > 0) {
+      // Lost or stunned: no attacks, and presses meanwhile don't count.
       this.aim = null;
       this.lunge = null;
       this.queued = null;

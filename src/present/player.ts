@@ -87,6 +87,7 @@ export class PlayerPresenter {
           : null,
       spearReady: at.ready("spear"),
       frozen: p.freeze > 0,
+      stunned: p.stun > 0,
     };
   }
 }

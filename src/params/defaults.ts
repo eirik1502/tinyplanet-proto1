@@ -46,6 +46,8 @@ export const DEFAULTS = {
       accel: 0, // Speed up / brake (per s)
       grabRadius: 30, // Grab radius
       fallGrab: 45, // Grab radius when falling
+      overHeight: 80, // Flies over islands this high above the rims…
+      overSpeed: 550, // …at this speed or more (sideways)
     },
     assist: {
       angle: 14, // Most a jump is nudged toward an island (degrees, at full help)
@@ -112,6 +114,11 @@ export const DEFAULTS = {
     },
     hurtbox: {
       radius: 10, // Radius
+    },
+    stun: {
+      min: 0.2, // Stun after a hit (s)
+      perSpeed: 0.001, // Stun per knockback speed (s)
+      max: 1.5, // Longest stun (s)
     },
     sword: {
       range: 52, // Reach

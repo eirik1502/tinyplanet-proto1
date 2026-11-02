@@ -51,6 +51,8 @@ export class Player extends GameObject {
   facing = 0;
   /** Invulnerable for this long after a hit (s). */
   invuln = 0;
+  /** Stunned for this long after a hit or shove (s): no climbing, jumping or attacking; air steering still works. */
+  stun = 0;
   /**
    * A jump decided on the press, waiting while the player climbs (briefly) to the rim spot `s`
    * it goes from, at `angle`, with the climb speed `climb` they had on the press.

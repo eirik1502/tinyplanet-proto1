@@ -11,13 +11,16 @@ import { warpPlayer } from "../game/portal";
 
 // The player's movement: hanging on and climbing rims, sliding, jumping (held for full height),
 // steering in the air, the double jump with its snap to an island ahead, the safety bounce,
-// falling into the haze and respawning. Also how the player takes hits and shoves, reacts to
+// falling into the haze and respawning. Also how the player takes hits and shoves (and is
+// stunned by them), reacts to
 // their own hits landing (and turns on them), and the slow motion while aiming in the air.
 
 /** Spacing of the rim spots tried for a jump (world units). */
 const SPOT_STEP = 4;
 /** Steps of the jump assist's search (rad). */
 const ASSIST_STEP = 0.035;
+/** How hard a hit in the air knocks the flight sideways. */
+const HIT_KNOCKBACK = 160;
 
 /** The jump the player would make from the rim right now. */
 export interface JumpPlan {
@@ -77,6 +80,7 @@ export class PlayerController {
     p.slide = 0;
     this.health.hp = this.w.params.player.health.max;
     p.invuln = 0;
+    p.stun = 0;
   }
 
   private rim(): EdgePoint {
@@ -95,14 +99,30 @@ export class PlayerController {
     p.freeze = Math.max(p.freeze, w.combat.hitStop(h.damage));
     p.invuln = w.params.player.health.invulnTime;
     w.events.emit("hurt", { target: p.id, x: p.x, y: p.y, alt: p.alt, damage: h.damage, fromX: h.fromX, fromY: h.fromY });
-    if (p.mode === "air") {
+    const knock = p.mode === "air" ? HIT_KNOCKBACK : 0;
+    if (knock) {
       // Knock the flight sideways.
       const l = Math.hypot(p.x - h.fromX, p.y - h.fromY) || 1;
-      p.vx += ((p.x - h.fromX) / l) * 160;
-      p.vy += ((p.y - h.fromY) / l) * 160;
+      p.vx += ((p.x - h.fromX) / l) * knock;
+      p.vy += ((p.y - h.fromY) / l) * knock;
     }
+    this.stun(knock);
     if (this.health.hp <= 0) w.end("defeat");
     return true;
+  }
+
+  /**
+   * Stun the player for `stun.min`, plus `stun.perSpeed` for each unit of knockback `speed` taken
+   * (up to `stun.max`): a hard throw keeps them helpless for the whole flight it starts. It
+   * interrupts a turn.
+   */
+  private stun(speed: number) {
+    const p = this.player;
+    const st = this.w.params.player.stun;
+    p.stun = Math.max(p.stun, Math.min(st.max, st.min + speed * st.perSpeed));
+    p.turn = null;
+    p.turnWindow = 0;
+    p.jumpQueue = null;
   }
 
   /**
@@ -114,6 +134,7 @@ export class PlayerController {
     const p = this.player;
     if (!this.w.playing || p.mode === "lost") return;
     this.w.events.emit("pushed", { target: p.id, hard });
+    this.stun(Math.hypot(vx, vy));
     if (p.mode === "air") {
       const l = Math.hypot(vx, vy);
       const against = l > 0 ? (p.vx * vx + p.vy * vy) / l : 0;
@@ -248,15 +269,18 @@ export class PlayerController {
     const prm = w.params;
     const p = this.player;
     const playing = w.playing;
+    // Stunned, the player can't climb, jump or attack; steering in the air still works.
+    const stunned = p.stun > 0;
     const dir = playing ? input.move : { x: 0, y: 0 };
     const aim = playing ? input.aim : null;
-    const jumpPressed = playing && input.pressed.has("jump");
+    const jumpPressed = playing && !stunned && input.pressed.has("jump");
     this.jumpPlan = null;
     if (p.warp && w.portal) {
       warpPlayer(w, w.portal, dt);
       return;
     }
 
+    if (p.freeze <= 0 && stunned) p.stun = Math.max(0, p.stun - dt);
     if (p.freeze <= 0 && p.turnWindow > 0) {
       // Just after a sword hit in the air: a clearly tilted stick turns the flight.
       p.turnWindow = Math.max(0, p.turnWindow - dtReal);
@@ -289,7 +313,7 @@ export class PlayerController {
       } else {
         // Climb toward the rim point that faces the input direction. Aiming an attack takes over
         // the input; an ongoing slide carries on.
-        p.climb = w.attacks.aim ? 0 : climbInput(e, dir) * prm.move.climb.speed;
+        p.climb = w.attacks.aim || stunned ? 0 : climbInput(e, dir) * prm.move.climb.speed;
         p.s += (p.climb + p.slide) * dt;
       }
       p.slide *= Math.exp(-prm.move.slide.friction * dt);
@@ -308,7 +332,7 @@ export class PlayerController {
         else if (p.s === queued.s) this.jump(queued);
       } else {
         const plan = this.planJump(aim ?? dir);
-        if (playing) this.jumpPlan = plan;
+        if (playing && !stunned) this.jumpPlan = plan;
         if (jumpPressed) {
           const climb = p.climb;
           if (plan.s === p.s) this.jump({ ...plan, climb });
@@ -398,7 +422,7 @@ export class PlayerController {
     const p = this.player;
     const tn = this.w.params.move.turn;
     const l = Math.hypot(dir.x, dir.y);
-    if (p.mode !== "air" || !this.w.playing || l < tn.minTilt) return;
+    if (p.mode !== "air" || !this.w.playing || p.stun > 0 || l < tn.minTilt) return;
     const angle = Math.atan2(dir.y, dir.x);
     const speed = Math.hypot(p.vx, p.vy);
     if (speed > 1 && Math.abs(wrapAngle(angle - Math.atan2(p.vy, p.vx))) < (tn.minAngle * Math.PI) / 180) return;

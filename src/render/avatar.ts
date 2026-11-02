@@ -2,7 +2,8 @@ import type { Projected } from "./projection";
 
 // The player character's look and animation: a hooded climber with a cloth cloak, posed for
 // hanging, climbing, sliding, rising, falling, aiming and striking, with squash and stretch,
-// a somersault on double jumps, a backflip on turns and afterimages at speed.
+// a somersault on double jumps, a backflip on turns, stars circling the head while stunned and
+// afterimages at speed.
 //
 // Drawing happens in a local frame centred on the player, +x pointing the way the body faces
 // (toward the rim while hanging), in world units scaled to screen pixels. The cloak and the
@@ -25,6 +26,8 @@ export interface AvatarView {
   spearReady: boolean;
   /** Hit-stop: the pose holds. */
   frozen: boolean;
+  /** Stunned after a hit: no control. */
+  stunned: boolean;
 }
 
 type Project = (x: number, y: number, alt: number) => Projected;
@@ -344,6 +347,28 @@ export class Avatar {
       ctx.fillStyle = `rgba(255,70,70,${(this.hurtT / 0.35) * 0.55})`;
       ctx.beginPath();
       ctx.ellipse(0, 0, 7.5 * k, 8 * k, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+    if (v.stunned) this.drawStunStars(ctx, pr.x, pr.y, k);
+  }
+
+  /** Stunned: little stars circling over the head (screen space). */
+  private drawStunStars(ctx: CanvasRenderingContext2D, x: number, y: number, k: number) {
+    ctx.save();
+    ctx.fillStyle = GOLD;
+    for (let i = 0; i < 3; i++) {
+      const a = this.t * 6 + (i * Math.PI * 2) / 3;
+      const sx = x + Math.cos(a) * 9 * k;
+      const sy = y - 10 * k + Math.sin(a) * 3.5 * k;
+      const r = (1.6 + 0.5 * Math.sin(a)) * k;
+      ctx.beginPath();
+      for (let j = 0; j < 8; j++) {
+        const rr = j % 2 ? r * 0.45 : r;
+        const b = (j * Math.PI) / 4 + this.t * 3;
+        ctx.lineTo(sx + Math.cos(b) * rr, sy + Math.sin(b) * rr);
+      }
+      ctx.closePath();
       ctx.fill();
     }
     ctx.restore();

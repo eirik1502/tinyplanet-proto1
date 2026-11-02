@@ -279,6 +279,7 @@ function paintPlayer(ctx: CanvasRenderingContext2D, size: number, weapons: Weapo
     aim: null,
     spearReady: weapons.includes("spear"),
     frozen: false,
+    stunned: false,
   };
   // Let the cloak settle behind the player.
   for (let i = 0; i < 90; i++) avatar.update(1 / 60, view);
