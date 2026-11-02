@@ -50,7 +50,7 @@ export const DEFAULTS = {
       overSpeed: 550, // …at this speed or more (sideways)
     },
     assist: {
-      angle: 14, // Most a jump is nudged toward an island (degrees, at full help)
+      angle: 14, // Most a jump is nudged toward an island (degrees)
       climbToJump: 0.2, // Longest climb to a better spot before a jump (s)
     },
     limits: {
@@ -70,7 +70,7 @@ export const DEFAULTS = {
       window: 0.15, // A tilt this soon after a hit's freeze turns the flight (s)
       minTilt: 0.6, // Least stick tilt that turns
       minAngle: 45, // Least turn from the flight that counts (degrees)
-      delay: 0.12, // Turn delay, while the backflip starts (s)
+      delay: 0.19, // Turn delay, while the backflip starts (s)
     },
     slide: {
       minSpeed: 100, // Slide min speed
@@ -131,7 +131,7 @@ export const DEFAULTS = {
       maxDamage: 5, // Damage at full power
       activeTime: 0.18, // Active time (s)
       fadeTime: 0.12,
-      cooldown: 0.16, // Cooldown (s)
+      cooldown: 0.36, // Cooldown (s)
       comboWindow: 1.2, // Combo window after a hit (s)
     },
     thrust: {
