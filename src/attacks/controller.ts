@@ -8,7 +8,7 @@ import type { AttackContext, AttackDef, Loadout, StatGroup, Stats, Weapon, Weapo
 
 // The player's attacks: hold a weapon's button to aim and power up, release to strike. The aim
 // starts at the closest enemy in range (except with the move input steering the aim and pushed,
-// which starts along it), else straight out from the rim, or along the input / flight in the air,
+// which starts along it), else along the input, else straight out from the rim or along the flight,
 // and turns toward the input direction, quickly at first and slower and slower until it locks at
 // full power. With a pointer the aim simply follows it. Combos, cooldowns, lunges and the armor
 // while attacking are handled here for any weapon; what an attack does is its own.
@@ -148,11 +148,11 @@ export class AttackController {
         angle = toPointer ? Math.atan2(toPointer.y, toPointer.x) : p.facing;
       } else if (target) {
         angle = Math.atan2(target.y - p.y, target.x - p.x);
+      } else if (dir.x || dir.y) {
+        angle = Math.atan2(dir.y, dir.x);
       } else if (p.mode === "hang") {
         const e = w.islands[p.island]!.pointAt(p.s);
         angle = Math.atan2(e.ny, e.nx);
-      } else if (dir.x || dir.y) {
-        angle = Math.atan2(dir.y, dir.x);
       } else {
         angle = Math.atan2(p.vy, p.vx);
       }
