@@ -16,6 +16,7 @@ export class SoundPresenter {
     const heard = this.heard;
     on("jump", () => sfx.jump(), owner);
     on("doubleJump", () => sfx.doubleJump(), owner);
+    on("turn", () => sfx.doubleJump(), owner);
     on("land", (e) => sfx.grab(e.speed), owner);
     on("netBounce", () => sfx.netBounce(), owner);
     on("lost", () => sfx.lost(), owner);

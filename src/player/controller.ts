@@ -12,7 +12,7 @@ import { warpPlayer } from "../game/portal";
 // The player's movement: hanging on and climbing rims, sliding, jumping (held for full height),
 // steering in the air, the double jump with its snap to an island ahead, the safety bounce,
 // falling into the haze and respawning. Also how the player takes hits and shoves, reacts to
-// their own hits landing, and the slow motion while aiming in the air.
+// their own hits landing (and turns on them), and the slow motion while aiming in the air.
 
 /** Spacing of the rim spots tried for a jump (world units). */
 const SPOT_STEP = 4;
@@ -51,7 +51,7 @@ export class PlayerController {
       hit: (h) => this.hurt(h),
       push: (vx, vy, vz, hard) => this.push(vx, vy, vz, hard),
     });
-    // The player's own hits: hit-stop and a redirect after sword hits; in the air they refill the
+    // The player's own hits: hit-stop and a chance to turn after sword hits; in the air they refill the
     // double jump and some focus, and sword hits bounce the player up.
     w.events.on("hit", (e) => this.onOwnHit(e.weapon, e.damage), { source: p.id, owner: p.lifetime });
     this.reset();
@@ -138,7 +138,7 @@ export class PlayerController {
     const w = this.w;
     if (weapon === "sword" && p.mode !== "lost") {
       p.freeze = Math.max(p.freeze, w.combat.hitStop(damage));
-      p.redirect = p.mode === "air";
+      if (p.mode === "air" && !p.turn) p.turnWindow = w.params.move.turn.window;
     }
     if (p.mode !== "air") return;
     p.airJumps = 1;
@@ -257,18 +257,24 @@ export class PlayerController {
       return;
     }
 
+    if (p.freeze <= 0 && p.turnWindow > 0) {
+      // Just after a sword hit in the air: a clearly tilted stick turns the flight.
+      p.turnWindow = Math.max(0, p.turnWindow - dtReal);
+      this.startTurn(dir);
+    }
+
     if (p.freeze > 0) {
-      // Hit-stop: no moving, attacking or animating. After a sword hit in the air, the flight then
-      // turns toward the input.
+      // Hit-stop: no moving, attacking or animating.
       p.freeze -= dtReal;
-      if (p.freeze <= 0 && p.redirect) {
-        p.redirect = false;
-        const l = Math.hypot(dir.x, dir.y);
-        if (p.mode === "air" && l) {
-          const sp = Math.hypot(p.vx, p.vy) / l;
-          p.vx = dir.x * sp;
-          p.vy = dir.y * sp;
-        }
+    } else if (p.turn) {
+      // The backflip: held in place a moment, then off the new way at the speed it had.
+      const t = p.turn;
+      if (p.mode !== "air") p.turn = null;
+      else if ((t.t -= dt) <= 0) {
+        p.vx = Math.cos(t.angle) * t.speed;
+        p.vy = Math.sin(t.angle) * t.speed;
+        p.vz = t.vz;
+        p.turn = null;
       }
     } else if (p.mode === "hang") {
       const isl = w.islands[p.island]!;
@@ -382,6 +388,26 @@ export class PlayerController {
         w.events.emit("respawn", { source: p.id, x: p.x, y: p.y, alt: p.alt });
       }
     }
+  }
+
+  /**
+   * Turn the flight toward `dir` after a sword hit, if the stick is tilted far enough and away
+   * from the flight by enough: the player holds still while a backflip starts, then flies off.
+   */
+  private startTurn(dir: Vec) {
+    const p = this.player;
+    const tn = this.w.params.move.turn;
+    const l = Math.hypot(dir.x, dir.y);
+    if (p.mode !== "air" || !this.w.playing || l < tn.minTilt) return;
+    const angle = Math.atan2(dir.y, dir.x);
+    const speed = Math.hypot(p.vx, p.vy);
+    if (speed > 1 && Math.abs(wrapAngle(angle - Math.atan2(p.vy, p.vx))) < (tn.minAngle * Math.PI) / 180) return;
+    p.turnWindow = 0;
+    p.turn = { t: tn.delay, angle, speed, vz: p.vz };
+    p.vx = p.vy = p.vz = 0;
+    p.facing = angle;
+    p.jumpHeld = false;
+    this.w.events.emit("turn", { source: p.id, x: p.x, y: p.y, alt: p.alt, angle });
   }
 
   /** Counts down what runs on world time after the attacks (invulnerability). */

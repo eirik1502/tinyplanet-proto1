@@ -149,7 +149,9 @@ you shows how high you are: it closes in as you come down, turns orange below th
 net is spent. The net shows as a web when it catches you.
 
 Every flight has one double jump; it heads where you aim (the cursor, or the direction held; else along the flight). If that misses every island, it snaps to the edge of an island in a 30° cone around the aim. Air speed and height are capped. Hitting an enemy while airborne refills it (max one) and regains
-focus; a sword hit also bounces you up. Slow motion while winding up an air attack drains focus; grabbing a rim refills
+focus; a sword hit also bounces you up. Tilt the stick (or press a direction) well away from the flight as a sword hit
+lands, or just after (0.15 s), and you backflip: a short hold (0.12 s, no attacks), then the flight goes off that way at
+the speed it had (`move.turn` in the tuning panel). Slow motion while winding up an air attack drains focus; grabbing a rim refills
 it. The first dip below the rim in a flight springs you back up once.
 
 The sword strikes in a 1-2-3 combo: a hit opens a short window in which the next strike is the next

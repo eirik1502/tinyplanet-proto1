@@ -27,8 +27,16 @@ export class Player extends GameObject {
   focus = 1;
   /** Hit-stop left (s, real time): a frozen player doesn't move. */
   freeze = 0;
-  /** After this hit-stop, turn the flight toward the input (sword hits). */
-  redirect = false;
+  /**
+   * After a sword hit in the air: how long after its hit-stop a tilted stick still turns the
+   * flight (s, real time).
+   */
+  turnWindow = 0;
+  /**
+   * Turning in the air (a backflip): held in place for `t` more seconds, then off at `angle`
+   * with the speed `speed` and the upward speed `vz` the flight had.
+   */
+  turn: { t: number; angle: number; speed: number; vz: number } | null = null;
   /** Speed along the rim (per s) after a fast grab. */
   slide = 0;
   /** Climb speed along the rim (per s) from the input this step (not the climb to a jump's spot). */

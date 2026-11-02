@@ -21,6 +21,7 @@ export class RumblePresenter {
     on("hurt", () => r(0.7, 0.5, 220), owner);
     on("pushed", (e) => r(1, e.hard ? 1 : 0.6, e.hard ? 450 : 320), owner);
     on("doubleJump", () => r(0.15, 0.2, 60), owner);
+    on("turn", () => r(0.25, 0.2, 80), owner);
     on("land", (e) => r(0, Math.min(0.5, e.speed / 1500), 60), owner);
     on("netBounce", () => r(0.3, 0.3, 120), owner);
     on("lost", () => r(0.4, 0, 250), owner);

@@ -2,7 +2,7 @@ import type { Projected } from "./projection";
 
 // The player character's look and animation: a hooded climber with a cloth cloak, posed for
 // hanging, climbing, sliding, rising, falling, aiming and striking, with squash and stretch,
-// a somersault on double jumps and afterimages at speed.
+// a somersault on double jumps, a backflip on turns and afterimages at speed.
 //
 // Drawing happens in a local frame centred on the player, +x pointing the way the body faces
 // (toward the rim while hanging), in world units scaled to screen pixels. The cloak and the
@@ -48,6 +48,7 @@ const CLOAK_LINK = 3.6;
 const STRIKE_TIME = 0.3;
 const SWING_TIME = 0.18;
 const FLIP_TIME = 0.42;
+const BACKFLIP_TIME = 0.38;
 
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -100,8 +101,12 @@ export class Avatar {
   private bank = 0;
   /** Limb cycle phase: hand over hand while climbing, kicking in the air. */
   private cycle = 0;
-  /** Double-jump somersault progress 0..1 (1: not flipping). */
+  /** Somersault (double jump) or backflip (turn) progress 0..1 (1: not flipping). */
   private flip = 1;
+  private flipTime = FLIP_TIME;
+  /** A backflip: the body faces this way (world angle) from when it's edge-on; null after. */
+  private flipTo: number | null = null;
+  private backflipping = false;
   private hurtT = 0;
   private hurtDir = 0;
   /** `thrust`: a straight jab along the angle rather than a sweep across it. */
@@ -120,7 +125,19 @@ export class Avatar {
 
   doubleJump() {
     this.flip = 0;
+    this.flipTime = FLIP_TIME;
+    this.flipTo = null;
+    this.backflipping = false;
     this.kick(0.22);
+  }
+
+  /** Turning in the air: a backflip with a hop, coming round to face `angle`. */
+  backflip(angle: number) {
+    this.flip = 0;
+    this.flipTime = BACKFLIP_TIME;
+    this.flipTo = angle;
+    this.backflipping = true;
+    this.kick(-0.3);
   }
 
   /** Grabbing a rim; harder landings squash more. */
@@ -180,14 +197,21 @@ export class Avatar {
     const want =
       v.mode === "air" && v.aim ? v.aim.angle : v.mode === "air" && strike ? strike.angle : v.facing;
     const turn = v.mode === "hang" ? 30 : 14;
-    this.body = wrap(this.body + clamp(wrap(want - this.body), -turn * dt, turn * dt));
+    if (this.flipTo !== null) {
+      // A backflip turns the body round while it's edge-on, a quarter of the way through.
+      if (easeOut(this.flip) >= 0.25) {
+        this.body = this.flipTo;
+        this.flipTo = null;
+      }
+    } else this.body = wrap(this.body + clamp(wrap(want - this.body), -turn * dt, turn * dt));
 
     const speed = Math.hypot(this.vx, this.vy);
     const lateral = -Math.sin(this.body) * this.vx + Math.cos(this.body) * this.vy;
     this.bank += (clamp(lateral / 420, -1, 1) - this.bank) * Math.min(1, 8 * dt);
     this.cycle += dt * (v.mode === "hang" ? Math.min(speed, 500) * 0.09 : 7);
 
-    if (this.flip < 1) this.flip = Math.min(1, this.flip + dt / FLIP_TIME);
+    if (this.flip < 1) this.flip = Math.min(1, this.flip + dt / this.flipTime);
+    else this.backflipping = false;
     this.hurtT = Math.max(0, this.hurtT - dt);
     if (strike && (strike.t += dt) > STRIKE_TIME) this.strikeAnim = null;
 
@@ -270,6 +294,10 @@ export class Avatar {
     if (this.hurtT > 0) {
       const r = (this.hurtT / 0.35) ** 2 * 5 * k;
       ctx.translate(Math.cos(this.hurtDir) * r, Math.sin(this.hurtDir) * r);
+    }
+    if (this.backflipping) {
+      // A backflip hops up as it goes over.
+      ctx.translate(0, -Math.sin(this.flip * Math.PI) * 7 * k);
     }
     ctx.rotate(this.body + (v.mode === "lost" ? this.t * 9 : 0));
     ctx.scale((1 + this.squash) * this.flipFactor(), 1 - 0.55 * this.squash);

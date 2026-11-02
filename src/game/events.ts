@@ -30,6 +30,8 @@ export interface GameEvents {
   hurt: At & { target: number; damage: number; fromX: number; fromY: number };
   /** Shoved by a blast. */
   pushed: { target: number; hard: boolean };
+  /** Turning in the air after a sword hit (a backflip): the flight goes off at `angle` after a short hold. */
+  turn: At & { source: number; angle: number };
   /** A sword hit in the air bounced the player up. */
   hitBounce: { source: number };
   /** Slow motion starts or ends. */

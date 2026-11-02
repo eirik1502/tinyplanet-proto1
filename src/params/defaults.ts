@@ -64,6 +64,12 @@ export const DEFAULTS = {
       netDepth: 45, // Safety bounce depth below rim
       netBounce: 200, // Safety bounce (up speed)
     },
+    turn: {
+      window: 0.15, // A tilt this soon after a hit's freeze turns the flight (s)
+      minTilt: 0.6, // Least stick tilt that turns
+      minAngle: 45, // Least turn from the flight that counts (degrees)
+      delay: 0.12, // Turn delay, while the backflip starts (s)
+    },
     slide: {
       minSpeed: 100, // Slide min speed
       keep: 1, // Slide speed kept

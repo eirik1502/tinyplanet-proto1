@@ -101,7 +101,8 @@ export class World {
     this.time += dt;
     this.steps++;
 
-    const frozen = this.player.freeze > 0;
+    // Hit-stop and the turn after a hit hold attacks (presses are remembered).
+    const frozen = this.player.freeze > 0 || this.player.turn !== null;
     this.playerCtl.update(dt, dtReal, input);
     if (playing) this.attacks.update(dt, dtReal, input, frozen);
     this.playerCtl.afterAttacks(dt);

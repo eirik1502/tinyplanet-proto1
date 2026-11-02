@@ -36,6 +36,7 @@ export class PlayerPresenter {
     on("land", (e) => a.land(e.speed), owner);
     on("netBounce", () => a.bounce(), owner);
     on("hitBounce", () => a.bounce(), owner);
+    on("turn", (e) => a.backflip(e.angle), owner);
     on("hurt", (e) => a.hurt(e.fromX, e.fromY, e.x, e.y), owner);
     on("attack", (e) => a.strike(e.weapon as AvatarWeapon, e.angle, e.power, e.attack === "sword.thrust"), owner);
     on("respawn", (e) => {
