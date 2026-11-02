@@ -16,7 +16,7 @@ import type { Player } from "../player/player";
 export type WeaponId = "sword" | "spear";
 
 /** The param groups attacks read, by name. */
-export type StatGroup = "aim" | "sword" | "thrust" | "smash" | "spear";
+export type StatGroup = "aim" | "armor" | "sword" | "thrust" | "smash" | "spear";
 export type Stats<G extends StatGroup> = Params["player"][G];
 
 /** An aim indicator shape, in the aim's frame: +x along the aim, from the player. */

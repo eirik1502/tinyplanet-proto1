@@ -10,8 +10,8 @@ import type { AttackContext, AttackDef, Loadout, StatGroup, Stats, Weapon, Weapo
 // starts at the closest enemy in range (except with the move input steering the aim and pushed,
 // which starts along it), else straight out from the rim, or along the input / flight in the air,
 // and turns toward the input direction, quickly at first and slower and slower until it locks at
-// full power. With a pointer the aim simply follows it. Combos, cooldowns and lunges are handled
-// here for any weapon; what an attack does is its own.
+// full power. With a pointer the aim simply follows it. Combos, cooldowns, lunges and the armor
+// while attacking are handled here for any weapon; what an attack does is its own.
 
 /** How long a press made too early waits to go off (real s). */
 const QUEUE_TIME = 0.3;
@@ -45,6 +45,8 @@ export class AttackController {
   /** A lunge under way, or null. */
   lunge: LungeState | null = null;
   readonly weapons: Weapon[];
+  /** Armor left after the last attack went off (s, world time). */
+  private armor = 0;
   private cooldowns = new Map<WeaponId, number>();
   /** A press that came too early (cooldown, hit stop, another attack): it goes off once it can. */
   private queued: { id: WeaponId; left: number } | null = null;
@@ -84,6 +86,11 @@ export class AttackController {
     return s;
   }
 
+  /** Attacking: through a lunge and for `armor.time` after an attack goes off, enemy hits don't land. */
+  armored() {
+    return this.lunge !== null || this.armor > 0;
+  }
+
   /** Power 0..1 of the attack being aimed. */
   power() {
     return this.aim ? Math.min(1, this.aim.t / this.stats("aim").chargeTime) : 0;
@@ -108,12 +115,14 @@ export class AttackController {
     const press = this.weapons.find((x) => input.pressed.has(x.id));
     if (press) this.queued = { id: press.id, left: QUEUE_TIME };
     if (frozen) return;
+    this.armor = Math.max(0, this.armor - dt);
     for (const c of this.combos.values()) {
       c.left -= dt;
       if (c.left <= 0) c.step = 1;
     }
     if (p.mode === "lost" || p.stun > 0) {
       // Lost or stunned: no attacks, and presses meanwhile don't count.
+      this.armor = 0;
       this.aim = null;
       this.lunge = null;
       this.queued = null;
@@ -186,6 +195,7 @@ export class AttackController {
   private finish(weapon: Weapon, attack: AttackDef, c: AttackContext & { reach?: number; halfWidth?: number }, angle: number, power: number, lunged: boolean) {
     const p = this.w.player;
     this.cooldowns.set(weapon.id, weapon.cooldown((g) => this.stats(g)));
+    this.armor = this.stats("armor").time;
     this.w.events.emit("attack", { source: p.id, x: c.x, y: c.y, alt: c.alt, weapon: weapon.id, attack: attack.id, power, angle, lunged, reach: c.reach, halfWidth: c.halfWidth, step: this.stepOf(weapon, attack) });
   }
 

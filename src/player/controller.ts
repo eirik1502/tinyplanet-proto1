@@ -95,6 +95,10 @@ export class PlayerController {
     const p = this.player;
     const w = this.w;
     if (p.invuln > 0 || !w.playing) return false;
+    if (w.attacks.armored()) {
+      w.events.emit("block", { x: p.x, y: p.y, alt: p.alt, what: "armor" });
+      return false;
+    }
     this.health.hp = Math.max(0, this.health.hp - h.damage);
     p.freeze = Math.max(p.freeze, w.combat.hitStop(h.damage));
     p.invuln = w.params.player.health.invulnTime;
@@ -128,11 +132,11 @@ export class PlayerController {
   /**
    * Shove the player (a blast). In the air it adds to the flight; on a rim it blows them off it:
    * outward, keeping the push's sideways part, as if they had jumped. A `hard` shove first cancels
-   * any flight against it.
+   * any flight against it. Not while attacking (armor).
    */
   private push(vx: number, vy: number, vz: number, hard = false) {
     const p = this.player;
-    if (!this.w.playing || p.mode === "lost") return;
+    if (!this.w.playing || p.mode === "lost" || this.w.attacks.armored()) return;
     this.w.events.emit("pushed", { target: p.id, hard });
     this.stun(Math.hypot(vx, vy));
     if (p.mode === "air") {

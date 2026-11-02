@@ -111,7 +111,7 @@ export class Vfx {
       this.burst(e.x, e.y, e.alt, e.killed ? 18 : 6, boidColor(e.kind));
       if (e.kind === "queen" && e.killed) this.burst(e.x, e.y, e.alt, 60, "#ffe27a");
     }, owner);
-    on("block", (e) => this.burst(e.x, e.y, e.alt, 8, e.what === "shield" ? "#9fe8ff" : "#f4ffd0"), owner);
+    on("block", (e) => this.burst(e.x, e.y, e.alt, 8, e.what === "shield" ? "#9fe8ff" : e.what === "armor" ? "#ffd34d" : "#f4ffd0"), owner);
     on("interrupt", (e) => this.burst(e.x, e.y, e.alt, 10, "#ffffff"), owner);
     on("thud", (e) => this.burst(e.x, e.y, e.alt, 4, e.fromPlayer ? "#f4e3c0" : "#c9ff7a"), owner);
     on("smash", (e) => {

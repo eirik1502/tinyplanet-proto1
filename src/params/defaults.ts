@@ -115,6 +115,9 @@ export const DEFAULTS = {
     hurtbox: {
       radius: 10, // Radius
     },
+    armor: {
+      time: 0.1, // Armor after an attack goes off (s)
+    },
     stun: {
       min: 0.2, // Stun after a hit (s)
       perSpeed: 0.001, // Stun per knockback speed (s)

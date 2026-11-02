@@ -62,8 +62,8 @@ export interface GameEvents {
   // Combat
   /** A hit landed on a boid (`target`) of type `kind`. */
   hit: At & { source?: number; target: number; kind: string; damage: number; killed: boolean; weapon?: string; attack?: string; step?: number };
-  /** Blocked: the queen's shield turned a hit, or a blade stopped a projectile. */
-  block: At & { what: "shield" | "projectile" };
+  /** Blocked: the queen's shield turned a hit, a blade stopped a projectile, or the player's armor (attacking) took a hit. */
+  block: At & { what: "shield" | "projectile" | "armor" };
   /** A hit interrupted a boid's windup. */
   interrupt: At & { target: number };
   /** A projectile hit an island. */
