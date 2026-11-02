@@ -72,6 +72,8 @@ export interface Weapon {
   cooldown(stats: AttackContext["stats"]): number;
   /** One attack, or a combo: the attacks in order, and how long a hit keeps the next one open (s). */
   attacks: AttackDef[];
+  /** Thrown: from a rim it aims any way, over the island, not just outward. */
+  thrown?: boolean;
   comboWindow?(stats: AttackContext["stats"]): number;
 }
 

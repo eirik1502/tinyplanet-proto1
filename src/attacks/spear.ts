@@ -1,7 +1,7 @@
 import { lerp } from "../core/math";
 import type { AttackDef, Weapon } from "./types";
 
-// The spear: thrown. Power scales its speed, damage and size.
+// The spear: thrown (from a rim too, over the island). Power scales its speed, damage and size.
 
 export const THROW: AttackDef = {
   id: "spear",
@@ -29,4 +29,5 @@ export const SPEAR: Weapon = {
   name: "Spear",
   cooldown: (stats) => stats("spear").cooldown,
   attacks: [THROW],
+  thrown: true,
 };

@@ -132,7 +132,7 @@ export class AttackController {
       this.queued = null;
       // Aim assist, except when the move input steers the aim and is pushed.
       const steering = (dir.x || dir.y) && input.aimMode === "move";
-      const target = pointer || steering ? null : this.closestEnemy();
+      const target = pointer || steering ? null : this.closestEnemy(weapon);
       let angle: number;
       if (pointer) {
         angle = toPointer ? Math.atan2(toPointer.y, toPointer.x) : p.facing;
@@ -147,7 +147,7 @@ export class AttackController {
         angle = Math.atan2(p.vy, p.vx);
       }
       const { attack, step } = this.next(weapon);
-      this.aim = { weapon, attack, t: 0, angle: this.clampAimToRim(angle), step };
+      this.aim = { weapon, attack, t: 0, angle: this.clampAimToRim(angle, weapon), step };
       w.events.emit("aimStart", { source: p.id, weapon: weapon.id });
       return;
     }
@@ -160,9 +160,9 @@ export class AttackController {
     const pa = this.stats("aim");
     if (pointer) {
       // The aim follows the pointer directly.
-      if (toPointer) aim.angle = this.clampAimToRim(Math.atan2(toPointer.y, toPointer.x));
+      if (toPointer) aim.angle = this.clampAimToRim(Math.atan2(toPointer.y, toPointer.x), aim.weapon);
     } else {
-      aim.angle = this.clampAimToRim(turnAim(aim.angle, dir, aim.t / pa.chargeTime, dtReal, pa.turnRate, pa.minTurnRate));
+      aim.angle = this.clampAimToRim(turnAim(aim.angle, dir, aim.t / pa.chargeTime, dtReal, pa.turnRate, pa.minTurnRate), aim.weapon);
     }
 
     if (!input.held.has(aim.weapon.id)) {
@@ -238,7 +238,7 @@ export class AttackController {
     const h = b.get(Hurtable);
     const up = b.alive && !!h?.targetable();
     lunge.t += dt;
-    if (up) lunge.angle = this.clampAimToRim(Math.atan2(b.y - p.y, b.x - p.x));
+    if (up) lunge.angle = this.clampAimToRim(Math.atan2(b.y - p.y, b.x - p.x), lunge.weapon);
     const near = Math.hypot(b.x - p.x, b.y - p.y) <= lunge.strikeDistance + (h?.hurtbox().radius ?? 0);
     if (up && !near && lunge.t < lunge.maxTime && p.mode === "air") return;
     this.lunge = null;
@@ -252,12 +252,12 @@ export class AttackController {
 
   /**
    * Aim assist: the closest enemy within `aim.assistRange`. On a rim, only enemies on the outward
-   * side count, since attacks can't point into the island.
+   * side count, since attacks can't point into the island (except thrown ones).
    */
-  private closestEnemy(): GameObject | null {
+  private closestEnemy(weapon: Weapon): GameObject | null {
     const w = this.w;
     const p = w.player;
-    const e = p.mode === "hang" ? w.islands[p.island]!.pointAt(p.s) : null;
+    const e = p.mode === "hang" && !weapon.thrown ? w.islands[p.island]!.pointAt(p.s) : null;
     let best: GameObject | null = null;
     let bestD = this.stats("aim").assistRange;
     for (const [o, h] of w.objects.query(Hurtable)) {
@@ -274,10 +274,13 @@ export class AttackController {
     return best;
   }
 
-  /** On a rim, attacks may not point back into the island: keep them in the outward half-plane. */
-  private clampAimToRim(angle: number): number {
+  /**
+   * On a rim, attacks may not point back into the island: keep them in the outward half-plane.
+   * Thrown weapons fly over the island, so they aim any way.
+   */
+  private clampAimToRim(angle: number, weapon: Weapon): number {
     const p = this.w.player;
-    if (p.mode !== "hang") return angle;
+    if (p.mode !== "hang" || weapon.thrown) return angle;
     const e = this.w.islands[p.island]!.pointAt(p.s);
     let x = Math.cos(angle);
     let y = Math.sin(angle);

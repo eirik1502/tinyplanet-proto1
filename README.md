@@ -159,4 +159,7 @@ hurts and throws back everything around it, more the closer it is. The aim indic
 strike is coming. Strikes can follow each other every 0.16 s (real time, so hit stop and
 slow motion don't stretch it), and a press that comes too early (up to 0.3 s) goes off as soon as it can.
 
+On a rim, attacks point outward, never into the island, except the spear: thrown from a rim it aims any way and
+flies over the island.
+
 Game parameters can be tweaked live from the Tuning section of the dev panel (defaults in `src/params/defaults.ts`).
