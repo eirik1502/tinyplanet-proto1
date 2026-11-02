@@ -325,7 +325,7 @@ export class Swarm implements BoidApi {
       blast,
       "swarm",
       (o, h) => {
-        h.hit({ damage, fromX: blast.x, fromY: blast.y });
+        h.hit({ damage, fromX: blast.x, fromY: blast.y, explosive: true });
         const dx = o.x - blast.x;
         const dy = o.y - blast.y;
         const l = Math.hypot(dx, dy) || 1;

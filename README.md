@@ -165,8 +165,8 @@ enemy in its reach and strikes once near it (off a rim, too); 3 a small, strong 
 hurts and throws back everything around it, more the closer it is. The aim indicator shows which
 strike is coming. Strikes can follow each other every 0.16 s (real time, so hit stop and
 slow motion don't stretch it), and a press that comes too early (up to 0.3 s) goes off as soon as it can.
-While attacking you have armor: through a lunge and for 0.1 s after any attack goes off, enemy hits and blasts
-don't land (`player.armor` in the tuning panel).
+While attacking you have armor: through a lunge and for 0.1 s after any attack goes off, enemy hits don't land;
+explosions (bombers, the queen's blast) still do (`player.armor` in the tuning panel).
 
 On a rim, attacks point outward, never into the island, except the spear: thrown from a rim it aims any way and
 flies over the island.

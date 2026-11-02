@@ -4,7 +4,7 @@ import { Session } from "../game/session";
 import { NO_INPUT, type Action } from "../input/types";
 import { liveParams } from "../params/store";
 
-// While attacking, the player has armor: enemy hits and shoves don't land.
+// While attacking, the player has armor: enemy hits don't land, except explosions.
 
 test("hits don't land just after an attack goes off, and do once the armor is gone", () => {
   const s = new Session(liveParams, { skipBriefings: true });
@@ -20,9 +20,7 @@ test("hits don't land just after an attack goes off, and do once the armor is go
   expect(w.attacks.armored()).toBe(true);
   const hp = w.playerCtl.health.hp;
   expect(hurt.hit({ damage: 5, fromX: p.x + 10, fromY: p.y })).toBe(false);
-  hurt.push(500, 0, 300, true);
   expect(w.playerCtl.health.hp).toBe(hp);
-  expect(p.mode).toBe("hang");
   expect(p.stun).toBe(0);
   expect(blocks).toEqual(["armor"]);
 
@@ -30,4 +28,20 @@ test("hits don't land just after an attack goes off, and do once the armor is go
   expect(w.attacks.armored()).toBe(false);
   expect(hurt.hit({ damage: 5, fromX: p.x + 10, fromY: p.y })).toBe(true);
   expect(w.playerCtl.health.hp).toBe(hp - 5);
+});
+
+test("explosions get through the armor", () => {
+  const s = new Session(liveParams, { skipBriefings: true });
+  s.start({ kind: "normal", level: 1, template: null });
+  const w = s.world;
+  const p = w.player;
+  const hurt = p.require(Hurtable);
+  s.step(1 / 60, { ...NO_INPUT, pressed: new Set<Action>(["sword"]), held: new Set<Action>(["sword"]) });
+  s.step(1 / 60, NO_INPUT);
+  expect(w.attacks.armored()).toBe(true);
+  const hp = w.playerCtl.health.hp;
+  expect(hurt.hit({ damage: 5, fromX: p.x + 10, fromY: p.y, explosive: true })).toBe(true);
+  hurt.push(500, 0, 300, true);
+  expect(w.playerCtl.health.hp).toBe(hp - 5);
+  expect(p.mode).toBe("air");
 });

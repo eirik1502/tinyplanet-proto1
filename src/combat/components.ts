@@ -24,6 +24,8 @@ export interface HitInfo {
   weapon?: string;
   attack?: string;
   step?: number;
+  /** A blast (an explosion): armor doesn't stop it. */
+  explosive?: boolean;
 }
 
 export interface Hurtable {
