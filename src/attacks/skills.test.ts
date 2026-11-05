@@ -3,6 +3,7 @@ import { mulberry32 } from "../core/rng";
 import { Session } from "../game/session";
 import { NO_INPUT, type Action } from "../input/types";
 import { makeParams } from "../params/store";
+import { scenario } from "../scenarios";
 import { loadoutFor } from ".";
 import { offer, SKILL_IDS, SKILLS, type SkillLevels } from "./skills";
 
@@ -89,4 +90,44 @@ test("the tutorial has the swipe only, and winning it leads straight to level 1"
   for (let i = 0; i < 400 && session.level === 0; i++) session.step(1 / 60, NO_INPUT);
   expect(session.level).toBe(1);
   expect(SKILL_IDS.filter((id) => session.world.skill(id) > 0)).toEqual(["swipe"]);
+});
+
+test("the instant thrust puts the player at the furthest enemy at once, striking the one on the way", () => {
+  const params = makeParams();
+  const session = new Session(params, { skipBriefings: true, seed: 4 });
+  const drill = scenario("melee-drill")!;
+  session.start({ kind: "scenario", scenario: { ...drill, spec: { ...drill.spec, skills: { swipe: 1, thrust: 3 } } } });
+  const w = session.world;
+  const p = w.player;
+  // In the air, still, with two boids straight ahead: one in the swipe's reach, one past it.
+  w.playerCtl.leaveRim(0, 0, 0);
+  p.alt += 60;
+  const [near, far] = w.swarm.boids.filter((b) => b !== w.swarm.queen && b.hp > 0);
+  for (const b of w.swarm.boids) if (b !== near && b !== far) b.x += 5000;
+  Object.assign(near!, { x: p.x + 30, y: p.y, alt: p.alt, vx: 0, vy: 0 });
+  Object.assign(far!, { x: p.x + 75, y: p.y, alt: p.alt, vx: 0, vy: 0 });
+  near!.hp = far!.hp = 100;
+  const frame = (pressed: Action[], held: Action[]) => ({ ...NO_INPUT, aimMode: "pointer" as const, aim: { x: 1, y: 0 }, pressed: new Set(pressed), held: new Set(held) });
+  const hits: string[] = [];
+  w.events.on("hit", (e) => hits.push(`${e.target === near!.id ? "near" : "far"}:${e.attack}`));
+  const blinks: number[] = [];
+  w.events.on("blink", (e) => blinks.push(e.toX - e.x));
+  const keepStill = () => Object.assign(p, { vx: 0, vy: 0, vz: 0 });
+  // Swipe (hits the near one), then thrust once the combo window is open.
+  session.step(1 / 60, frame(["sword"], ["sword"]));
+  session.step(1 / 60, frame([], []));
+  for (let i = 0; i < 60 && !hits.length; i++) session.step(1 / 60, frame([], []));
+  expect(hits).toEqual(["near:sword.swipe"]);
+  for (let i = 0; i < 30; i++) session.step(1 / 60, frame([], [])), keepStill();
+  Object.assign(near!, { x: p.x + 30, y: p.y, alt: p.alt });
+  Object.assign(far!, { x: p.x + 75, y: p.y, alt: p.alt });
+  session.step(1 / 60, frame(["sword"], ["sword"]));
+  const x0 = p.x;
+  session.step(1 / 60, frame([], []));
+  expect(blinks.length).toBe(1);
+  expect(p.x - x0).toBeGreaterThan(20);
+  expect(Math.hypot(p.vx, p.vy)).toBeCloseTo(0.35 * params.player.thrust.lungeSpeed, 0);
+  for (let i = 0; i < 3; i++) session.step(1 / 60, frame([], []));
+  expect(hits).toContain("near:sword.thrust");
+  expect(hits).toContain("far:sword.thrust");
 });

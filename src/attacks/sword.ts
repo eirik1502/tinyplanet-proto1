@@ -57,34 +57,34 @@ export const THRUST: AttackDef = {
   },
   release(c) {
     // Lunge at the closest enemy in its reach, and strike once near it; with none, strike at once.
-    // Upgraded, it goes through to the furthest one, striking all on the way, and then all but
-    // instantly.
+    // Upgraded, it goes through to the furthest one, striking all on the way, and then instantly.
     const t = c.stats("thrust");
     const length = lerp(t.length, t.maxLength, c.power);
     const reach = { x: c.x, y: c.y, alt: c.alt, radius: length, rect: { dx: c.dx, dy: c.dy, length, halfWidth: t.width / 2 } };
     const through = c.skill("thrust") >= 2;
     const target = through ? furthestIn(c, reach) : c.world.combat.closestIn(reach, "player");
     if (!target) return thrust(c);
-    const speed = c.skill("thrust") >= 3 ? c.world.params.skills.thrust.dashSpeed : t.lungeSpeed;
+    const instant = c.skill("thrust") >= 3;
     if (through) {
-      // A blade around the player for the lunge: it strikes what it passes (the target gets the strike).
+      // What it passes on the way is struck too (the target gets the strike): by a blade around
+      // the player through the lunge, or for an instant one, along the line it skips.
       const d = Math.hypot(target.x - c.x, target.y - c.y);
+      const ux = (target.x - c.x) / (d || 1);
+      const uy = (target.y - c.y) / (d || 1);
+      const halfWidth = t.width / 2 + 10;
       const v = c.spawn({
         attack: "sword.thrust",
         step: 2,
-        shape: { radius: t.width / 2 + 10 },
         damage: lerp(t.damage, t.maxDamage, c.power),
-        active: Math.min(t.lungeTime, d / speed) + 0.05,
-        follow: c.player.id,
+        ...(instant
+          ? { shape: { radius: d, rect: { dx: ux, dy: uy, length: d, halfWidth } }, active: c.stats("sword").activeTime }
+          : { shape: { radius: halfWidth }, active: Math.min(t.lungeTime, d / t.lungeSpeed) + 0.05, follow: c.player.id }),
       });
       v.require(HitVolume).hits.add(target.id);
     }
-    c.lunge(target, {
-      speed,
-      maxTime: t.lungeTime,
-      strikeDistance: t.strikeDistance,
-      strike: (s) => thrust(s, s.stats("thrust").strikeLength),
-    });
+    const strike = (s: AttackContext) => thrust(s, s.stats("thrust").strikeLength);
+    if (instant) return c.blink(target, { speed: t.lungeSpeed, strikeDistance: t.strikeDistance, strike });
+    c.lunge(target, { speed: t.lungeSpeed, maxTime: t.lungeTime, strikeDistance: t.strikeDistance, strike });
   },
 };
 

@@ -54,6 +54,12 @@ export interface AttackContext {
    * from where the player is. The weapon's cooldown starts after the strike.
    */
   lunge(target: GameObject, o: { speed: number; maxTime: number; strikeDistance: number; strike: (c: AttackContext) => void }): void;
+  /**
+   * A lunge with no flight: the player is put within `strikeDistance` of `target`'s body at once
+   * (leaving the rim if hanging), and `strike` goes off from there. They come out of it as from a
+   * lunge at `speed`.
+   */
+  blink(target: GameObject, o: { speed: number; strikeDistance: number; strike: (c: AttackContext) => void }): void;
   /** Tell listeners what this attack reached (for its look): its reach along the aim and half-width. */
   describe(reach: number, halfWidth?: number): void;
 }

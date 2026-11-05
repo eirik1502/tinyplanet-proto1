@@ -148,6 +148,16 @@ export class Vfx {
     }, owner);
     on("shot", (e) => this.burst(e.x + e.dx * e.r, e.y + e.dy * e.r, e.alt, 8, "#e8ff9a"), owner);
     on("doubleJump", (e) => this.burst(e.x, e.y, e.alt - 6, 10, "#bff4ff"), owner);
+    on("blink", (e) => {
+      // A puff where the player was, a streak of sparks along the way, and a puff where they are.
+      this.burst(e.x, e.y, e.alt, 10, "#e8f6ff");
+      const n = Math.ceil(Math.hypot(e.toX - e.x, e.toY - e.y) / 12);
+      for (let i = 1; i < n; i++) {
+        const u = i / n;
+        this.burst(e.x + (e.toX - e.x) * u, e.y + (e.toY - e.y) * u, e.alt + (e.toAlt - e.alt) * u, 1, "#ffffff");
+      }
+      this.burst(e.toX, e.toY, e.toAlt, 10, "#e8f6ff");
+    }, owner);
     on("queenFlee", (e) => {
       this.flee = { x: e.x, y: e.y, alt: e.alt, age: 0 };
       this.burst(e.x, e.y, e.alt, 30, "#aaf0ff");

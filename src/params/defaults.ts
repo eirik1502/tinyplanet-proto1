@@ -175,7 +175,6 @@ export const DEFAULTS = {
       range: 1.3, // Step 4: reach (×)
     },
     thrust: {
-      dashSpeed: 2400, // Step 3: lunge speed
       range: 2, // Step 4: reach (×)
     },
     smash: {

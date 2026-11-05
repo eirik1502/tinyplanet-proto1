@@ -16,6 +16,10 @@ import type { AttackContext, AttackDef, Loadout, StatGroup, Stats, Weapon, Weapo
 
 /** How long a press made too early waits to go off (real s). */
 const QUEUE_TIME = 0.3;
+/** How much of a lunge's speed the player keeps after its strike. */
+const LUNGE_KEEP = 0.35;
+
+type Context = AttackContext & { reach?: number; halfWidth?: number; struck?: boolean };
 
 export interface AimState {
   weapon: Weapon;
@@ -196,12 +200,12 @@ export class AttackController {
   private release(weapon: Weapon, attack: AttackDef, step: number, angle: number, power: number) {
     const c = this.context(weapon, attack, step, angle, power);
     attack.release(c);
-    if (this.lunge) return; // its strike comes later
+    if (this.lunge || c.struck) return; // its strike comes later, or came already
     this.finish(weapon, attack, c, angle, power, false);
   }
 
   /** After an attack went off: the cooldown starts, and listeners hear what it was. */
-  private finish(weapon: Weapon, attack: AttackDef, c: AttackContext & { reach?: number; halfWidth?: number }, angle: number, power: number, lunged: boolean) {
+  private finish(weapon: Weapon, attack: AttackDef, c: Context, angle: number, power: number, lunged: boolean) {
     const p = this.w.player;
     this.cooldowns.set(weapon.id, weapon.cooldown((g) => this.stats(g)));
     this.armor = this.stats("armor").time;
@@ -212,13 +216,13 @@ export class AttackController {
     return weapon.attacks.indexOf(attack) + 1;
   }
 
-  private context(weapon: Weapon, attack: AttackDef, step: number, angle: number, power: number): AttackContext & { reach?: number; halfWidth?: number } {
+  private context(weapon: Weapon, attack: AttackDef, step: number, angle: number, power: number): Context {
     const w = this.w;
     const p = w.player;
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
     const alt = p.mode === "hang" ? ISLAND_TOP + 2 : p.alt;
-    const ctx: AttackContext & { reach?: number; halfWidth?: number } = {
+    const ctx: Context = {
       world: w,
       player: p,
       x: p.x,
@@ -240,6 +244,26 @@ export class AttackController {
         const r = target.get(Hurtable)?.hurtbox().radius ?? 0;
         const reach = Math.hypot(target.x - p.x, target.y - p.y) - o.strikeDistance - r;
         w.events.emit("lungeStart", { source: p.id, target: target.id, x: p.x, y: p.y, alt: p.alt, duration: Math.min(o.maxTime, Math.max(0, reach) / o.speed) });
+      },
+      blink: (target, o) => {
+        if (p.mode === "hang") w.playerCtl.leaveRim(0, 0, 0);
+        const r = target.get(Hurtable)?.hurtbox().radius ?? 0;
+        const d = Math.hypot(target.x - p.x, target.y - p.y);
+        const ux = d > 1e-3 ? (target.x - p.x) / d : dx;
+        const uy = d > 1e-3 ? (target.y - p.y) / d : dy;
+        const go = Math.max(0, d - o.strikeDistance - r);
+        w.events.emit("blink", { source: p.id, x: p.x, y: p.y, alt: p.alt, toX: p.x + ux * go, toY: p.y + uy * go, toAlt: target.alt });
+        p.x += ux * go;
+        p.y += uy * go;
+        p.alt = target.alt;
+        p.vx = ux * o.speed * LUNGE_KEEP;
+        p.vy = uy * o.speed * LUNGE_KEEP;
+        p.vz = 0;
+        const a = Math.atan2(uy, ux);
+        const c = this.context(weapon, attack, step, a, power);
+        o.strike(c);
+        ctx.struck = true;
+        this.finish(weapon, attack, c, a, power, true);
       },
       describe: (reach, halfWidth) => {
         ctx.reach = reach;
@@ -265,9 +289,9 @@ export class AttackController {
     this.lunge = null;
     const c = this.context(lunge.weapon, lunge.attack, this.stepOf(lunge.weapon, lunge.attack), lunge.angle, lunge.power);
     lunge.strike(c);
-    p.vx *= 0.35;
-    p.vy *= 0.35;
-    p.vz = Math.max(0, p.vz * 0.35);
+    p.vx *= LUNGE_KEEP;
+    p.vy *= LUNGE_KEEP;
+    p.vz = Math.max(0, p.vz * LUNGE_KEEP);
     this.finish(lunge.weapon, lunge.attack, c, lunge.angle, lunge.power, true);
   }
 

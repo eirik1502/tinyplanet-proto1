@@ -87,7 +87,7 @@ const THRUST: Skill = {
   steps: [
     "Hit with the swipe to chain a thrust that lunges at the closest enemy in reach.",
     "The lunge goes through to the furthest enemy, striking all on the way.",
-    "The lunge is all but instant.",
+    "The lunge is instant.",
     "The thrust reaches twice as far.",
   ],
   modify(group, s, lv, params) {

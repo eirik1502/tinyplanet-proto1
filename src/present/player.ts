@@ -32,6 +32,7 @@ export class PlayerPresenter {
     const a = this.avatar;
     on("jump", () => a.jump(), owner);
     on("lungeStart", () => a.jump(), owner);
+    on("blink", () => a.jump(), owner);
     on("doubleJump", () => a.doubleJump(), owner);
     on("land", (e) => a.land(e.speed), owner);
     on("netBounce", () => a.bounce(), owner);

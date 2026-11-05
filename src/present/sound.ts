@@ -25,6 +25,7 @@ export class SoundPresenter {
     on("aimStart", (e) => sfx.aim(e.weapon === "spear" ? "spear" : "sword"), owner);
     on("charged", () => sfx.charged(), owner);
     on("lungeStart", (e) => sfx.thrustWhoosh(e.duration), owner);
+    on("blink", () => sfx.thrustWhoosh(0), owner);
     on("attack", (e) => {
       if (e.attack === "sword.swipe") sfx.swing(e.power);
       else if (e.attack === "sword.thrust") {

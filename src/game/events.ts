@@ -58,6 +58,8 @@ export interface GameEvents {
   };
   /** The thrust lunges at `target` for up to `duration` s. */
   lungeStart: At & { source: number; target: number; duration: number };
+  /** The instant thrust puts the player at (toX, toY, toAlt) at once. */
+  blink: At & { source: number; toX: number; toY: number; toAlt: number };
 
   // Combat
   /** A hit landed on a boid (`target`) of type `kind`. */
