@@ -1,4 +1,5 @@
 import type { Vec } from "../core/math";
+import { airJumpSpeed } from "../attacks/skills";
 import { wrapAngle } from "../core/math";
 import { box } from "../combat/hitbox";
 import { Health, Hurtable, type HitInfo } from "../combat/components";
@@ -361,7 +362,7 @@ export class PlayerController {
         const aj = prm.move.airJump;
         p.vz = riseSpeed(w, Math.max(aj.height, ISLAND_TOP + aj.minPeak - p.alt));
         p.jumpHeld = true;
-        const push = aj.speed;
+        const push = airJumpSpeed(w);
         const to = this.doubleJumpDir(push, aim, dir);
         if (to) {
           const sp = Math.min(prm.move.limits.maxSpeed, Math.max(0, p.vx * to.x + p.vy * to.y) + push);

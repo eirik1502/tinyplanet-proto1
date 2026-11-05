@@ -12,6 +12,7 @@ import { Vfx } from "../present/vfx";
 import { Painter } from "../render/painter";
 import { Projector } from "../render/projection";
 import { render } from "../render/renderer";
+import { mountPick } from "../ui/briefing/pick";
 import { mountBriefing } from "../ui/briefing/controller";
 import { debugSection } from "../ui/dev/debug";
 import { inspectSection } from "../ui/dev/inspect";
@@ -68,6 +69,7 @@ session.events.on("roundStart", ({ world, arrival }) => {
 });
 
 mountBriefing(document.getElementById("briefing")!, session, input, unlockAudio);
+mountPick(document.getElementById("briefing")!, session, input);
 createDevPanel([runSection, tuningDevSection, debugSection, inspectSection], {
   session,
   start: (run) => session.start(run),
@@ -103,7 +105,7 @@ function frame(now: number) {
   if (frameInput.pressed.has("mute")) toggleMute();
 
   const world = session.world;
-  const stepped = session.state !== "briefing";
+  const stepped = session.state !== "briefing" && session.state !== "pick";
   session.step(dtReal, frameInput);
   world.events.flush();
   if (stepped && session.world === world) {

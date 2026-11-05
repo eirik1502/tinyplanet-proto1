@@ -1,10 +1,14 @@
 import { DEFAULT_STYLE, MELEE_PACK, resolveFlock, type FlockSpec, type FlockStyle } from "../enemies/flocks";
 import { MEMBER_TYPES } from "../enemies";
 import type { Params } from "../params/store";
-import { ALL_TEMPLATES, LAYOUTS, levelBase, PLACEMENTS, QUEEN_SPOTS, resolveLevel, weaponsAt, type LevelSpec } from "./levels";
+import { SKILLS, type SkillLevels } from "../attacks/skills";
+import { ALL_TEMPLATES, LAYOUTS, levelBase, PLACEMENTS, QUEEN_SPOTS, resolveLevel, type LevelSpec } from "./levels";
 
 // Level specs for custom levels: an empty one, a template's as on a level, checking one read back
 // from storage, and turning one (or a flock) into source for levels.ts / flocks.ts.
+
+/** Every attack, not upgraded: what a custom level starts with. */
+const ALL_ATTACKS: SkillLevels = { swipe: 1, thrust: 1, smash: 1, spear: 1 };
 
 /** An empty level: a small planet and one melee pack waiting near the start. */
 export function emptyLevel(): LevelSpec {
@@ -17,7 +21,7 @@ export function emptyLevel(): LevelSpec {
     queen: null,
     flocks: [resolveFlock(MELEE_PACK)],
     modifiers: [],
-    weapons: ["sword", "spear"],
+    skills: { ...ALL_ATTACKS },
   };
 }
 
@@ -25,12 +29,18 @@ export function emptyLevel(): LevelSpec {
 export function templateLevel(name: string, level: number, params: Params): LevelSpec {
   const t = ALL_TEMPLATES.find((t) => t.name === name);
   if (!t) return emptyLevel();
-  return resolveLevel(t, levelBase(level, params.world), { modifiers: [...(t.modifiers ?? [])], weapons: weaponsAt(level) });
+  return resolveLevel(t, levelBase(level, params.world), { modifiers: [...(t.modifiers ?? [])], skills: ALL_ATTACKS });
 }
 
 /** Whether `v` looks like a LevelSpec (for one read back from storage). */
 export function isLevelSpec(v: unknown): v is LevelSpec {
-  const s = v as LevelSpec;
+  const s = v as LevelSpec & { weapons?: string[] };
+  // Saved before skills: its weapons as attacks.
+  if (s && !s.skills && Array.isArray(s.weapons)) {
+    const sword = s.weapons.includes("sword") ? 1 : 0;
+    s.skills = { swipe: sword, thrust: sword, smash: sword, spear: s.weapons.includes("spear") ? 1 : 0 };
+    delete s.weapons;
+  }
   // Saved flocks get any style knobs added since they were saved.
   const okFlock = (f: FlockSpec) =>
     !!f &&
@@ -49,8 +59,9 @@ export function isLevelSpec(v: unknown): v is LevelSpec {
     s.flocks.every(okFlock) &&
     (s.queen === null || okFlock(s.queen?.escort)) &&
     Array.isArray(s.modifiers) &&
-    Array.isArray(s.weapons) &&
-    (s.perks === undefined || Array.isArray(s.perks))
+    !!s.skills &&
+    typeof s.skills === "object" &&
+    Object.entries(s.skills).every(([id, n]) => id in SKILLS && typeof n === "number")
   );
 }
 
@@ -90,7 +101,6 @@ export function levelSource(s: LevelSpec) {
     ...(s.queen ? { queenParams: s.queen.params, escort: flockTemplate(s.queen.escort) } : { noQueen: true }),
     flocks: s.flocks.map((f) => ({ flock: flockTemplate(f) })),
     ...(s.modifiers.length ? { modifiers: s.modifiers } : {}),
-    ...(s.perks?.length ? { perks: s.perks } : {}),
     ...(s.theme ? { theme: s.theme } : {}),
   };
   return `const customLevel: LevelTemplate = ${literal(t)};\n`;

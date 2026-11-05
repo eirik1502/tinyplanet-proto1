@@ -25,7 +25,7 @@ bun run test       # tests (the tutorial can be finished)
 | `core/` | Event bus (`events.ts`), game objects with typed components (`object.ts`), math, seeded RNG |
 | `game/` | `World` (one planet: objects, systems, `step(dt, input)`), `Session` (levels, briefings, rounds), the event catalog, scenarios |
 | `player/` | The player object, its movement controller and flight physics |
-| `attacks/` | Weapons and attacks as data + hooks (`sword.ts`, `spear.ts`), the attack controller (aim, charge, combos, lunges), perks (upgrades) |
+| `attacks/` | Weapons and attacks as data + hooks (`sword.ts`, `spear.ts`), the attack controller (aim, charge, combos, lunges), skills (what the player picks up over a run) |
 | `combat/` | Hit/hurtboxes, the `Health` / `Hurtable` / `HitVolume` components, and the rules every hit follows |
 | `enemies/` | Boid types (behaviour only), flocks and the swarm |
 | `world/`, `levels/` | Islands and planet generation; level specs, templates, progression |
@@ -36,12 +36,12 @@ bun run test       # tests (the tutorial can be finished)
 | `app/` | Entry points: `browser.ts` and `headless.ts` |
 
 Everything in a world reports on its event bus (`world.events`): `on` listeners react inside the
-step (perks, combos), `after` listeners get events once the step is done (presenters). Listeners can
+step (skills, combos), `after` listeners get events once the step is done (presenters). Listeners can
 narrow to one object (`{ source: id }` / `{ target: id }`) and are removed with their owner.
 
 Extending:
 - **Input device**: an `InputSource` producing `InputFrame`s, plus a presenter for its outputs (see `present/rumble.ts`).
-- **Attack upgrade**: a `Perk` in `attacks/perks.ts` (change stats, or listen to events); levels list them in `LevelSpec.perks`.
+- **Skill**: a `Skill` in `attacks/skills.ts`: its steps' texts, and how it changes stats, listens to events or runs each step; its numbers go in the `skills.*` params. A normal run starts with the swipe and offers three skills to pick from after each win; custom levels and scenarios set `LevelSpec.skills`.
 - **Dev UI**: a `DevSection` in `ui/dev/`, a debug layer in `render/debug.ts`, or a HUD widget in `ui/hud/`.
 - **Test setup**: a `Scenario` in `src/scenarios` (fixed planet and enemies). Play it with `?scenario=<id>`, the Run → Scenario tab, or `bun run sim --scenario <id>`.
 

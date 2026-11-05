@@ -4,7 +4,7 @@
 //
 // Two kinds of listeners:
 // - `on`: called as soon as the event is emitted, inside the simulation step. For gameplay
-//   reactions that must land in the same tick (a perk that explodes on landing, the combo window
+//   reactions that must land in the same tick (a skill that explodes on landing, the combo window
 //   opening on a hit). Keep these few; chains are capped at MAX_DEPTH.
 // - `after`: called when `flush()` runs, after the step. For presentation: sound, rumble, effects.
 //   A headless run simply has none.

@@ -79,7 +79,17 @@ export const NET_TIME = 0.7;
 /** How long a shock ring shows (s). */
 export const BLAST_TIME = 0.45;
 
-const BLAST_LOOKS: Record<string, string> = { landingShockwave: "200,240,255", bounceBlast: "160,235,255" };
+const BLAST_LOOKS: Record<string, string> = { landing: "200,240,255", safetyDoom: "200,150,255", jumpForce: "160,235,255" };
+
+/** The safety bounce's black hole, pulling in until it blows up. */
+export interface HoleLook {
+  x: number;
+  y: number;
+  alt: number;
+  age: number;
+  dur: number;
+  radius: number;
+}
 
 export class Vfx {
   sparks: Spark[] = [];
@@ -87,6 +97,7 @@ export class Vfx {
   strikes: StrikeLook[] = [];
   dust: Dust[] = [];
   nets: NetLook[] = [];
+  holes: HoleLook[] = [];
   flee: FleeLook | null = null;
   /** The flash as the player goes through the portal, 1 → 0. */
   flash = 0;
@@ -105,6 +116,7 @@ export class Vfx {
     this.strikes = [];
     this.dust = [];
     this.nets = [];
+    this.holes = [];
     const on = w.events.after.bind(w.events);
     const owner = { owner: w.lifetime };
     on("hit", (e) => {
@@ -122,6 +134,7 @@ export class Vfx {
       this.blasts.push({ x: e.x, y: e.y, alt: e.alt, age: 0, radius: e.radius, rgb: BLAST_LOOKS[e.kind] ?? "255,226,150" });
       this.burst(e.x, e.y, e.alt, 14, "#bff4ff");
     }, owner);
+    on("blackHole", (e) => this.holes.push({ x: e.x, y: e.y, alt: e.alt, age: 0, dur: e.dur, radius: e.radius }), owner);
     on("explode", (e) => {
       this.blasts.push({ x: e.x, y: e.y, alt: e.alt, age: 0, radius: e.radius, rgb: "255,200,120" });
       this.burst(e.x, e.y, e.alt, 36, "#ffa040");
@@ -196,6 +209,8 @@ export class Vfx {
       if (s.life <= 0) this.sparks.splice(i, 1);
     }
     for (const b of this.blasts) b.age += dt;
+    for (const h of this.holes) h.age += dt;
+    this.holes = this.holes.filter((h) => h.age < h.dur);
     this.blasts = this.blasts.filter((b) => b.age < BLAST_TIME);
     if (this.flee && (this.flee.age += dt) > FLEE_TIME) this.flee = null;
     if (this.arrival && (this.arrival.age += dt) > ARRIVAL_TIME) this.arrival = null;

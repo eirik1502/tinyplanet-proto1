@@ -84,7 +84,7 @@ export const TUTORIAL: LevelSpec = {
   queen: null,
   flocks: [DUMMIES],
   modifiers: [],
-  weapons: ["sword"],
+  skills: { swipe: 1 },
   goal: "portal",
   lessons: "all",
   noFallDamage: true,

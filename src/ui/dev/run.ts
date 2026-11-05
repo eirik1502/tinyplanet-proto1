@@ -1,14 +1,15 @@
+import { SKILLS, START_SKILLS, type SkillLevels } from "../../attacks/skills";
 import { getPref, setPref } from "../../core/prefs";
 import type { Run } from "../../game/session";
 import { emptyLevel, hasOpponents, isLevelSpec, levelSource } from "../../levels/custom";
 import { ALL_TEMPLATES } from "../../levels/levels";
 import { scenario, SCENARIOS } from "../../scenarios";
 import { button, copyButton, el, numberInput, select } from "../dom";
-import { customEditor, type CustomState } from "./customlevel";
+import { customEditor, skillInputs, type CustomState } from "./customlevel";
 import type { DevSection } from "./panel";
 
 // The dev panel's Run section: what to play right now. A normal run (from a level, optionally with
-// one template on every level), a custom level, or a scenario. Unlike the tuned params these
+// one template on every level, and the skills it starts with), a custom level, or a scenario. Unlike the tuned params these
 // aren't game design, so they're never copied into source; they're kept per browser so a reload
 // picks up where you left off. `?scenario=<id>` in the URL plays a scenario regardless.
 
@@ -18,6 +19,8 @@ interface RunState {
   level: number;
   /** Template override for every level of a normal run, by name; "" = the progression's own. */
   template: string;
+  /** The skills the normal run starts with. */
+  skills: SkillLevels;
   custom: CustomState;
   scenario: string;
 }
@@ -38,12 +41,13 @@ const clampLevel = (n: number) => (Number.isFinite(n) ? Math.min(MAX_LEVEL, Math
 const levelName = (n: number) => (n === 0 ? "the tutorial" : `level ${n}`);
 
 function load(): RunState {
-  const fallback: RunState = { mode: "normal", level: getPref(TUTORIAL_DONE) ? 1 : 0, template: "", custom: { spec: emptyLevel(), from: "", fromLevel: 4 }, scenario: SCENARIOS[0]!.id };
+  const fallback: RunState = { mode: "normal", level: getPref(TUTORIAL_DONE) ? 1 : 0, template: "", skills: { ...START_SKILLS }, custom: { spec: emptyLevel(), from: "", fromLevel: 4 }, scenario: SCENARIOS[0]!.id };
   try {
     const s = { ...fallback, ...(JSON.parse(getPref(STORAGE_KEY) ?? "{}") as Partial<RunState>) };
     if (!MODES.some(([m]) => m === s.mode)) s.mode = "normal";
     s.level = clampLevel(Number(s.level));
     if (!ALL_TEMPLATES.some((t) => t.name === s.template)) s.template = "";
+    if (!s.skills || Object.entries(s.skills).some(([id, n]) => !(id in SKILLS) || typeof n !== "number")) s.skills = { ...START_SKILLS };
     if (!s.custom || !isLevelSpec(s.custom.spec)) s.custom = fallback.custom;
     s.custom.fromLevel = Math.max(1, clampLevel(Number(s.custom.fromLevel)));
     if (!scenario(s.scenario)) s.scenario = fallback.scenario;
@@ -61,7 +65,7 @@ export function currentRun(): Run {
   if (fromUrl) return { kind: "scenario", scenario: fromUrl };
   if (state.mode === "custom" && hasOpponents(state.custom.spec)) return { kind: "custom", spec: structuredClone(state.custom.spec) };
   if (state.mode === "scenario") return { kind: "scenario", scenario: scenario(state.scenario)! };
-  return { kind: "normal", level: state.level, template: ALL_TEMPLATES.find((t) => t.name === state.template) ?? null };
+  return { kind: "normal", level: state.level, template: ALL_TEMPLATES.find((t) => t.name === state.template) ?? null, skills: { ...state.skills } };
 }
 
 export const runSection: DevSection = {
@@ -128,6 +132,9 @@ export const runSection: DevSection = {
         el("h4", { textContent: "Template" }),
         template,
         el("div", { className: "note", textContent: "Used on every level of the run; modifiers roll as usual." }),
+        el("h4", { textContent: "Skills" }),
+        skillInputs(state.skills, save),
+        el("div", { className: "note", textContent: "What the run starts with; a pick after each win adds to them." }),
       );
       footer.append(go);
     };

@@ -1,3 +1,4 @@
+import { describeSkills, parseSkills } from "../attacks/skills";
 import { Session, type Run } from "../game/session";
 import type { World } from "../game/world";
 import { BotInput, IdleInput } from "../input/scripted";
@@ -17,6 +18,8 @@ const HELP = `Usage: bun run sim [options]
   --scenario <id>      play a scenario (${SCENARIOS.map((s) => s.id).join(", ")})
   --level <n>          play the progression from level n (default 1)
   --template <name>    with --level: use this template on every level
+  --skills <list>      with --level: the skills the run starts with, e.g. swipe=2,thrust=1,spear=1
+                       (default swipe=1); after each win the bot picks one at random
   --input bot|idle     who plays (default bot)
   --rounds <n>         stop after this many rounds (default 1)
   --seconds <s>        stop after this much game time in all (default 600)
@@ -26,13 +29,14 @@ const HELP = `Usage: bun run sim [options]
   --json               print the result as JSON`;
 
 function parseArgs(argv: string[]) {
-  const o = { scenario: "", level: 1, template: "", input: "bot", rounds: 1, seconds: 600, dt: 1 / 60, seed: 1, set: [] as string[], json: false };
+  const o = { scenario: "", level: 1, template: "", skills: "", input: "bot", rounds: 1, seconds: 600, dt: 1 / 60, seed: 1, set: [] as string[], json: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     const v = () => argv[++i] ?? "";
     if (a === "--scenario") o.scenario = v();
     else if (a === "--level") o.level = Number(v());
     else if (a === "--template") o.template = v();
+    else if (a === "--skills") o.skills = v();
     else if (a === "--input") o.input = v();
     else if (a === "--rounds") o.rounds = Number(v());
     else if (a === "--seconds") o.seconds = Number(v());
@@ -70,6 +74,7 @@ function patchFrom(sets: string[]): ParamsPatch {
 
 interface RoundStats {
   where: string;
+  skills: string;
   outcome: string;
   seconds: number;
   playerHp: number;
@@ -89,7 +94,7 @@ if (args.scenario) {
   run = { kind: "scenario", scenario: s };
 } else {
   const template = args.template ? (ALL_TEMPLATES.find((t) => t.name === args.template) ?? null) : null;
-  run = { kind: "normal", level: args.level, template };
+  run = { kind: "normal", level: args.level, template, ...(args.skills ? { skills: parseSkills(args.skills) } : {}) };
 }
 
 const session = new Session(params, { seed: args.seed, skipBriefings: true });
@@ -98,7 +103,7 @@ const rounds: RoundStats[] = [];
 const statsOf = new Map<World, RoundStats>();
 
 session.events.on("roundStart", ({ world }) => {
-  const r: RoundStats = { where: session.where(), outcome: "unfinished", seconds: 0, playerHp: 0, kills: 0, hitsDealt: 0, damageTaken: 0, boidsLeft: 0, events: {} };
+  const r: RoundStats = { where: session.where(), skills: describeSkills(world.loadout.skills), outcome: "unfinished", seconds: 0, playerHp: 0, kills: 0, hitsDealt: 0, damageTaken: 0, boidsLeft: 0, events: {} };
   rounds.push(r);
   statsOf.set(world, r);
   watch(world, r);
@@ -140,7 +145,7 @@ const result = { rounds, steps, simSeconds: Number(simTime.toFixed(2)), wallSeco
 if (args.json) console.log(JSON.stringify(result, null, 2));
 else {
   for (const [i, r] of rounds.entries()) {
-    console.log(`Round ${i + 1}: ${r.where}`);
+    console.log(`Round ${i + 1}: ${r.where}${r.skills ? ` · skills: ${r.skills}` : ""}`);
     console.log(`  ${r.outcome} after ${r.seconds.toFixed(1)}s · hp ${r.playerHp} · ${r.kills} kills, ${r.hitsDealt} hits dealt, ${r.damageTaken} damage taken · ${r.boidsLeft} boids left`);
     console.log(`  events: ${Object.entries(r.events).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(", ")}`);
   }

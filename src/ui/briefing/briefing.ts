@@ -1,3 +1,4 @@
+import { level, SKILLS, SKILL_IDS, type SkillIcon } from "../../attacks/skills";
 import type { WeaponId } from "../../attacks/types";
 import type { BriefingData, BriefingEnemy } from "../../game/session";
 import type { BrowserInput, InputMode } from "../../input/browser";
@@ -29,12 +30,13 @@ export function setBriefingInput(i: BrowserInput) {
 // Icons
 // ---------------------------------------------------------------------------------------------
 
-const ICONS = {
+export const ICONS = {
   sword: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5H20v5.5L9 20l-5-5z"/><path d="M5 14l5 5M3 21l3-3"/></svg>`,
   spear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21L15 9"/><path d="M14 4l6-1-1 6-4 1-2-2z" fill="currentColor"/></svg>`,
   lunge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h12M12 6l6 6-6 6"/><path d="M20 5v14"/></svg>`,
   orb: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="17" cy="12" r="4" fill="currentColor"/><path d="M3 12h6M5 8h5M5 16h5"/></svg>`,
   blast: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.2 5.6L20 6l-2.8 5.2L22 15l-6 .8L15 22l-3-4.6L9 22l-1-6.2-6-.8 4.8-3.8L4 6l5.8 1.6z"/></svg>`,
+  landing: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v10M7.5 8.5L12 13l4.5-4.5"/><path d="M3 19h18M6 16l-2.5 3M18 16l2.5 3"/></svg>`,
   crown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 18h18l-1.5-10-4.5 4-3-6-3 6-4.5-4z" fill="currentColor" fill-opacity=".25"/></svg>`,
   jump: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12l6-6 6 6M6 19l6-6 6 6"/></svg>`,
   focus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10M7 21h10M8 3c0 5 8 5 8 9s-8 4-8 9M16 3c0 5-8 5-8 9s8 4 8 9"/></svg>`,
@@ -72,7 +74,7 @@ function glyphHtml(g: Glyph) {
   }
 }
 /** The buttons for an action on the device in use, separated by `sep`. */
-const buttons = (a: Action, sep = or) => input.prompt(a).map(glyphHtml).join(sep);
+export const buttons = (a: Action, sep = or) => input.prompt(a).map(glyphHtml).join(sep);
 /**
  * Class, style and corner badge for an entity that may be newly unlocked. Each new entity on the
  * sheet appears a little after the previous one.
@@ -82,6 +84,10 @@ function freshMark(on: boolean) {
   if (!on) return { cls: "", style: "", badge: "" };
   return { cls: " fresh", style: `--d:${freshCount++ * 0.35}s;`, badge: '<span class="badge-new">NEW</span>' };
 }
+/** A skill's icon. */
+export const skillIcon = (i: SkillIcon) => ICONS[i === "smash" ? "blast" : i];
+/** Steps owned out of a skill's last, as pips: ●●○○. */
+export const pips = (lv: number, max: number) => "●".repeat(lv) + "○".repeat(Math.max(0, max - lv));
 const fmt = (v: number) => String(Number(v.toFixed(2)));
 const chip = (text: string, cls = "") => `<span class="chip ${cls}">${text}</span>`;
 
@@ -120,10 +126,10 @@ function playerCard(b: BriefingInfo) {
     attacks.push({
       icon: ICONS.sword,
       name: "Sword",
-      text: "Hold to power up. Bounce on aerial hits. Hit to chain a lunging thrust, then a smash.",
+      text: `Hold to power up. Bounce on aerial hits.${level(b.skills, "thrust") ? ` Hit to chain a lunging thrust${level(b.skills, "smash") ? ", then a smash" : ""}.` : ""}`,
       stats: [`${fmt(sw.damage)}–${fmt(sw.maxDamage)} dmg`, `${fmt(sw.cooldown)}s recharge`],
       input: buttons("sword"),
-      fresh: b.fresh.includes("sword"),
+      fresh: (["thrust", "smash"] as const).some((id) => b.fresh.includes(id) && level(b.skills, id) === 1),
     });
   if (b.weapons.includes("spear"))
     attacks.push({
@@ -132,7 +138,7 @@ function playerCard(b: BriefingInfo) {
       text: "Hold to power up. Thrown.",
       stats: [`${fmt(sp.damage)}–${fmt(sp.maxDamage)} dmg`, `${fmt(sp.cooldown)}s recharge`],
       input: buttons("spear"),
-      fresh: b.fresh.includes("spear"),
+      fresh: b.fresh.includes("spear") && level(b.skills, "spear") === 1,
     });
   const passives: Ability[] = [
     {
@@ -155,7 +161,14 @@ function playerCard(b: BriefingInfo) {
       stats: [`${fmt(1 / params.player.focus.drain)}s budget`],
     },
   ];
-  for (const perk of b.perks) passives.push({ icon: ICONS.blast, name: perk.name, text: perk.blurb, stats: ["perk"] });
+  // Skills past what they unlock: their upgrades so far.
+  for (const id of SKILL_IDS) {
+    const sk = SKILLS[id];
+    const lv = level(b.skills, id);
+    const from = sk.kind === "attack" ? 1 : 0;
+    if (lv <= from) continue;
+    passives.push({ icon: skillIcon(sk.icon), name: sk.name, text: sk.steps.slice(from, lv).join(" "), stats: [pips(lv, sk.steps.length)], fresh: b.fresh.includes(id) });
+  }
   const h = params.player.health;
   return `
     <article class="unit player">

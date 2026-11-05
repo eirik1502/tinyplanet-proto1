@@ -4,6 +4,7 @@ import { HitVolume, Hurtable } from "../combat/components";
 import type { World } from "../game/world";
 import type { InputFrame } from "../input/types";
 import { ISLAND_TOP } from "../world/island";
+import { level, SKILLS, SKILL_IDS, type SkillId } from "./skills";
 import type { AttackContext, AttackDef, Loadout, StatGroup, Stats, Weapon, WeaponId } from "./types";
 
 // The player's attacks: hold a weapon's button to aim and power up, release to strike. The aim
@@ -79,11 +80,19 @@ export class AttackController {
     return this.has(id) && (this.cooldowns.get(id) ?? 0) <= 0;
   }
 
-  /** A stat group, with the perks applied (a copy). */
+  /** A stat group, with the skills applied (a copy). */
   stats<G extends StatGroup>(group: G): Stats<G> {
     const s = { ...this.w.params.player[group] };
-    for (const perk of this.loadout.perks) perk.modify?.(group, s as unknown as Record<string, number>);
+    for (const id of SKILL_IDS) {
+      const lv = level(this.loadout.skills, id);
+      if (lv > 0) SKILLS[id].modify?.(group, s as unknown as Record<string, number>, lv, this.w.params);
+    }
     return s;
+  }
+
+  /** The step the player has of a skill (0: not owned). */
+  skill(id: SkillId) {
+    return level(this.loadout.skills, id);
   }
 
   /** Attacking: through a lunge and for `armor.time` after an attack goes off, enemy hits don't land. */
@@ -220,6 +229,7 @@ export class AttackController {
       angle,
       power,
       stats: (g) => this.stats(g),
+      skill: (id) => this.skill(id),
       spawn: (v, at) => {
         const o = w.combat.spawnVolume({ ...v, team: "player", owner: p.id, weapon: weapon.id, step: v.step ?? step, power: v.power ?? power, age: 0, hits: new Set() }, at ?? { x: p.x, y: p.y, alt });
         return o;

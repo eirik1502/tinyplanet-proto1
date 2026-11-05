@@ -26,6 +26,10 @@ export interface HitInfo {
   step?: number;
   /** A blast (an explosion): armor doesn't stop it. */
   explosive?: boolean;
+  /** How hard the hit throws the target, × the usual (default 1). */
+  knockback?: number;
+  /** Staggers a boid this long (s): it drifts and can't act. */
+  stun?: number;
 }
 
 export interface Hurtable {
@@ -56,6 +60,10 @@ export interface HitVolume {
   /** The hitbox, relative to the object's position. */
   shape: Omit<Hitbox, "x" | "y" | "alt">;
   damage: number;
+  /** How hard its hits throw, × the usual (default 1). */
+  knockback?: number;
+  /** A blade that moves with this object (by id), like the player through a lunge. */
+  follow?: number;
   /** 0..1, how charged the attack was. */
   power: number;
   /** Seconds it hits for (blades). */

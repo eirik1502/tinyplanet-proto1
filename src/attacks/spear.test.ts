@@ -8,7 +8,7 @@ import { HitVolume } from "../combat/components";
 
 test("a spear thrown from a rim into the island flies over it", () => {
   const session = new Session(liveParams, { skipBriefings: true });
-  session.start({ kind: "normal", level: 3, template: null });
+  session.start({ kind: "normal", level: 3, template: null, skills: { swipe: 1, spear: 1 } });
   const w = session.world;
   const p = w.player;
   const e = w.islands[p.island]!.pointAt(p.s);

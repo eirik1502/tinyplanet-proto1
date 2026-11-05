@@ -1,7 +1,7 @@
 import type { Vec } from "../core/math";
 import { smoothstep, lerp } from "../core/math";
 import { mulberry32, type Rng } from "../core/rng";
-import type { WeaponId } from "../attacks/types";
+import type { SkillLevels } from "../attacks/skills";
 import { BOID_TYPES } from "../enemies";
 import type { SwarmRules } from "../enemies/swarm";
 import { resolveParams } from "../enemies/types";
@@ -23,7 +23,7 @@ import type { Layout, PlanetOptions, QueenSpot, Spot, SwarmSpots, ThemeHint } fr
 import { TUTORIAL_LAYOUT } from "./tutorial";
 
 // Levels. Everything about a level is a LevelSpec: plain data (layout, size, queen, flocks,
-// modifiers, weapons) that a planet is generated from. The dev panel's custom levels edit one
+// modifiers, the player's skills) that a planet is generated from. The dev panel's custom levels edit one
 // directly; the game's levels come from templates. PROGRESSION says which template each level
 // uses; a template turns a level number into a spec: its own planet size (tuned to its theme, not
 // the level) and the level's swarm budget, shaped by the template's layout, flocks and modifiers.
@@ -41,9 +41,8 @@ export interface LevelSpec {
   queen: { params: Record<string, number>; escort: FlockSpec } | null;
   flocks: FlockSpec[];
   modifiers: ModifierId[];
-  weapons: WeaponId[];
-  /** Upgrades the player has (attacks/perks.ts ids). */
-  perks?: string[];
+  /** The player's skills (attacks/skills.ts): what attacks they have, and the upgrades. */
+  skills: SkillLevels;
   /**
    * How the level is won. Default: kill the queen (or every boid, without her). "portal": take
    * the portal, which opens once every boid is dead.
@@ -596,7 +595,7 @@ export function planLevel(
 export function resolveLevel(
   t: LevelTemplate,
   base: LevelBase,
-  opts: { modifiers: ModifierId[]; weapons: WeaponId[]; rand?: Rng },
+  opts: { modifiers: ModifierId[]; skills: SkillLevels; rand?: Rng },
 ): LevelSpec {
   const rand = opts.rand ?? Math.random;
   const escort = resolveFlock(t.escort ?? ROYAL_GUARD, rand);
@@ -625,19 +624,16 @@ export function resolveLevel(
       : { params: { hp: Math.max(1, Math.round(BOID_TYPES.queen.params.hp * (t.queenHp ?? 1))), ...t.queenParams }, escort },
     flocks,
     modifiers: opts.modifiers,
-    weapons: opts.weapons,
+    skills: { ...opts.skills },
   };
 }
 
-/** The level each weapon first appears on in the normal progression. */
-export const WEAPON_UNLOCKS: Record<WeaponId, number> = { sword: 1, spear: 3 };
-export const weaponsAt = (level: number): WeaponId[] => (["sword", "spear"] as const).filter((w) => level >= WEAPON_UNLOCKS[w]);
 
 /** Help on the first levels of a normal run: level 1 falls don't hurt. */
 export const earlyHelp = (level: number): Pick<LevelSpec, "noFallDamage"> => ({ noFallDamage: level <= 1 });
 
-/** The level each weapon and enemy type first appears on in a normal run (the briefing tags them new). */
-export const UNLOCKS: Record<string, number> = { ...WEAPON_UNLOCKS, melee: 1, ranged: 2, bomber: 3 };
+/** The level each enemy type first appears on in a normal run (the briefing tags them new). */
+export const UNLOCKS: Record<string, number> = { melee: 1, ranged: 2, bomber: 3 };
 
 /** The base for `level` from the tuning panel: the level 4 values plus a per-level increase. */
 export function levelBase(level: number, w: Params["world"]): LevelBase {

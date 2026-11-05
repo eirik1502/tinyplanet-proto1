@@ -124,19 +124,20 @@ export const DEFAULTS = {
       max: 1.5, // Longest stun (s)
     },
     sword: {
-      range: 52, // Reach
-      maxRange: 88, // Reach at full power
+      range: 40, // Reach
+      maxRange: 68, // Reach at full power
       arc: 1.35, // Half arc (rad)
       damage: 2, // Damage
       maxDamage: 5, // Damage at full power
       activeTime: 0.18, // Active time (s)
       fadeTime: 0.12,
-      cooldown: 0.36, // Cooldown (s)
+      cooldown: 0.48, // Cooldown (s)
+      knockback: 1, // Knockback (×)
       comboWindow: 1.2, // Combo window after a hit (s)
     },
     thrust: {
-      length: 120, // Reach
-      maxLength: 170, // Reach at full power
+      length: 75, // Reach
+      maxLength: 105, // Reach at full power
       width: 32, // Width
       damage: 3, // Damage
       maxDamage: 6, // Damage at full power
@@ -146,24 +147,73 @@ export const DEFAULTS = {
       strikeLength: 60, // Reach of the strike after a lunge
     },
     smash: {
-      size: 46, // Size
-      maxSize: 62, // Size at full power
+      size: 34, // Size
+      maxSize: 46, // Size at full power
       damage: 6, // Damage
       maxDamage: 12, // Damage at full power
-      blastRadius: 85, // Blast radius
+      blastRadius: 60, // Blast radius
       blastDamage: 4, // Blast damage (at the centre)
       blastPush: 520, // Blast knockback (at the centre)
     },
     spear: {
-      speed: 720, // Speed
-      maxSpeed: 1050, // Speed at full power
-      life: 0.7, // Flight time (s)
+      speed: 500, // Speed
+      maxSpeed: 725, // Speed at full power
+      life: 0.47, // Flight time (s)
       damage: 1, // Damage
       maxDamage: 3, // Damage at full power
       hitRadius: 12, // Hit radius
       maxScale: 1.8, // Size at full power
+      size: 1, // Size (×)
       length: 46,
       cooldown: 0.45, // Cooldown (s)
+    },
+  },
+  skills: {
+    swipe: {
+      cooldown: 0.75, // Step 2: cooldown (×)
+      knockback: 2.2, // Step 3: knockback (×)
+      range: 1.3, // Step 4: reach (×)
+    },
+    thrust: {
+      dashSpeed: 2400, // Step 3: lunge speed
+      range: 2, // Step 4: reach (×)
+    },
+    smash: {
+      blastRadius: 1.4, // Step 2: blast radius (×)
+      size: 1.35, // Step 3: size (×)
+      blastPush: 3, // Step 4: blast knockback (×)
+    },
+    spear: {
+      range: 1.5, // Step 2: range (×)
+      speed: 1.45, // Step 3: speed (×)
+      size: 2, // Step 4: size (×)
+    },
+    landing: {
+      minSpeed: 250, // Step 1: least landing speed
+      radius: 120, // Blast radius
+      damage: 1, // Blast damage (at the centre)
+      push: 520, // Blast knockback (at the centre)
+      growth: 1.35, // Step 2: radius (×)
+      stun: 0.8, // Step 3: stun (s)
+      pushUp: 1.5, // Step 3: knockback (×)
+    },
+    safetyDoom: {
+      radius: 130, // Blast radius
+      damage: 2, // Blast damage (at the centre)
+      push: 600, // Blast knockback (at the centre)
+      pullRadius: 220, // Step 2: black hole pull radius
+      pull: 1400, // Step 2: pull strength
+      delay: 0.6, // Step 2: blows up after (s)
+      growth: 1.5, // Step 3: pull radius, blast (×)
+    },
+    jumpForce: {
+      length: 90, // Strike reach ahead
+      width: 70, // Strike width
+      damage: 1, // Damage
+      push: 450, // Knockback aside
+      speed: 1.4, // Step 2: double jump speed (×)
+      growth: 1.5, // Step 3: reach and width (×)
+      pushUp: 1.6, // Step 3: knockback (×)
     },
   },
   combat: {

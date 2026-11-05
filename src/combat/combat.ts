@@ -82,15 +82,17 @@ export class Combat {
     for (const [o, v] of volumes) {
       if (v.projectile) continue;
       v.age += dt;
-      if (v.age > v.active) {
+      const followed = v.follow === undefined ? null : this.w.objects.get(v.follow);
+      if (v.age > v.active || followed?.alive === false) {
         this.w.objects.destroy(o);
         continue;
       }
+      if (followed) Object.assign(o, { x: followed.x, y: followed.y, alt: followed.alt });
       const hitbox = this.volumeBox(o, v);
       for (const [t, h] of this.targets(v.team)) {
         if (v.hits.has(t.id) || !this.overlaps(hitbox, h.hurtbox())) continue;
         v.hits.add(t.id);
-        h.hit({ damage: v.damage, fromX: o.x, fromY: o.y, source: v.owner, weapon: v.weapon, attack: v.attack, step: v.step });
+        h.hit({ damage: v.damage, fromX: o.x, fromY: o.y, source: v.owner, weapon: v.weapon, attack: v.attack, step: v.step, knockback: v.knockback });
       }
       if (!v.blocks) continue;
       for (const [s, sv] of volumes) {

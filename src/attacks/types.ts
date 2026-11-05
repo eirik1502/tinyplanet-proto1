@@ -3,6 +3,7 @@ import type { HitVolume } from "../combat/components";
 import type { World } from "../game/world";
 import type { Params } from "../params/store";
 import type { Player } from "../player/player";
+import type { SkillId, SkillLevels } from "./skills";
 
 // Attacks as data plus hooks. A weapon is one attack, or a combo of them (a hit opens a window in
 // which the next press is the next attack along). Holding the button aims and charges the attack
@@ -10,7 +11,7 @@ import type { Player } from "../player/player";
 // lunge, sets off a blast… The aim indicator is the attack's `indicator` shapes, drawn by the
 // renderer whatever the attack is.
 //
-// Numbers come from stat groups (the `player.*` params). Perks are upgrades: they can change any
+// Numbers come from stat groups (the `player.*` params). Skills are upgrades: they can change any
 // stat group before an attack reads it, and listen to world events to add effects of their own.
 
 export type WeaponId = "sword" | "spear";
@@ -41,8 +42,10 @@ export interface AttackContext {
   angle: number;
   /** 0..1, how long it was charged. */
   power: number;
-  /** A stat group with the perks applied. */
+  /** A stat group with the skills applied. */
   stats<G extends StatGroup>(group: G): Stats<G>;
+  /** The step the player has of a skill (0: not owned). */
+  skill(id: SkillId): number;
   /** A hit volume of the player's team at (x, y, alt), moving at (vx, vy, vz) if a projectile. */
   spawn(v: VolumeSpec, at?: { x: number; y: number; alt: number; vx?: number; vy?: number; vz?: number }): GameObject;
   /**
@@ -77,18 +80,8 @@ export interface Weapon {
   comboWindow?(stats: AttackContext["stats"]): number;
 }
 
-/** An upgrade. */
-export interface Perk {
-  id: string;
-  name: string;
-  blurb: string;
-  /** Change a stat group's values (a copy) before an attack or indicator reads them. */
-  modify?(group: StatGroup, stats: Record<string, number>): void;
-  /** Add behaviour to a world: listen to its events (with `owner: world.lifetime`). */
-  install?(world: World): void;
-}
-
 export interface Loadout {
+  /** The weapons the skills give, the sword with only the strikes owned. */
   weapons: Weapon[];
-  perks: Perk[];
+  skills: SkillLevels;
 }

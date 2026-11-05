@@ -2,6 +2,7 @@ import { EventBus, Lifetime } from "../core/events";
 import { ObjectStore } from "../core/object";
 import { mulberry32 } from "../core/rng";
 import { loadoutFor } from "../attacks";
+import { level, SKILLS, SKILL_IDS, type SkillId } from "../attacks/skills";
 import { AttackController } from "../attacks/controller";
 import type { Loadout } from "../attacks/types";
 import { Combat } from "../combat/combat";
@@ -36,7 +37,7 @@ export type Outcome = "victory" | "defeat";
 export class World {
   readonly events: GameBus = new EventBus();
   readonly objects = new ObjectStore();
-  /** Ends with the world: perks and other listeners subscribe with this as their owner. */
+  /** Ends with the world: skills and other listeners subscribe with this as their owner. */
   readonly lifetime = new Lifetime();
   readonly params: Params;
   readonly spec: LevelSpec;
@@ -71,15 +72,20 @@ export class World {
     this.planet = generatePlanet(o.seed, planetOptions(o.spec, o.seed));
     this.islands = this.planet.islands;
     this.rules = levelRules(o.spec, o.params.world.modifiers, mulberry32(o.seed ^ 0x68e31da4));
-    this.loadout = loadoutFor(o.spec.weapons, o.spec.perks);
+    this.loadout = loadoutFor(o.spec.skills);
 
     this.combat = new Combat(this);
     this.playerCtl = new PlayerController(this);
     this.swarm = new Swarm(this, this.rules.swarm);
     this.attacks = new AttackController(this, this.loadout);
-    for (const perk of this.loadout.perks) perk.install?.(this);
+    for (const id of SKILL_IDS) if (this.skill(id) > 0) SKILLS[id].install?.(this, this.skill(id));
     this.lessons = new Lessons(this, o.learned);
     this.portal = o.spec.goal === "portal" ? this.objects.add(new Portal(this.planet.portal.x, this.planet.portal.y)) : null;
+  }
+
+  /** The step the player has of a skill (0: not owned). */
+  skill(id: SkillId) {
+    return level(this.loadout.skills, id);
   }
 
   get player(): Player {
@@ -107,6 +113,7 @@ export class World {
     if (playing) this.attacks.update(dt, dtReal, input, frozen);
     this.playerCtl.afterAttacks(dt);
     this.swarm.update(dt, dtReal);
+    for (const id of SKILL_IDS) if (this.skill(id) > 0) SKILLS[id].update?.(this, dt, this.skill(id));
     this.combat.update(dt);
     this.swarm.cull();
     this.lessons.update(dt);

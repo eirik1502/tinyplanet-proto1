@@ -45,6 +45,8 @@ function loadLive(): Params {
     const saved = JSON.parse(getPref(STORAGE_KEY) ?? "{}") as Tree;
     // Move values from before jumps were set by speed and height don't fit the new model.
     if (saved.move?.jump && "length" in saved.move.jump) delete saved.move;
+    // From before skills: the attacks' tuned values are now what their skills reach, the base less.
+    if (!saved.skills && saved.player) for (const g of ["sword", "thrust", "smash", "spear"]) delete saved.player[g];
     applyPatch(p, saved as ParamsPatch);
   } catch {
     // Corrupt: keep defaults.

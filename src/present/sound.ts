@@ -66,7 +66,7 @@ export class SoundPresenter {
 
   /** Held sounds and the music's mood, every frame. */
   update(session: Session) {
-    if (session.state === "briefing") {
+    if (session.state === "briefing" || session.state === "pick") {
       sfx.loops(0, 0);
       music.update(0, 0, 0.25);
       applyVolumes();

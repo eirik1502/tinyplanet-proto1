@@ -1,7 +1,7 @@
 import type { EventBus } from "../core/events";
 
 // Everything that happens in a world, as events. The simulation emits them; gameplay listeners
-// (perks, the combo window) react within the step, and presenters (sound, rumble, effects, the
+// (skills, the combo window) react within the step, and presenters (sound, rumble, effects, the
 // avatar's animation) after it. `source` is who did it, `target` who it happened to (ids).
 
 /** Where it happened. */
@@ -70,8 +70,10 @@ export interface GameEvents {
   thud: At & { fromPlayer: boolean };
   /** The smash's blast. */
   smash: At & { source: number; radius: number };
-  /** Some other blast of the player's (perks); `kind` names it for its look. */
+  /** Some other blast of the player's (skills); `kind` names it for its look. */
   blast: At & { source: number; radius: number; kind: string };
+  /** The safety bounce left a black hole: it pulls in what's within `radius`, and blows up in `dur` s. */
+  blackHole: At & { source: number; radius: number; dur: number };
 
   // The swarm (`source`: the boid)
   /** A boid starts winding up an attack that goes off in `dur` s. */

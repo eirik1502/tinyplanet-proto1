@@ -1,10 +1,14 @@
+import { HitVolume } from "../combat/components";
+import type { Hitbox } from "../combat/hitbox";
 import { lerp } from "../core/math";
+import type { GameObject } from "../core/object";
 import type { AttackContext, AttackDef, Weapon } from "./types";
 
 // The sword strikes in a 1-2-3 combo: a hit opens a short window in which the next strike is the
 // next one along, else it starts over. 1 is the swipe (a sector); 2 a long, thin thrust (a
 // rectangle) that lunges at the closest enemy in its reach and strikes once near it; 3 a small,
-// strong smash (a square) whose blast hurts and throws back everything else around it.
+// strong smash (a square) whose blast hurts and throws back everything else around it. The combo
+// has only the strikes the skills unlocked (attacks/index.ts).
 
 export const SWIPE: AttackDef = {
   id: "sword.swipe",
@@ -21,6 +25,7 @@ export const SWIPE: AttackDef = {
       step: 1,
       shape: { radius: range, sector: { dx: c.dx, dy: c.dy, arc: sw.arc } },
       damage: lerp(sw.damage, sw.maxDamage, c.power),
+      knockback: sw.knockback,
       active: sw.activeTime,
       blocks: true,
     });
@@ -52,21 +57,50 @@ export const THRUST: AttackDef = {
   },
   release(c) {
     // Lunge at the closest enemy in its reach, and strike once near it; with none, strike at once.
+    // Upgraded, it goes through to the furthest one, striking all on the way, and then all but
+    // instantly.
     const t = c.stats("thrust");
     const length = lerp(t.length, t.maxLength, c.power);
-    const target = c.world.combat.closestIn(
-      { x: c.x, y: c.y, alt: c.alt, radius: length, rect: { dx: c.dx, dy: c.dy, length, halfWidth: t.width / 2 } },
-      "player",
-    );
+    const reach = { x: c.x, y: c.y, alt: c.alt, radius: length, rect: { dx: c.dx, dy: c.dy, length, halfWidth: t.width / 2 } };
+    const through = c.skill("thrust") >= 2;
+    const target = through ? furthestIn(c, reach) : c.world.combat.closestIn(reach, "player");
     if (!target) return thrust(c);
+    const speed = c.skill("thrust") >= 3 ? c.world.params.skills.thrust.dashSpeed : t.lungeSpeed;
+    if (through) {
+      // A blade around the player for the lunge: it strikes what it passes (the target gets the strike).
+      const d = Math.hypot(target.x - c.x, target.y - c.y);
+      const v = c.spawn({
+        attack: "sword.thrust",
+        step: 2,
+        shape: { radius: t.width / 2 + 10 },
+        damage: lerp(t.damage, t.maxDamage, c.power),
+        active: Math.min(t.lungeTime, d / speed) + 0.05,
+        follow: c.player.id,
+      });
+      v.require(HitVolume).hits.add(target.id);
+    }
     c.lunge(target, {
-      speed: t.lungeSpeed,
+      speed,
       maxTime: t.lungeTime,
       strikeDistance: t.strikeDistance,
       strike: (s) => thrust(s, s.stats("thrust").strikeLength),
     });
   },
 };
+
+/** The furthest (on the plane) of the enemies inside `hit`. */
+function furthestIn(c: AttackContext, hit: Hitbox): GameObject | null {
+  let best: GameObject | null = null;
+  let bestD = -1;
+  for (const [o] of c.world.combat.touching(hit, "player")) {
+    const d = Math.hypot(o.x - hit.x, o.y - hit.y);
+    if (d > bestD) {
+      best = o;
+      bestD = d;
+    }
+  }
+  return best;
+}
 
 export const SMASH: AttackDef = {
   id: "sword.smash",

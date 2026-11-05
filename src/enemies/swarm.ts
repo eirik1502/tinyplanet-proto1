@@ -204,7 +204,7 @@ export class Swarm implements BoidApi {
       step: h.step,
     });
     const l = Math.hypot(b.x - h.fromX, b.y - h.fromY) || 1;
-    const push = isQueen ? 60 : 260;
+    const push = (isQueen ? 60 : 260) * (h.knockback ?? 1);
     b.vx += ((b.x - h.fromX) / l) * push;
     b.vy += ((b.y - h.fromY) / l) * push;
     b.lunge = 0;
@@ -213,6 +213,10 @@ export class Swarm implements BoidApi {
       b.windup = 0;
       b.recover = Math.max(b.recover, STAGGER);
       this.events.emit("interrupt", { target: b.id, x: b.x, y: b.y, alt: b.alt });
+    }
+    if (!isQueen && h.stun && b.hp > 0) {
+      b.windup = 0;
+      b.recover = Math.max(b.recover, h.stun);
     }
     // Hitting any member sets the whole flock on the player; hitting the queen or her guard also
     // calls in the flock nearest the player after it.

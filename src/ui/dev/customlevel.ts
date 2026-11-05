@@ -1,4 +1,4 @@
-import { PERKS } from "../../attacks";
+import { SKILLS, SKILL_IDS, type SkillLevels } from "../../attacks/skills";
 import { boidType, BOID_TYPES, MEMBER_TYPES, type MemberTypeId } from "../../enemies";
 import type { ParamInput } from "../../enemies/types";
 import {
@@ -20,12 +20,29 @@ import { button, checkbox, copyButton, el, numberInput, select, slider } from ".
 
 // The custom level editor in the dev panel's Run section. A custom level is a LevelSpec: start
 // from an empty one or load a game template (as on a given level), then edit everything: the
-// planet, weapons, perks, modifiers, the queen and her escort, and the flocks with their members,
+// planet, the player's skills, modifiers, the queen and her escort, and the flocks with their members,
 // the members' params and the flocks' style. Copy turns a flock or the whole level into source.
 
 // ---------------------------------------------------------------------------------------------
 // Editor
 // ---------------------------------------------------------------------------------------------
+
+/** A step picker per skill (off, 1…its last step), editing `skills` in place. */
+export function skillInputs(skills: SkillLevels, changed: () => void) {
+  return el(
+    "div",
+    { className: "row wrap" },
+    ...SKILL_IDS.map((id) => {
+      const sk = SKILLS[id];
+      const steps: [string, string][] = [["0", "off"], ...sk.steps.map((_, i): [string, string] => [String(i + 1), String(i + 1)])];
+      const pick = select(steps, String(skills[id] ?? 0), (v) => {
+        skills[id] = Number(v);
+        changed();
+      });
+      return el("label", { className: "check", title: sk.steps.map((t, i) => `${i + 1}: ${t}`).join("\n") }, el("span", { textContent: sk.name }), pick);
+    }),
+  );
+}
 
 export interface CustomState {
   spec: LevelSpec;
@@ -97,33 +114,8 @@ export function customEditor(state: CustomState, changed: () => void, rerender: 
       "Queen's island",
       select(Object.entries(QUEEN_SPOTS) as [string, string][], s.queenSpot, (v) => ((s.queenSpot = v as QueenSpot), changed())),
     ),
-    el("h4", { textContent: "Weapons" }),
-    el(
-      "div",
-      { className: "row wrap" },
-      ...(["sword", "spear"] as const).map((w) =>
-        checkbox(w === "sword" ? "Sword" : "Spear", s.weapons.includes(w), (on) => {
-          s.weapons = on ? [...new Set([...s.weapons, w])] : s.weapons.filter((x) => x !== w);
-          changed();
-        }),
-      ),
-    ),
-    el("h4", { textContent: "Perks" }),
-    el(
-      "div",
-      { className: "row wrap" },
-      ...Object.values(PERKS).map((perk) =>
-        checkbox(
-          perk.name,
-          !!s.perks?.includes(perk.id),
-          (on) => {
-            s.perks = on ? [...new Set([...(s.perks ?? []), perk.id])] : (s.perks ?? []).filter((x) => x !== perk.id);
-            changed();
-          },
-          perk.blurb,
-        ),
-      ),
-    ),
+    el("h4", { textContent: "Skills" }),
+    skillInputs(s.skills, changed),
     el("h4", { textContent: "Modifiers" }),
     el(
       "div",

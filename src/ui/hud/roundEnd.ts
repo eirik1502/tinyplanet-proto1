@@ -37,7 +37,17 @@ export const roundEnd: HudWidget = {
     ctx.font = "13px system-ui, sans-serif";
     ctx.fillStyle = "rgba(240,232,255,0.7)";
     const left = Math.ceil(session.endTimeLeft);
-    const next = custom ? (session.run.kind === "scenario" ? "Restarting the scenario" : "Restarting the custom level") : win ? `Level ${level + 1}` : tutorial ? "Retrying the tutorial" : `Retrying level ${level}`;
+    const next = custom
+      ? session.run.kind === "scenario"
+        ? "Restarting the scenario"
+        : "Restarting the custom level"
+      : win
+        ? session.picksNext
+          ? "Choosing a skill"
+          : `Level ${level + 1}`
+        : tutorial
+          ? "Retrying the tutorial"
+          : `Retrying level ${level}`;
     ctx.fillText(`${next} in ${left}…  (${promptText("confirm")} to continue now)`, W / 2, H / 2 + 60);
     ctx.globalAlpha = 1;
   },

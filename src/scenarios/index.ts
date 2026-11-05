@@ -1,8 +1,12 @@
+import { SKILL_IDS, SKILLS, type SkillLevels } from "../attacks/skills";
 import { resolveFlock, MELEE_PACK, SKIRMISHERS, BOMBER_RUN, ROYAL_GUARD } from "../enemies/flocks";
 import type { Scenario } from "../game/scenario";
 import { TUTORIAL, TUTORIAL_BLURB, TUTORIAL_NAME, TUTORIAL_SEED } from "../levels/tutorial";
 
 // Scenarios for testing: a fixed planet with fixed enemies. Add one by adding an entry here.
+
+/** Every attack, not upgraded. */
+const ALL_ATTACKS: SkillLevels = { swipe: 1, thrust: 1, smash: 1, spear: 1 };
 
 /** No enemies to speak of: one far-off melee boid, so the round doesn't end. Jump around and tune the movement. */
 const movement: Scenario = {
@@ -19,7 +23,7 @@ const movement: Scenario = {
     queen: null,
     flocks: [resolveFlock({ name: "Lone boid", members: [{ type: "melee", count: 1 }], style: { aggroRange: 0, giveUpRange: 0 } })],
     modifiers: [],
-    weapons: ["sword", "spear"],
+    skills: ALL_ATTACKS,
   },
 };
 
@@ -38,7 +42,7 @@ const meleeDrill: Scenario = {
     queen: null,
     flocks: [resolveFlock(MELEE_PACK)],
     modifiers: [],
-    weapons: ["sword", "spear"],
+    skills: ALL_ATTACKS,
   },
 };
 
@@ -57,26 +61,26 @@ const mixed: Scenario = {
     queen: { params: { hp: 12 }, escort: resolveFlock(ROYAL_GUARD, () => 0.5) },
     flocks: [resolveFlock(MELEE_PACK), resolveFlock(SKIRMISHERS), resolveFlock(BOMBER_RUN)],
     modifiers: [],
-    weapons: ["sword", "spear"],
+    skills: ALL_ATTACKS,
   },
 };
 
-/** The perks on: try the upgrades. */
-const perks: Scenario = {
-  id: "perks",
-  name: "Perk test",
-  blurb: "Every perk, against a couple of melee packs.",
+/** Every skill maxed: try the upgrades. */
+const skills: Scenario = {
+  id: "skills",
+  name: "Skill test",
+  blurb: "Every skill maxed, against a couple of melee packs.",
   seed: 99,
   spec: {
     ...meleeDrill.spec,
     flocks: [resolveFlock(MELEE_PACK), resolveFlock(MELEE_PACK)],
-    perks: ["longBlade", "heavySmash", "quickSpear", "landingShockwave", "bounceBlast"],
+    skills: Object.fromEntries(SKILL_IDS.map((id) => [id, SKILLS[id].steps.length])),
   },
 };
 
 /** The tutorial on its own (it's also level 0 of a normal run). */
 const tutorial: Scenario = { id: "tutorial", name: TUTORIAL_NAME, blurb: TUTORIAL_BLURB, seed: TUTORIAL_SEED, spec: TUTORIAL };
 
-export const SCENARIOS: Scenario[] = [movement, meleeDrill, mixed, perks, tutorial];
+export const SCENARIOS: Scenario[] = [movement, meleeDrill, mixed, skills, tutorial];
 
 export const scenario = (id: string) => SCENARIOS.find((s) => s.id === id) ?? null;

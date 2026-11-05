@@ -101,9 +101,16 @@ export const LESSONS: Lesson[] = [
   },
   {
     id: "combo",
-    text: "{sword} {sword} {sword} keep hitting: swipe, lunge, smash",
+    text: "{sword} {sword} keep hitting: swipe, then lunge",
     after: ["sword"],
-    when: (w) => hasWeapon(w, "sword") && enemyDistance(w) < 300,
+    when: (w) => w.skill("thrust") > 0 && enemyDistance(w) < 300,
+    done: on("attack", (e) => e.weapon === "sword" && e.step === 2),
+  },
+  {
+    id: "smash",
+    text: "{sword} {sword} {sword} keep hitting: swipe, lunge, then smash",
+    after: ["combo"],
+    when: (w) => w.skill("smash") > 0 && enemyDistance(w) < 300,
     done: on("attack", (e) => e.weapon === "sword" && e.step === 3),
   },
   {

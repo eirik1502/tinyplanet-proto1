@@ -1,8 +1,9 @@
-import { BLAST_TIME, NET_TIME, type BlastRing, type NetLook, type StrikeLook } from "../present/vfx";
+import { BLAST_TIME, NET_TIME, type BlastRing, type HoleLook, type NetLook, type StrikeLook } from "../present/vfx";
 import { BLOBS, type Painter } from "./painter";
 import type { Scene, WorldLayer } from "./scene";
 
-// Effects from present/vfx: sword strikes playing out, shock rings, the safety net, sparks and dust.
+// Effects from present/vfx: sword strikes playing out, shock rings, the safety net, black holes,
+// sparks and dust.
 
 export const effectsLayer: WorldLayer = (p, s, out) => {
   const { ctx, proj } = p;
@@ -10,6 +11,7 @@ export const effectsLayer: WorldLayer = (p, s, out) => {
   for (const st of fx.strikes) out.push({ alt: st.alt + 0.5, draw: () => drawStrike(p, s, st) });
   for (const bl of fx.blasts) out.push({ alt: bl.alt, draw: () => drawBlast(p, bl) });
   for (const n of fx.nets) out.push({ alt: n.alt - 1, draw: () => drawNet(p, n) });
+  for (const h of fx.holes) out.push({ alt: h.alt, draw: () => drawHole(p, h) });
   for (const sp of fx.sparks) {
     out.push({
       alt: sp.alt,
@@ -122,6 +124,27 @@ function drawBlast(p: Painter, bl: BlastRing) {
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
   }
+}
+
+/** A black hole: a dark core swelling as rings close in on it from its pull radius. */
+function drawHole(p: Painter, h: HoleLook) {
+  const { ctx, proj } = p;
+  const c = proj.project(h.x, h.y, h.alt);
+  if (!c.visible) return;
+  const t = h.age / h.dur;
+  for (let i = 0; i < 3; i++) {
+    const u = (t * 2.5 + i / 3) % 1;
+    p.circlePath(h.x, h.y, h.alt, h.radius * (1 - u));
+    ctx.strokeStyle = `rgba(200,150,255,${0.6 * u})`;
+    ctx.lineWidth = Math.max(1, 3 * c.kt);
+    ctx.stroke();
+  }
+  p.circlePath(h.x, h.y, h.alt, 10 + 18 * t);
+  ctx.fillStyle = "rgba(20,0,40,0.85)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(220,180,255,0.9)";
+  ctx.lineWidth = Math.max(1, 2 * c.kt);
+  ctx.stroke();
 }
 
 /** The safety net: a glowing web that stretches under the player as it catches them, then fades. */

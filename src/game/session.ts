@@ -1,10 +1,11 @@
 import { EventBus } from "../core/events";
 import { mulberry32, nextSeed, type Rng } from "../core/rng";
+import { offer, START_SKILLS, type SkillId, type SkillLevels } from "../attacks/skills";
 import type { WeaponId } from "../attacks/types";
 import { boidType } from "../enemies";
 import { resolveParams, type BaseParams, type BoidType } from "../enemies/types";
 import { describeFlock } from "../enemies/flocks";
-import { earlyHelp, levelBase, MODIFIERS, planLevel, resolveLevel, UNLOCKS, weaponsAt, type LevelPlan, type LevelSpec, type LevelTemplate } from "../levels/levels";
+import { earlyHelp, levelBase, MODIFIERS, planLevel, resolveLevel, UNLOCKS, type LevelPlan, type LevelSpec, type LevelTemplate } from "../levels/levels";
 import type { Params } from "../params/store";
 import type { InputFrame } from "../input/types";
 import { TUTORIAL, TUTORIAL_BLURB, TUTORIAL_NAME, TUTORIAL_SEED } from "../levels/tutorial";
@@ -14,16 +15,18 @@ import { World } from "./world";
 // A session: what's being played, round after round. It picks each level (the progression, a
 // custom level or a scenario), makes a World for every round, and runs the screens around it:
 // the briefing before each level (also the pause screen), and the end of a round, after which a
-// win moves on to the next level and a defeat retries the level on a fresh planet. No DOM: the
-// browser shows the briefing when the session says so, and a headless run skips it.
+// win moves on to the next level and a defeat retries the level on a fresh planet. On a normal run
+// the player builds up skills: after each win (but the tutorial's) they pick one of a few offered,
+// and keep them through defeats until the run starts over. No DOM: the browser shows the briefing
+// and the pick when the session says so, and a headless run skips the briefing and picks at random.
 
 /** What a round plays: the normal progression from a level (0: the tutorial), a custom level, or a scenario. */
 export type Run =
-  | { kind: "normal"; level: number; template: LevelTemplate | null }
+  | { kind: "normal"; level: number; template: LevelTemplate | null; skills?: SkillLevels }
   | { kind: "custom"; spec: LevelSpec }
   | { kind: "scenario"; scenario: Scenario };
 
-export type SessionState = "briefing" | "play" | "victory" | "defeat";
+export type SessionState = "briefing" | "play" | "victory" | "defeat" | "pick";
 export type BriefingReason = "new" | "retry" | "pause";
 
 export interface SessionEvents {
@@ -32,6 +35,11 @@ export interface SessionEvents {
   roundStart: { world: World; arrival: "portal" | null };
   briefingOpen: { reason: BriefingReason };
   briefingClose: object;
+  /** Skills to pick one of, after a win. */
+  pickOpen: { offer: SkillId[] };
+  /** The highlighted one moved. */
+  pickChange: { choice: number };
+  pickClose: { skill: SkillId };
 }
 
 export interface BriefingEnemy {
@@ -52,10 +60,10 @@ export interface BriefingData {
   modifiers: { name: string; blurb: string }[];
   reason: BriefingReason;
   weapons: WeaponId[];
-  perks: { name: string; blurb: string }[];
+  skills: SkillLevels;
   /** A card per distinct enemy on the planet (type and params, as spawned), the queen first. */
   enemies: BriefingEnemy[];
-  /** Weapons and enemy types (by id) unlocked on this level. */
+  /** Enemy types and the skill (by id) new on this level. */
   fresh: string[];
 }
 
@@ -85,6 +93,14 @@ export class Session {
   spec: LevelSpec | null = null;
   world!: World;
   run!: Run;
+  /** The skills of a normal run so far. */
+  skills: SkillLevels = {};
+  /** On the pick screen: the skills offered, and which one is highlighted. */
+  offer: SkillId[] = [];
+  choice = 0;
+  /** The skill picked before this level, tagged new in its briefing. */
+  private picked: SkillId | null = null;
+  private pickMove = 0;
   private rand: Rng;
 
   /** Call `start` to begin (after subscribing to the session's events). */
@@ -109,6 +125,8 @@ export class Session {
     this.run = run;
     this.plan = null;
     this.spec = null;
+    this.skills = run.kind === "normal" ? { ...(run.skills ?? START_SKILLS) } : {};
+    this.picked = null;
     this.restart(run.kind === "normal" ? run.level : 1);
   }
 
@@ -136,7 +154,7 @@ export class Session {
       this.spec = {
         ...resolveLevel(this.plan.template, levelBase(level, this.params.world), {
           modifiers: this.plan.modifiers,
-          weapons: weaponsAt(level),
+          skills: this.skills,
           rand: this.rand,
         }),
         ...earlyHelp(level),
@@ -170,8 +188,51 @@ export class Session {
     this.events.emit("briefingClose", {});
   }
 
+  /** Whether winning this round leads to a pick. */
+  get picksNext() {
+    return this.run.kind === "normal" && !this.tutorial && offer(this.skills, () => 0).length > 0;
+  }
+
+  private openPick() {
+    this.offer = offer(this.skills, this.rand);
+    if (this.opts.skipBriefings) return this.choose(Math.floor(this.rand() * this.offer.length));
+    this.state = "pick";
+    this.choice = 0;
+    this.timer = 0;
+    this.pickMove = 0;
+    this.events.emit("pickOpen", { offer: this.offer });
+  }
+
+  /** Highlight another offered skill. */
+  highlight(i: number) {
+    if (this.state !== "pick" || i < 0 || i >= this.offer.length || i === this.choice) return;
+    this.choice = i;
+    this.events.emit("pickChange", { choice: i });
+  }
+
+  /** Take the `i`th skill offered, and go on to the next level. */
+  choose(i: number) {
+    const id = this.offer[i];
+    if (!id) return;
+    this.skills[id] = (this.skills[id] ?? 0) + 1;
+    this.picked = id;
+    this.offer = [];
+    if (this.state === "pick") this.events.emit("pickClose", { skill: id });
+    this.restart(this.level + 1);
+  }
+
   /** One frame of `dtReal` real seconds. */
   step(dtReal: number, input: InputFrame) {
+    if (this.state === "pick") {
+      // Left and right move the highlight, a press at a time; confirm takes it.
+      this.timer += dtReal;
+      const x = input.move.x;
+      const dir = x > 0.5 ? 1 : x < -0.5 ? -1 : 0;
+      if (dir && dir !== this.pickMove) this.highlight(this.choice + dir);
+      this.pickMove = dir;
+      if (this.timer > 0.4 && input.pressed.has("confirm")) this.choose(this.choice);
+      return;
+    }
     if (this.state === "briefing") {
       // The world is paused: only the briefing's own keys do anything.
       this.timer += dtReal;
@@ -192,7 +253,8 @@ export class Session {
       // Winning moves on to the next level; losing replays the same level on a fresh planet. A
       // custom level or scenario just starts over.
       if (this.timer > END_TIME || (this.timer > END_SKIP && input.pressed.has("confirm"))) {
-        this.restart(this.state === "victory" && !this.custom ? this.level + 1 : this.level, this.state === "defeat");
+        if (this.state === "victory" && this.picksNext) this.openPick();
+        else this.restart(this.state === "victory" && !this.custom ? this.level + 1 : this.level, this.state === "defeat");
       }
     }
   }
@@ -234,12 +296,12 @@ export class Session {
       modifiers: spec.modifiers.map((m) => MODIFIERS[m]),
       reason: this.briefing,
       weapons,
-      perks: w.loadout.perks,
+      skills: w.loadout.skills,
       enemies,
       fresh:
         this.briefing === "pause" || this.custom || this.level < 2
           ? []
-          : [...weapons, ...enemies.map((e) => e.type.id)].filter((x) => UNLOCKS[x] === this.level),
+          : [...enemies.map((e) => e.type.id).filter((x) => UNLOCKS[x] === this.level), ...(this.picked && this.briefing === "new" ? [this.picked] : [])],
     };
   }
 

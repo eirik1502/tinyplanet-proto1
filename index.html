@@ -88,6 +88,16 @@
     @media (prefers-reduced-motion: reduce) {
       #briefing .fresh, #briefing .fresh::after, #briefing .badge-new { animation: none !important; }
     }
+    #briefing .picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-top: 16px; }
+    #briefing .pick { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 14px 16px; text-align: center; font: inherit; color: inherit; transition: transform .12s, box-shadow .12s; }
+    #briefing .pick.unlock { --c: #8fe3ff; }
+    #briefing .pick.on { transform: translateY(-4px); box-shadow: 0 0 0 2px var(--c), 0 10px 30px rgba(0, 0, 0, .4); }
+    #briefing .pick .ability-icon { width: 52px; height: 52px; font-size: 30px; border-radius: 12px; }
+    #briefing .pick h3 { margin: 0; font-size: 18px; color: var(--c); }
+    #briefing .pick-tag { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: color-mix(in srgb, var(--c) 70%, #b9addf); }
+    #briefing .pips { letter-spacing: .2em; color: var(--c); font-size: 14px; }
+    #briefing .pick .ability-text { font-size: 13px; }
+    #briefing .pick .ability-input { margin: 0; }
     #briefing .hint { margin: 12px 0 0; color: #8d80bd; font-size: 12px; text-align: center; }
     #briefing .hint kbd { height: 17px; min-width: 17px; font-size: 10px; }
     #briefing .start { display: flex; justify-content: center; align-items: center; gap: 10px; width: 100%; margin-top: 12px; padding: 11px; border: 0; border-radius: 10px; background: #ffd34d; color: #2a1640; font-size: 16px; font-weight: 800; }

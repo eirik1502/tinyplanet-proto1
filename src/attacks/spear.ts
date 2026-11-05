@@ -10,7 +10,7 @@ export const THROW: AttackDef = {
   release(c) {
     const sp = c.stats("spear");
     const speed = lerp(sp.speed, sp.maxSpeed, c.power);
-    const scale = lerp(1, sp.maxScale, c.power);
+    const scale = lerp(1, sp.maxScale, c.power) * sp.size;
     c.spawn(
       {
         attack: "spear",
