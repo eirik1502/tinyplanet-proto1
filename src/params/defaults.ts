@@ -166,6 +166,8 @@ export const DEFAULTS = {
       size: 1, // Size (×)
       length: 46,
       pierce: 1, // Enemies it hits before it stops
+      falloff: 0.25, // Damage lost per enemy it went through (of the first hit's)
+      minDamage: 0.25, // Least damage after going through enemies (of the first hit's)
       flame: 0, // Flame from the tip (size, 0: none)
       cooldown: 0.45, // Cooldown (s)
     },
@@ -189,6 +191,7 @@ export const DEFAULTS = {
       speed: 1.45, // Step 3: speed (×)
       range: 1.5, // Step 3: range (×)
       size: 1.5, // Step 4: hit size and flame (×)
+      maxPierce: 3, // Step 4: enemies it hits
     },
     landing: {
       minSpeed: 250, // Step 1: least landing speed

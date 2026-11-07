@@ -18,7 +18,7 @@ export const THROW: AttackDef = {
         shape: { radius: sp.hitRadius * scale },
         damage: lerp(sp.damage, sp.maxDamage, c.power),
         active: Infinity,
-        projectile: { life: sp.life, scale, pierce: sp.pierce, flame: sp.flame },
+        projectile: { life: sp.life, scale, pierce: sp.pierce, falloff: sp.falloff, minDamage: sp.minDamage, flame: sp.flame },
       },
       { x: c.x + c.dx * 10, y: c.y + c.dy * 10, alt: c.alt, vx: c.dx * speed, vy: c.dy * speed, vz: 0 },
     );

@@ -121,7 +121,7 @@ const SPEAR: Skill = {
   name: "Spear",
   kind: "attack",
   icon: "spear",
-  steps: ["Spear", "The spear hits two enemies.", "The spear flies faster and further, aflame.", "The spear's flame is bigger, and it hits all on its way."],
+  steps: ["Spear", "Piercing arrow", "Faster and further", "Bigger and stronger"],
   modify(group, s, lv, params) {
     const k = params.skills.spear;
     if (group !== "spear") return;
@@ -134,7 +134,7 @@ const SPEAR: Skill = {
     // Bigger to hit and in flame, not the spear itself.
     if (lv >= 4) {
       scale(s, ["hitRadius", "flame"], k.size);
-      s.pierce = Infinity;
+      s.pierce = Math.max(s.pierce!, k.maxPierce);
     }
   },
 };

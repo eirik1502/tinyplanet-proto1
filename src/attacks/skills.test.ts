@@ -134,7 +134,7 @@ test("the instant thrust puts the player at the furthest enemy at once, striking
   expect(hits).toContain("far:sword.thrust");
 });
 
-test("the spear pierces two enemies at step 2, all on its way at step 4, and burns from step 3", () => {
+test("the spear pierces two enemies at step 2, five at step 4, each for less damage, and burns from step 3", () => {
   const params = makeParams();
   const throwThrough = (spear: number) => {
     const session = new Session(params, { skipBriefings: true, seed: 3 });
@@ -143,24 +143,25 @@ test("the spear pierces two enemies at step 2, all on its way at step 4, and bur
     for (const [o, h] of w.objects.query(Hurtable)) if (h.team === "swarm") w.objects.destroy(o);
     // A row of dummies ahead, then a spear thrown down it.
     const hit: number[] = [];
-    for (let i = 0; i < 4; i++) {
+    const damage: number[] = [];
+    for (let i = 0; i < 7; i++) {
       const o = w.objects.add(new GameObject("dummy"));
       Object.assign(o, { x: 1000 + 40 * i, y: 0, alt: 50 });
       o.add(Hurtable, {
         team: "swarm",
         hurtbox: () => ({ x: o.x, y: o.y, alt: o.alt, radius: 8 }),
         targetable: () => true,
-        hit: () => (hit.push(i), true),
+        hit: (h) => (hit.push(i), damage.push(h.damage), true),
         push: () => {},
       });
     }
     const sp = w.attacks.stats("spear");
     w.combat.spawnVolume(
-      { team: "player", owner: 0, attack: "spear", shape: { radius: sp.hitRadius }, damage: 1, power: 0, active: Infinity, age: 0, hits: new Set(), projectile: { life: 5, scale: 1, pierce: sp.pierce, flame: sp.flame } },
+      { team: "player", owner: 0, attack: "spear", shape: { radius: sp.hitRadius }, damage: 1, power: 0, active: Infinity, age: 0, hits: new Set(), projectile: { life: 5, scale: 1, pierce: sp.pierce, falloff: sp.falloff, minDamage: sp.minDamage, flame: sp.flame } },
       { x: 940, y: 0, alt: 50, vx: 300, vy: 0 },
     );
     for (let i = 0; i < 120; i++) w.combat.update(1 / 60);
-    return { hit, sp };
+    return { hit, damage, sp };
   };
   expect(throwThrough(1).hit).toEqual([0]);
   expect(throwThrough(1).sp.flame).toBe(0);
@@ -170,7 +171,9 @@ test("the spear pierces two enemies at step 2, all on its way at step 4, and bur
   expect(s3.sp.flame).toBeGreaterThan(0);
   expect(s3.sp.speed * s3.sp.life).toBeCloseTo(params.player.spear.speed * params.player.spear.life * params.skills.spear.range);
   const s4 = throwThrough(4);
-  expect(s4.hit).toEqual([0, 1, 2, 3]);
+  expect(s4.hit).toEqual([0, 1, 2, 3, 4]);
+  // 25% less each, down to 25%.
+  s4.damage.forEach((d, i) => expect(d).toBeCloseTo([1, 0.75, 0.5, 0.25, 0.25][i]!));
   expect(s4.sp.hitRadius).toBeCloseTo(params.player.spear.hitRadius * params.skills.spear.size);
   expect(s4.sp.size).toBe(params.player.spear.size);
 });

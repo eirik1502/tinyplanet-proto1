@@ -164,6 +164,8 @@ export const SLIDERS: Record<string, Slider> = {
   "player.spear.cooldown": ["Cooldown (s)", 0, 2, 0.02],
   "player.spear.size": ["Size (×)", 0.2, 4, 0.05],
   "player.spear.pierce": ["Enemies it hits", 1, 5, 1],
+  "player.spear.falloff": ["Damage lost per enemy gone through (×)", 0, 1, 0.05],
+  "player.spear.minDamage": ["Least damage after going through (×)", 0, 1, 0.05],
   "player.spear.flame": ["Flame from the tip (size, 0: none)", 0, 4, 0.05],
   "player.sword.knockback": ["Knockback (×)", 0, 5, 0.05],
 
@@ -178,6 +180,7 @@ export const SLIDERS: Record<string, Slider> = {
   "skills.spear.speed": ["Step 3: speed (×)", 1, 3, 0.05],
   "skills.spear.range": ["Step 3: range (×)", 1, 3, 0.05],
   "skills.spear.size": ["Step 4: hit size and flame (×)", 1, 4, 0.05],
+  "skills.spear.maxPierce": ["Step 4: enemies it hits", 1, 10, 1],
   "skills.landing.minSpeed": ["Step 1: least landing speed", 0, 1000, 10],
   "skills.landing.radius": ["Blast radius", 20, 400, 5],
   "skills.landing.damage": ["Blast damage (at the centre)", 0, 20, 0.5],

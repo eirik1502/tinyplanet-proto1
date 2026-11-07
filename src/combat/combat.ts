@@ -112,8 +112,10 @@ export class Combat {
       const hitbox = this.volumeBox(o, v);
       for (const [t, h] of this.targets(v.team)) {
         if (v.hits.has(t.id) || !this.overlaps(hitbox, h.hurtbox())) continue;
+        const pj = v.projectile;
+        const damage = v.damage * Math.max(pj.minDamage ?? 0, 1 - (pj.falloff ?? 0) * v.hits.size);
         v.hits.add(t.id);
-        h.hit({ damage: v.damage, fromX: o.x - o.vx * 0.05, fromY: o.y - o.vy * 0.05, source: v.owner, weapon: v.weapon, attack: v.attack });
+        h.hit({ damage, fromX: o.x - o.vx * 0.05, fromY: o.y - o.vy * 0.05, source: v.owner, weapon: v.weapon, attack: v.attack });
         if (v.hits.size >= (v.projectile.pierce ?? 1)) {
           this.w.objects.destroy(o);
           break;
