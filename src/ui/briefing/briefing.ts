@@ -1,17 +1,15 @@
-import { level, SKILLS, SKILL_IDS, type SkillIcon } from "../../attacks/skills";
+import { level, SKILLS, type SkillIcon, type SkillId, type SkillLevels } from "../../attacks/skills";
 import type { WeaponId } from "../../attacks/types";
-import type { BriefingData, BriefingEnemy } from "../../game/session";
+import type { BriefingData } from "../../game/session";
 import type { BrowserInput, InputMode } from "../../input/browser";
 import type { Action, Glyph } from "../../input/types";
 import type { Params } from "../../params/store";
 import { Avatar, type AvatarView } from "../../render/avatar";
-import { boidColor, drawBoidBody } from "../../render/sprites";
-import { CARDS } from "./cards";
 
-// The briefing shown before each level (and as the pause screen): input mode, a compact movement
-// strip, the player's card with the unlocked attacks and air abilities as its properties, and a
-// card per enemy on this level with its health and attack. Newly unlocked items are tagged.
-// Texts stay short: only what you can't easily learn by playing.
+// The briefing shown before each level (and as the pause screen): the goal and the level's
+// effects, a line with the input mode and the movement buttons, and the player's card with the
+// unlocked attacks and air abilities as its properties. Each skill is listed on what it upgrades.
+// Newly unlocked items are tagged. Texts stay short: only what you can't easily learn by playing.
 
 export interface BriefingInfo extends BriefingData {
   /** Play the appearance animation on new items (on opening, not on re-renders). */
@@ -95,17 +93,39 @@ const chip = (text: string, cls = "") => `<span class="chip ${cls}">${text}</spa
 // Content
 // ---------------------------------------------------------------------------------------------
 
+/** A skill's steps so far on the item it upgrades; `name` when it isn't the item's own skill. */
+interface Upgrade {
+  name?: string;
+  pips: string;
+  text: string;
+  fresh: boolean;
+}
+
 interface Ability {
   icon: string;
   name: string;
   text: string;
   stats: string[];
   input?: string;
+  upgrades?: Upgrade[];
   fresh?: boolean;
 }
 
+/** Skill `id`'s steps past `from` (what unlocks the item), if any. */
+function upgrade(skills: SkillLevels, fresh: string[], id: SkillId, from: number, name?: string): Upgrade[] {
+  const sk = SKILLS[id];
+  const lv = level(skills, id);
+  if (lv <= from) return [];
+  return [{ name, pips: pips(lv, sk.steps.length), text: sk.steps.slice(from, lv).join(" "), fresh: fresh.includes(id) }];
+}
+
 function ability(a: Ability) {
-  const f = freshMark(!!a.fresh);
+  const f = freshMark(!!a.fresh || !!a.upgrades?.some((u) => u.fresh));
+  const ups = a.upgrades?.length
+    ? `<ul class="upgrades">${a.upgrades
+        .map((u) => `<li class="${u.fresh ? "new" : ""}"><span class="pips">${u.pips}</span>${u.name ? `<b>${u.name}</b> ` : ""}${u.text}</li>`)
+        .join("")}</ul>`
+    : "";
   return `
     <div class="ability${f.cls}" style="${f.style}">
       ${f.badge}
@@ -113,32 +133,50 @@ function ability(a: Ability) {
       <div class="ability-body">
         <div class="ability-head"><b>${a.name}</b>${a.stats.map((s) => chip(s)).join("")}${a.input ? `<span class="ability-input">${a.input}</span>` : ""}</div>
         <div class="ability-text">${a.text}</div>
+        ${ups}
       </div>
     </div>`;
 }
 
 function playerCard(b: BriefingInfo) {
   const params = b.params;
-  const sw = params.player.sword;
-  const sp = params.player.spear;
+  const { skills, fresh } = b;
+  const pl = params.player;
+  const dmg = (g: { damage: number; maxDamage: number }) => `${fmt(g.damage)}–${fmt(g.maxDamage)} dmg`;
+  const unlocked = (id: SkillId) => fresh.includes(id) && level(skills, id) === 1;
   const attacks: Ability[] = [];
-  if (b.weapons.includes("sword"))
+  if (b.weapons.includes("sword")) {
     attacks.push({
       icon: ICONS.sword,
       name: "Sword",
-      text: `Hold to power up. Bounce on aerial hits.${level(b.skills, "thrust") ? ` Hit to chain a lunging thrust${level(b.skills, "smash") ? ", then a smash" : ""}.` : ""}`,
-      stats: [`${fmt(sw.damage)}–${fmt(sw.maxDamage)} dmg`, `${fmt(sw.cooldown)}s recharge`],
+      text: "Hold to power up. Bounce on aerial hits.",
+      stats: [dmg(pl.sword), `${fmt(pl.sword.cooldown)}s recharge`],
       input: buttons("sword"),
-      fresh: (["thrust", "smash"] as const).some((id) => b.fresh.includes(id) && level(b.skills, id) === 1),
+      upgrades: upgrade(skills, fresh, "swipe", 1),
     });
+    // The chained strikes: attacks of their own.
+    for (const id of ["thrust", "smash"] as const) {
+      if (!level(skills, id)) continue;
+      const sk = SKILLS[id];
+      attacks.push({
+        icon: skillIcon(sk.icon),
+        name: sk.name,
+        text: sk.steps[0]!,
+        stats: [dmg(pl[id])],
+        upgrades: upgrade(skills, fresh, id, 1),
+        fresh: unlocked(id),
+      });
+    }
+  }
   if (b.weapons.includes("spear"))
     attacks.push({
       icon: ICONS.spear,
       name: "Spear",
       text: "Hold to power up. Thrown.",
-      stats: [`${fmt(sp.damage)}–${fmt(sp.maxDamage)} dmg`, `${fmt(sp.cooldown)}s recharge`],
+      stats: [dmg(pl.spear), `${fmt(pl.spear.cooldown)}s recharge`],
       input: buttons("spear"),
-      fresh: b.fresh.includes("spear") && level(b.skills, "spear") === 1,
+      upgrades: upgrade(skills, fresh, "spear", 1),
+      fresh: unlocked("spear"),
     });
   const passives: Ability[] = [
     {
@@ -147,12 +185,14 @@ function playerCard(b: BriefingInfo) {
       text: "Refills on aerial hits.",
       stats: ["1 per flight"],
       input: `${buttons("jump")}<span class="or">in air</span>`,
+      upgrades: upgrade(skills, fresh, "jumpForce", 0, SKILLS.jumpForce.name),
     },
     {
       icon: ICONS.net,
       name: "Safety bounce",
       text: "Springs you back up from your first dip below the rim.",
       stats: ["1 per flight"],
+      upgrades: upgrade(skills, fresh, "safetyDoom", 0, SKILLS.safetyDoom.name),
     },
     {
       icon: ICONS.focus,
@@ -161,13 +201,10 @@ function playerCard(b: BriefingInfo) {
       stats: [`${fmt(1 / params.player.focus.drain)}s budget`],
     },
   ];
-  // Skills past what they unlock: their upgrades so far.
-  for (const id of SKILL_IDS) {
-    const sk = SKILLS[id];
-    const lv = level(b.skills, id);
-    const from = sk.kind === "attack" ? 1 : 0;
-    if (lv <= from) continue;
-    passives.push({ icon: skillIcon(sk.icon), name: sk.name, text: sk.steps.slice(from, lv).join(" "), stats: [pips(lv, sk.steps.length)], fresh: b.fresh.includes(id) });
+  // Passive skills with nothing to upgrade: abilities of their own.
+  if (level(skills, "landing")) {
+    const sk = SKILLS.landing;
+    passives.push({ icon: skillIcon(sk.icon), name: sk.name, text: sk.steps[0]!, stats: [], upgrades: upgrade(skills, fresh, "landing", 1), fresh: unlocked("landing") });
   }
   const h = params.player.health;
   return `
@@ -183,26 +220,6 @@ function playerCard(b: BriefingInfo) {
         <section><h4>Attacks</h4><div class="abilities attacks">${attacks.map(ability).join("")}</div></section>
         <section><h4>Abilities</h4><div class="abilities passives">${passives.map(ability).join("")}</div></section>
       </div>
-    </article>`;
-}
-
-function enemyCard(e: BriefingEnemy, i: number, b: BriefingInfo) {
-  const { type, params: p } = e;
-  const f = freshMark(b.fresh.includes(type.id));
-  const queen = type.id === "queen";
-  return `
-    <article class="unit enemy${queen ? " queen" : ""}${f.cls}" style="--c:${boidColor(type.id)};${f.style}">
-      ${f.badge}
-      <header>
-        <canvas class="portrait" data-portrait="${i}"></canvas>
-        <div>
-          <h3>${type.name}</h3>
-          <div class="stats">${chip(`${ICONS.heart}${fmt(p.hp)} HP`, "hp")}${p.size !== 1 ? chip(`size ×${fmt(p.size)}`) : ""}</div>
-        </div>
-      </header>
-      <div class="abilities">${(CARDS[type.id]?.(p) ?? [])
-        .map((a) => ability({ ...a, icon: ICONS[a.icon] }))
-        .join("")}</div>
     </article>`;
 }
 
@@ -223,59 +240,40 @@ export function briefingHtml(b: BriefingInfo): string {
   return `
     <div class="sheet${b.animate ? " intro" : ""}">
       <header class="top">
-        <div>
-          <h1>${title}${b.template ? `<span class="template"> · ${b.template.name}</span>` : ""}${b.template?.boss ? `<span class="boss">Boss</span>` : ""}</h1>
-          ${b.template ? `<p class="blurb">${b.template.blurb}</p>` : ""}
-          ${
-            b.modifiers.length
-              ? `<ul class="modifiers">${b.modifiers.map((m) => `<li><b>${m.name}</b> ${m.blurb}</li>`).join("")}</ul>`
-              : ""
-          }
-          <p class="goal">${ICONS.crown}${b.goal}</p>
-        </div>
+        <h1>${title}${b.template ? `<span class="template"> – ${b.template.name}</span>` : ""}${b.template?.boss ? `<span class="boss">Boss</span>` : ""}</h1>
+        <ul class="modifiers">
+          <li class="goal">${ICONS.crown}${b.goal}</li>
+          ${b.modifiers.map((m) => `<li><b>${m.name}</b> ${m.blurb}</li>`).join("")}
+        </ul>
+      </header>
+      <section class="controls">
         <div class="modes" role="group" aria-label="Input mode">
           ${modeButton("keyboard", `${ICONS.keyboard}Keyboard`)}
           ${modeButton("mouse", `${ICONS.keyboard}+${ICONS.mouse}Mouse`)}
           ${modeButton("gamepad", `${ICONS.gamepad}Gamepad`)}
           ${buttons("switchMode")}
         </div>
-      </header>
-      <section class="moves">
         ${moves.map(([k, t]) => `<div class="move"><span class="keys">${k}</span><span>${t}</span></div>`).join("")}
       </section>
-      <div class="units">
-        ${playerCard(b)}
-        <div class="enemies">${b.enemies.map((e, i) => enemyCard(e, i, b)).join("")}</div>
-      </div>
+      ${playerCard(b)}
       <p class="hint">${buttons("mute")} mutes · ${buttons("pause")} pauses</p>
       <button class="start" data-start>${b.reason === "pause" ? "Resume" : "Start"} <span>${buttons("confirm", " ")}</span></button>
     </div>`;
 }
 
 // ---------------------------------------------------------------------------------------------
-// Portraits: the in-game sprites, drawn into the cards' canvases
+// Portraits: the in-game sprite, drawn into the card's canvas
 // ---------------------------------------------------------------------------------------------
 
 /** Paint every `canvas[data-portrait]` under `root`. */
-export function paintPortraits(root: HTMLElement, weapons: WeaponId[], enemies: BriefingEnemy[]) {
+export function paintPortraits(root: HTMLElement, weapons: WeaponId[]) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   for (const c of Array.from(root.querySelectorAll<HTMLCanvasElement>("canvas[data-portrait]"))) {
     const size = c.clientWidth || 64;
     c.width = c.height = Math.round(size * dpr);
     const ctx = c.getContext("2d")!;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const which = c.dataset.portrait!;
-    const enemy = enemies[Number(which)];
-    if (which === "player") paintPlayer(ctx, size, weapons);
-    else if (enemy) {
-      const queen = enemy.type.id === "queen";
-      const k = (size / 64) * (queen ? 1 : 2.6);
-      // The queen's body sits behind her head: shift her down to centre it.
-      ctx.translate(size / 2, size / 2 + (queen ? 6 * k : 0));
-      // Portraits show every variant at the usual size; the card lists its size.
-      const look = { id: 1, heading: -Math.PI / 2, phase: 0.06, lunge: 0, cooldown: 0, windup: 0, recover: 0, flash: 0, flock: { engaged: true } };
-      drawBoidBody(ctx, enemy.type, { ...look, params: { ...enemy.params, size: 1 } }, k);
-    }
+    if (c.dataset.portrait === "player") paintPlayer(ctx, size, weapons);
   }
 }
 

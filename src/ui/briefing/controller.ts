@@ -11,7 +11,7 @@ export function mountBriefing(el: HTMLElement, session: Session, input: BrowserI
     const data = session.briefingData();
     el.innerHTML = briefingHtml({ ...data, animate, params: session.params });
     el.hidden = false;
-    paintPortraits(el, data.weapons, data.enemies);
+    paintPortraits(el, data.weapons);
   };
   session.events.on("briefingOpen", () => show(true));
   session.events.on("briefingClose", () => {

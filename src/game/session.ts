@@ -2,13 +2,11 @@ import { EventBus } from "../core/events";
 import { mulberry32, nextSeed, type Rng } from "../core/rng";
 import { offer, START_SKILLS, type SkillId, type SkillLevels } from "../attacks/skills";
 import type { WeaponId } from "../attacks/types";
-import { boidType } from "../enemies";
-import { resolveParams, type BaseParams, type BoidType } from "../enemies/types";
 import { describeFlock } from "../enemies/flocks";
-import { earlyHelp, levelBase, MODIFIERS, planLevel, resolveLevel, UNLOCKS, type LevelPlan, type LevelSpec, type LevelTemplate } from "../levels/levels";
+import { earlyHelp, levelBase, MODIFIERS, planLevel, resolveLevel, type LevelPlan, type LevelSpec, type LevelTemplate } from "../levels/levels";
 import type { Params } from "../params/store";
 import type { InputFrame } from "../input/types";
-import { TUTORIAL, TUTORIAL_BLURB, TUTORIAL_NAME, TUTORIAL_SEED } from "../levels/tutorial";
+import { TUTORIAL, TUTORIAL_NAME, TUTORIAL_SEED } from "../levels/tutorial";
 import type { Scenario } from "./scenario";
 import { World } from "./world";
 
@@ -42,17 +40,12 @@ export interface SessionEvents {
   pickClose: { skill: SkillId };
 }
 
-export interface BriefingEnemy {
-  type: BoidType<BaseParams>;
-  params: BaseParams;
-}
-
 /** What the briefing shows. */
 export interface BriefingData {
   level: number;
   /** Replaces "Level n" in the title. */
   heading?: string;
-  template: { name: string; blurb: string; boss: boolean } | null;
+  template: { name: string; boss: boolean } | null;
   /** How to win, in a few words. */
   goal: string;
   /** Falling into the haze doesn't hurt on this level. */
@@ -61,9 +54,7 @@ export interface BriefingData {
   reason: BriefingReason;
   weapons: WeaponId[];
   skills: SkillLevels;
-  /** A card per distinct enemy on the planet (type and params, as spawned), the queen first. */
-  enemies: BriefingEnemy[];
-  /** Enemy types and the skill (by id) new on this level. */
+  /** The skill (by id) new on this level. */
   fresh: string[];
 }
 
@@ -278,51 +269,25 @@ export class Session {
     const w = this.world;
     const spec = this.spec!;
     const weapons = w.attacks.weapons.map((x) => x.id);
-    const enemies = this.briefingEnemies();
     const run = this.run;
     return {
       level: this.level,
       heading: run.kind === "scenario" ? run.scenario.name : this.custom ? "Dev" : this.tutorial ? "Tutorial" : undefined,
       template:
         this.tutorial
-          ? { name: TUTORIAL_NAME, blurb: TUTORIAL_BLURB, boss: false }
+          ? { name: TUTORIAL_NAME, boss: false }
           : run.kind === "scenario"
-          ? { name: "Scenario", blurb: run.scenario.blurb, boss: false }
+          ? { name: "Scenario", boss: false }
           : this.custom
-            ? { name: "Custom level", blurb: "Set up in the dev panel.", boss: false }
-            : this.plan && { name: this.plan.template.name, blurb: this.plan.template.blurb, boss: !!this.plan.template.boss },
+            ? { name: "Custom level", boss: false }
+            : this.plan && { name: this.plan.template.name, boss: !!this.plan.template.boss },
       goal: w.portal ? "Beat every boid, then take the portal" : w.swarm.queen ? "Beat the queen, then follow her through her portal" : "Kill every boid",
       noFallDamage: !!spec.noFallDamage,
       modifiers: spec.modifiers.map((m) => MODIFIERS[m]),
       reason: this.briefing,
       weapons,
       skills: w.loadout.skills,
-      enemies,
-      fresh:
-        this.briefing === "pause" || this.custom || this.level < 2
-          ? []
-          : [...enemies.map((e) => e.type.id).filter((x) => UNLOCKS[x] === this.level), ...(this.picked && this.briefing === "new" ? [this.picked] : [])],
+      fresh: this.briefing === "new" && !this.custom && this.picked ? [this.picked] : [],
     };
-  }
-
-  private briefingEnemies(): BriefingEnemy[] {
-    const { planet, rules } = this.world;
-    const out: BriefingEnemy[] = [];
-    const seen = new Set<string>();
-    const add = (e: BriefingEnemy) => {
-      const key = `${e.type.id}:${JSON.stringify(e.params)}`;
-      if (!seen.has(key)) out.push(e);
-      seen.add(key);
-    };
-    if (planet.queen) add({ type: boidType("queen"), params: resolveParams(boidType("queen"), planet.queen.params) });
-    const flocks = [...(planet.queen ? [planet.queen.escort] : []), ...planet.flocks.map((f) => f.spec)];
-    for (const f of flocks)
-      for (const m of f.members) {
-        if (m.count < 1) continue;
-        const type = boidType(m.type);
-        const p = resolveParams(type, m.params);
-        add({ type, params: { ...p, hp: Math.max(1, Math.round(p.hp * rules.swarm.hp)), size: p.size * rules.swarm.size } });
-      }
-    return out;
   }
 }

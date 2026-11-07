@@ -5,7 +5,7 @@ import type { Boid } from "./boid";
 // Boid types: each kind of enemy is one template, in its own file, with its own params (base
 // params every boid has, plus its own) and its behaviour. A boid is an instance of a type with
 // resolved params (the type's defaults with any overrides). How a type looks lives in
-// render/sprites, and its briefing card in ui/briefing/cards.
+// render/sprites.
 
 /** Params every boid type has: the generic code (hits, hurtboxes, flocking, budgets) uses these. */
 export interface BaseParams {
@@ -109,5 +109,3 @@ export function resolveParams<P extends BaseParams>(t: BoidType<P>, over: Partia
   for (const [k, v] of Object.entries(over)) if (k in p && typeof v === "number" && Number.isFinite(v)) (p as unknown as Record<string, number>)[k] = v;
   return p;
 }
-
-export const fmt = (v: number) => String(Math.round(v * 10) / 10);
