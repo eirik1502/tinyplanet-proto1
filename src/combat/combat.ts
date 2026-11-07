@@ -36,6 +36,11 @@ export class Combat {
     return o;
   }
 
+  /** The damage of `v`'s next hit, less for each it has landed already. */
+  private nextDamage(v: HitVolume) {
+    return v.damage * Math.max(v.minDamage ?? 0, 1 - (v.falloff ?? 0) * v.hits.size);
+  }
+
   volumeBox(o: GameObject, v: HitVolume): Hitbox {
     return { ...v.shape, x: o.x, y: o.y, alt: o.alt };
   }
@@ -91,8 +96,9 @@ export class Combat {
       const hitbox = this.volumeBox(o, v);
       for (const [t, h] of this.targets(v.team)) {
         if (v.hits.has(t.id) || !this.overlaps(hitbox, h.hurtbox())) continue;
+        const damage = this.nextDamage(v);
         v.hits.add(t.id);
-        h.hit({ damage: v.damage, fromX: o.x, fromY: o.y, source: v.owner, weapon: v.weapon, attack: v.attack, step: v.step, knockback: v.knockback });
+        h.hit({ damage, fromX: o.x, fromY: o.y, source: v.owner, weapon: v.weapon, attack: v.attack, step: v.step, knockback: v.knockback });
       }
       if (!v.blocks) continue;
       for (const [s, sv] of volumes) {
@@ -113,8 +119,7 @@ export class Combat {
       const hitbox = this.volumeBox(o, v);
       for (const [t, h] of this.targets(v.team)) {
         if (v.hits.has(t.id) || !this.overlaps(hitbox, h.hurtbox())) continue;
-        const pj = v.projectile;
-        const damage = v.damage * Math.max(pj.minDamage ?? 0, 1 - (pj.falloff ?? 0) * v.hits.size);
+        const damage = this.nextDamage(v);
         v.hits.add(t.id);
         h.hit({ damage, fromX: o.x - o.vx * 0.05, fromY: o.y - o.vy * 0.05, source: v.owner, weapon: v.weapon, attack: v.attack });
         if (v.hits.size >= (v.projectile.pierce ?? 1)) {

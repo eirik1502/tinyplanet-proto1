@@ -104,6 +104,11 @@ export class AttackController {
     return this.lunge !== null || this.armor > 0;
   }
 
+  /** Armor for at least `t` more seconds (world time), from something other than an attack. */
+  armorFor(t: number) {
+    this.armor = Math.max(this.armor, t);
+  }
+
   /** Power 0..1 of the attack being aimed. */
   power() {
     return this.aim ? Math.min(1, this.aim.t / this.stats("aim").chargeTime) : 0;

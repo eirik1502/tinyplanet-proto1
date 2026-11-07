@@ -224,13 +224,14 @@ export const DEFAULTS = {
       growth: 1.5, // Step 3: pull radius, blast (×)
     },
     jumpForce: {
-      length: 90, // Strike reach ahead
-      width: 70, // Strike width
-      damage: 1, // Damage
+      radius: 8, // Strike radius around the player (on top of the enemy's body)
+      time: 0.35, // Strike lasts (s), with armor as long
+      damage: 0.5, // Damage
+      falloff: 0.25, // Less damage each further hit (of the first's)
+      minDamage: 0.25, // Least damage (of the first's)
       push: 450, // Knockback aside
-      speed: 1.4, // Step 2: double jump speed (×)
-      growth: 1.5, // Step 3: reach and width (×)
-      pushUp: 1.6, // Step 3: knockback (×)
+      growth: 1.5, // Step 2: strike radius (×)
+      speed: 1.4, // Step 3: double jump speed (×)
     },
   },
   combat: {

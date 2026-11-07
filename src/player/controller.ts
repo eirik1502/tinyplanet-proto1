@@ -56,7 +56,7 @@ export class PlayerController {
       push: (vx, vy, vz, hard) => this.push(vx, vy, vz, hard),
     });
     // The player's own hits: hit-stop and a chance to turn after sword hits; in the air they refill the
-    // double jump and some focus, and sword hits bounce the player up.
+    // double jump (except the double jump's own strike) and some focus, and sword hits bounce the player up.
     w.events.on("hit", (e) => this.onOwnHit(e.weapon, e.damage), { source: p.id, owner: p.lifetime });
     this.reset();
   }
@@ -167,7 +167,8 @@ export class PlayerController {
       if (p.mode === "air" && !p.turn) p.turnWindow = w.params.move.turn.window;
     }
     if (p.mode !== "air") return;
-    p.airJumps = 1;
+    // The double jump's own strike doesn't give it back.
+    if (weapon !== "jumpForce") p.airJumps = 1;
     p.focus = Math.min(1, p.focus + w.params.player.focus.perHit);
     if (weapon === "sword") {
       p.vz = Math.max(p.vz, w.params.move.airJump.bounce);

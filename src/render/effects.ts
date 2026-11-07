@@ -3,7 +3,7 @@ import { BLOBS, type Painter } from "./painter";
 import type { Scene, WorldLayer } from "./scene";
 
 // Effects from present/vfx: sword strikes playing out, shock rings, the safety net, black holes,
-// sparks, embers and dust.
+// sparks, embers (and frost sparkles) and dust.
 
 export const effectsLayer: WorldLayer = (p, s, out) => {
   const { ctx, proj } = p;
@@ -33,18 +33,25 @@ export const effectsLayer: WorldLayer = (p, s, out) => {
       draw: () => {
         const pr = proj.project(e.x, e.y, e.alt);
         if (!pr.visible) return;
-        // Cools from yellow-white through orange to red as it fades, twinkling.
+        // Cools from yellow-white through orange to red as it fades (frost: white to blue), twinkling.
         const u = e.age / e.life;
         const flicker = 0.6 + 0.4 * Math.sin(e.age * 40 + e.seed);
         const r = Math.max(0.8, 1.8 * e.size * pr.kt * (1 - 0.5 * u));
         ctx.globalCompositeOperation = "lighter";
         ctx.globalAlpha = (1 - u) * flicker;
         const g = ctx.createRadialGradient(pr.x, pr.y, 0, pr.x, pr.y, r * 3);
-        g.addColorStop(0, `rgba(255,${Math.round(160 - u * 100)},40,0.5)`);
-        g.addColorStop(1, "rgba(200,40,0,0)");
+        if (e.frost) {
+          g.addColorStop(0, `rgba(${Math.round(140 - u * 80)},220,255,0.5)`);
+          g.addColorStop(1, "rgba(40,120,255,0)");
+        } else {
+          g.addColorStop(0, `rgba(255,${Math.round(160 - u * 100)},40,0.5)`);
+          g.addColorStop(1, "rgba(200,40,0,0)");
+        }
         ctx.fillStyle = g;
         ctx.fillRect(pr.x - r * 3, pr.y - r * 3, r * 6, r * 6);
-        ctx.fillStyle = `rgb(255,${Math.round(240 - u * 170)},${Math.round(150 - u * 140)})`;
+        ctx.fillStyle = e.frost
+          ? `rgb(${Math.round(240 - u * 150)},${Math.round(250 - u * 60)},255)`
+          : `rgb(255,${Math.round(240 - u * 170)},${Math.round(150 - u * 140)})`;
         ctx.beginPath();
         ctx.arc(pr.x, pr.y, r, 0, Math.PI * 2);
         ctx.fill();

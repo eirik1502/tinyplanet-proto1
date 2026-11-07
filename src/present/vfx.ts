@@ -3,8 +3,8 @@ import type { World } from "../game/world";
 import { boidColor } from "../render/sprites";
 import { ISLAND_TOP } from "../world/island";
 
-// Visual effects: hit sparks, shock rings, sword strikes fading out, dust, and the embers a burning
-// spear leaves along its way. None of it affects
+// Visual effects: hit sparks, shock rings, sword strikes fading out, dust, the embers a burning
+// spear and the double jump's frost flame leave along their way. None of it affects
 // play: it's built from the world's events and the player's state, after each step, and only the
 // renderer reads it.
 
@@ -19,7 +19,10 @@ export interface Spark {
   color: string;
 }
 
-/** An ember left by a burning spear: it drifts up, flickers, and cools from yellow to red. */
+/**
+ * An ember left by a burning spear: it drifts up, flickers, and cools from yellow to red. A `frost`
+ * one (the double jump's flame) fades from white to blue instead.
+ */
 export interface Ember {
   x: number;
   y: number;
@@ -31,6 +34,7 @@ export interface Ember {
   life: number;
   size: number;
   seed: number;
+  frost?: boolean;
 }
 
 /** An expanding shock ring: a bomber's explosion, the queen's blast, the smash. */
@@ -95,7 +99,24 @@ export const NET_TIME = 0.7;
 /** How long a shock ring shows (s). */
 export const BLAST_TIME = 0.45;
 
-const BLAST_LOOKS: Record<string, string> = { landing: "200,240,255", safetyDoom: "200,150,255", jumpForce: "160,235,255" };
+const BLAST_LOOKS: Record<string, string> = { landing: "200,240,255", safetyDoom: "200,150,255" };
+
+/** How big the double jump's frost flame burns at each step of its skill. */
+const JUMP_FLAME = [0, 0.9, 1.2, 1.5];
+
+/** How big the double jump's frost flame burns with skill step `step`, the whole time the strike is on. */
+export function jumpFlameSize(step: number) {
+  return JUMP_FLAME[step] ?? 1.5;
+}
+
+/** The double jump's flame sheds this many times the embers a burning spear does. */
+const JUMP_EMBERS = 4;
+
+/** Where the double jump's flame burns from: ahead of the player, along the flight, so it shows past the body. */
+export function jumpFlameTip(o: { x: number; y: number; alt: number; vx: number; vy: number }) {
+  const sp = Math.hypot(o.vx, o.vy) || 1;
+  return { x: o.x + (o.vx / sp) * 20, y: o.y + (o.vy / sp) * 20, alt: o.alt, vx: o.vx, vy: o.vy };
+}
 
 /** The safety bounce's black hole, pulling in until it blows up. */
 export interface HoleLook {
@@ -213,7 +234,10 @@ export class Vfx {
   /** Age everything by world time `dt`; kick up dust while the player slides along a rim. */
   update(w: World, dt: number) {
     const p = w.player;
-    for (const [o, v] of w.objects.query(HitVolume)) if (v.projectile?.flame) this.emitEmbers(o, v.projectile.scale, v.projectile.flame, dt);
+    for (const [o, v] of w.objects.query(HitVolume)) {
+      if (v.projectile?.flame) this.emitEmbers(o, v.projectile.scale, v.projectile.flame, dt);
+      if (v.attack === "jumpForce") this.emitEmbers(jumpFlameTip(p), 1, jumpFlameSize(w.skill("jumpForce")), dt, true);
+    }
     for (let i = this.embers.length - 1; i >= 0; i--) {
       const e = this.embers[i]!;
       e.x += e.vx * dt;
@@ -278,12 +302,12 @@ export class Vfx {
     }
   }
 
-  /** Embers along the way a burning projectile flew this step, about one per few units, more the bigger its flame. */
-  private emitEmbers(o: { x: number; y: number; alt: number; vx: number; vy: number }, scale: number, flame: number, dt: number) {
+  /** Embers along the way a burning projectile (or the double jump's `frost` flame) flew this step, about one per few units, more the bigger its flame. */
+  private emitEmbers(o: { x: number; y: number; alt: number; vx: number; vy: number }, scale: number, flame: number, dt: number, frost = false) {
     const speed = Math.hypot(o.vx, o.vy) || 1;
     const ux = o.vx / speed;
     const uy = o.vy / speed;
-    const n = (speed * dt * flame) / 5;
+    const n = ((speed * dt * flame) / 5) * (frost ? JUMP_EMBERS : 1);
     const count = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0);
     for (let i = 0; i < count; i++) {
       // Somewhere between the tip's last step and the flame's tail, a little either side.
@@ -302,6 +326,7 @@ export class Vfx {
         life: 0.2 + Math.random() * 0.3,
         size: (0.7 + Math.random() * 0.6) * Math.sqrt(flame * scale),
         seed: Math.random() * 100,
+        frost,
       });
     }
   }

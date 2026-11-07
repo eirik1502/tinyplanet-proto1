@@ -2,6 +2,7 @@ import { HitVolume } from "../combat/components";
 import { outOfHitHeight } from "../combat/hitbox";
 import type { Boid } from "../enemies/boid";
 import type { QueenParams } from "../enemies/queen";
+import { jumpFlameSize, jumpFlameTip } from "../present/vfx";
 import { ISLAND_TOP } from "../world/island";
 import { BLOBS, type Painter } from "./painter";
 import { OUT_OF_HEIGHT_ALPHA, type Scene, type WorldLayer } from "./scene";
@@ -26,6 +27,20 @@ export const playerLayer: WorldLayer = (p, s, out) => {
   if (pl.mode === "air" && s.session.state === "play") out.push({ alt: ISLAND_TOP + 0.7, draw: () => drawHeightMarker(p, s) });
   // While hanging, sort above the lip so the hands overlap the grass edge.
   out.push({ alt: pl.mode === "hang" ? ISLAND_TOP + 0.8 : v.alt, draw: () => drawPlayer(p, s) });
+  // The double jump's strike: a frost flame burning from just ahead of the player, streaming back
+  // under them, so the somersault shows through.
+  for (const [, hv] of s.world.objects.query(HitVolume)) {
+    if (hv.attack !== "jumpForce") continue;
+    out.push({
+      alt: v.alt - 0.1,
+      draw: () => {
+        const t = jumpFlameTip({ x: v.x, y: v.y, alt: v.alt, vx: pl.vx, vy: pl.vy });
+        const tip = p.proj.project(t.x, t.y, t.alt);
+        const neck = p.proj.project(v.x, v.y, t.alt);
+        if (tip.visible) drawFlame(p.ctx, tip, neck, jumpFlameSize(s.world.skill("jumpForce")) * tip.kt, pl.id, true);
+      },
+    });
+  }
 };
 
 /**
@@ -174,9 +189,10 @@ function drawQueenWarning(p: Painter, q: Boid) {
 
 /**
  * A flame burning from the spear's tip and streaming back past its head, `size` big on screen.
- * Flickers by `seed`, so spears in flight don't burn alike.
+ * Flickers by `seed`, so spears in flight don't burn alike. `frost`: white to blue (the double
+ * jump's), not yellow to red.
  */
-function drawFlame(ctx: CanvasRenderingContext2D, tip: { x: number; y: number }, neck: { x: number; y: number }, size: number, seed: number) {
+function drawFlame(ctx: CanvasRenderingContext2D, tip: { x: number; y: number }, neck: { x: number; y: number }, size: number, seed: number, frost = false) {
   const t = performance.now() / 1000 + seed * 1.7;
   const dl = Math.hypot(tip.x - neck.x, tip.y - neck.y) || 1;
   const bx = (neck.x - tip.x) / dl;
@@ -192,9 +208,15 @@ function drawFlame(ctx: CanvasRenderingContext2D, tip: { x: number; y: number },
     const y = tip.y + by * back + bx * wave;
     const r = (11 - f * 6) * size * (0.85 + 0.15 * Math.sin(t * 31 + i * 2.3));
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, f < 0.3 ? "rgba(255,245,200,0.9)" : `rgba(255,${Math.round(190 - f * 110)},60,0.7)`);
-    g.addColorStop(0.45, `rgba(255,${Math.round(130 - f * 70)},30,${0.5 - f * 0.25})`);
-    g.addColorStop(1, "rgba(200,40,0,0)");
+    if (frost) {
+      g.addColorStop(0, f < 0.3 ? "rgba(235,250,255,0.9)" : `rgba(${Math.round(190 - f * 110)},230,255,0.7)`);
+      g.addColorStop(0.45, `rgba(${Math.round(110 - f * 60)},190,255,${0.5 - f * 0.25})`);
+      g.addColorStop(1, "rgba(30,90,255,0)");
+    } else {
+      g.addColorStop(0, f < 0.3 ? "rgba(255,245,200,0.9)" : `rgba(255,${Math.round(190 - f * 110)},60,0.7)`);
+      g.addColorStop(0.45, `rgba(255,${Math.round(130 - f * 70)},30,${0.5 - f * 0.25})`);
+      g.addColorStop(1, "rgba(200,40,0,0)");
+    }
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);

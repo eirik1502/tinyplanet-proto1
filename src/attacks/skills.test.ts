@@ -8,7 +8,7 @@ import { makeParams } from "../params/store";
 import { scenario } from "../scenarios";
 import { ISLAND_TOP } from "../world/island";
 import { loadoutFor } from ".";
-import { offer, SKILL_IDS, SKILLS, type SkillLevels } from "./skills";
+import { airJumpSpeed, offer, SKILL_IDS, SKILLS, type SkillLevels } from "./skills";
 
 // Skills: what's offered after a win, what the loadout gets from them, and the pick between levels.
 
@@ -158,7 +158,7 @@ test("the spear pierces two enemies at step 2, five at step 4, each for less dam
     }
     const sp = w.attacks.stats("spear");
     w.combat.spawnVolume(
-      { team: "player", owner: 0, attack: "spear", shape: { radius: sp.hitRadius }, damage: 1, power: 0, active: Infinity, age: 0, hits: new Set(), projectile: { life: 5, scale: 1, pierce: sp.pierce, falloff: sp.falloff, minDamage: sp.minDamage, flame: sp.flame } },
+      { team: "player", owner: 0, attack: "spear", shape: { radius: sp.hitRadius }, damage: 1, power: 0, active: Infinity, age: 0, hits: new Set(), falloff: sp.falloff, minDamage: sp.minDamage, projectile: { life: 5, scale: 1, pierce: sp.pierce, flame: sp.flame } },
       { x: 940, y: 0, alt: 50, vx: 300, vy: 0 },
     );
     for (let i = 0; i < 120; i++) w.combat.update(1 / 60);
@@ -215,4 +215,51 @@ test("every landing blasts, bigger the faster; the landslide bounces rocks off t
   // Landing leaning one way along the edge throws the rocks on along it.
   expect(land(3, k.refSpeed, 0.6).along).toBeGreaterThan(0.2);
   expect(land(3, k.refSpeed, -0.6).along).toBeLessThan(-0.2);
+});
+
+test("the double jump's strike follows the player, throws enemies aside for less and less, armors, and doesn't refill the jump", () => {
+  const params = makeParams();
+  const k = params.skills.jumpForce;
+  const strike = (jumpForce: number) => {
+    const session = new Session(params, { skipBriefings: true, seed: 3 });
+    session.start({ kind: "normal", level: 1, template: null, skills: { swipe: 1, jumpForce } });
+    const w = session.world;
+    const p = w.player;
+    for (const [o, h] of w.objects.query(Hurtable)) if (h.team === "swarm") w.objects.destroy(o);
+    w.playerCtl.leaveRim(0, 0, 0);
+    p.alt += 200;
+    Object.assign(p, { vx: 300, vy: 0, vz: 0 });
+    // Dummies just beside the flight's line, a little ahead.
+    const pushes: { vx: number; vy: number }[] = [];
+    const damage: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const d = w.objects.add(new GameObject("dummy"));
+      Object.assign(d, { x: p.x + 8, y: p.y + 3, alt: p.alt });
+      d.add(Hurtable, {
+        team: "swarm",
+        hurtbox: () => ({ x: d.x, y: d.y, alt: d.alt, radius: 8 }),
+        targetable: () => true,
+        hit: (h) => (damage.push(h.damage), w.events.emit("hit", { source: h.source, target: d.id, x: d.x, y: d.y, alt: d.alt, kind: "melee", damage: h.damage, killed: false, weapon: h.weapon, attack: h.attack }), true),
+        push: (vx, vy) => pushes.push({ vx, vy }),
+      });
+    }
+    w.events.emit("doubleJump", { source: p.id, x: p.x, y: p.y, alt: p.alt });
+    p.airJumps = 0;
+    const [, v] = w.objects.query(HitVolume).find(([, v]) => v.attack === "jumpForce")!;
+    const armored = w.attacks.armored();
+    for (let i = 0; i < 10; i++) w.combat.update(1 / 60);
+    return { radius: v.shape.radius, armored, pushes, damage, airJumps: p.airJumps, speed: airJumpSpeed(w) };
+  };
+  const s1 = strike(1);
+  expect(s1.radius).toBe(k.radius);
+  expect(s1.armored).toBe(true);
+  // Each hit once, thrown aside (to +y, the side they were on), for 25% less each down to 25%,
+  // and the jump stays used.
+  expect(s1.pushes.length).toBe(5);
+  expect(s1.pushes[0]!.vy).toBeCloseTo(k.push);
+  s1.damage.forEach((d, i) => expect(d).toBeCloseTo(k.damage * [1, 0.75, 0.5, 0.25, 0.25][i]!));
+  expect(s1.airJumps).toBe(0);
+  expect(strike(2).radius).toBeCloseTo(k.radius * k.growth);
+  expect(strike(2).speed).toBe(params.move.airJump.speed);
+  expect(strike(3).speed).toBeCloseTo(params.move.airJump.speed * k.speed);
 });

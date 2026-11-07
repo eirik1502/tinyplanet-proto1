@@ -1,4 +1,5 @@
 import { wrapAngle } from "../core/math";
+import { Hurtable } from "../combat/components";
 import { component, GameObject } from "../core/object";
 import { mulberry32, type Rng } from "../core/rng";
 import type { World } from "../game/world";
@@ -272,31 +273,50 @@ const JUMP_FORCE: Skill = {
   name: "Jump force",
   kind: "passive",
   icon: "jump",
-  steps: ["The double jump strikes enemies ahead, throwing them aside.", "The double jump is faster.", "It strikes wider, and throws harder."],
+  steps: ["The double jump strikes the enemies you fly through, throwing them aside.", "The strike is bigger.", "The double jump is faster."],
   install(w, lv) {
     const k = w.params.skills.jumpForce;
-    const grow = lv >= 3 ? k.growth : 1;
     const p = w.player;
+    // A blade around the player for a while after the double jump, with armor as long. Its hits
+    // don't refill the double jump (see the player controller).
     w.events.on(
       "doubleJump",
       (e) => {
+        w.combat.spawnVolume(
+          {
+            team: "player",
+            owner: p.id,
+            attack: "jumpForce",
+            weapon: "jumpForce",
+            shape: { radius: k.radius * (lv >= 2 ? k.growth : 1) },
+            damage: k.damage,
+            falloff: k.falloff,
+            minDamage: k.minDamage,
+            knockback: 0,
+            follow: p.id,
+            power: 0,
+            active: k.time,
+            age: 0,
+            hits: new Set(),
+          },
+          e,
+        );
+        w.attacks.armorFor(k.time);
+      },
+      { source: p.id, owner: w.lifetime },
+    );
+    // Aside: away from the line of the flight, on whichever side the enemy is, and a little along.
+    w.events.on(
+      "hit",
+      (e) => {
+        if (e.attack !== "jumpForce") return;
+        const h = w.objects.get(e.target)?.get(Hurtable);
+        if (!h) return;
         const sp = Math.hypot(p.vx, p.vy);
         const dx = sp > 1 ? p.vx / sp : Math.cos(p.facing);
         const dy = sp > 1 ? p.vy / sp : Math.sin(p.facing);
-        const length = k.length * grow;
-        const halfWidth = (k.width * grow) / 2;
-        // From a little behind, so what's right beside the player counts too.
-        const x = e.x - dx * halfWidth;
-        const y = e.y - dy * halfWidth;
-        const box = { x, y, alt: e.alt, radius: length + halfWidth, rect: { dx, dy, length: length + halfWidth, halfWidth } };
-        w.events.emit("blast", { source: p.id, x: e.x + dx * length * 0.5, y: e.y + dy * length * 0.5, alt: e.alt, radius: length * 0.6, kind: "jumpForce" });
-        w.combat.blast(box, "player", (t, h) => {
-          // Aside: away from the line of the jump, on whichever side it is.
-          const side = dx * (t.y - e.y) - dy * (t.x - e.x) >= 0 ? 1 : -1;
-          const push = k.push * (lv >= 3 ? k.pushUp : 1);
-          h.hit({ damage: k.damage, fromX: e.x, fromY: e.y, source: p.id, weapon: "blast", attack: "jumpForce", knockback: 0 });
-          h.push(-dy * side * push + dx * push * 0.25, dx * side * push + dy * push * 0.25, 0);
-        });
+        const side = dx * (e.y - p.y) - dy * (e.x - p.x) >= 0 ? 1 : -1;
+        h.push(-dy * side * k.push + dx * k.push * 0.25, dx * side * k.push + dy * k.push * 0.25, 0);
       },
       { source: p.id, owner: w.lifetime },
     );
@@ -312,7 +332,7 @@ export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 /** The double jump's sideways speed with the skills. */
 export function airJumpSpeed(w: World) {
   const base = w.params.move.airJump.speed;
-  return w.skill("jumpForce") >= 2 ? base * w.params.skills.jumpForce.speed : base;
+  return w.skill("jumpForce") >= 3 ? base * w.params.skills.jumpForce.speed : base;
 }
 
 // ---------------------------------------------------------------------------------------------
