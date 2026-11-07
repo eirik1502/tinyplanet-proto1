@@ -7,7 +7,7 @@ import type { Params } from "../../params/store";
 import { Avatar, type AvatarView } from "../../render/avatar";
 
 // The briefing shown before each level (and as the pause screen): the goal and the level's
-// effects, a line with the input mode and the movement buttons, and the player's card with the
+// effects beside the input mode and the movement buttons, and the player's card with the
 // unlocked attacks and air abilities as its properties. Each skill is listed on what it upgrades.
 // Newly unlocked items are tagged. Texts stay short: only what you can't easily learn by playing.
 
@@ -240,21 +240,22 @@ export function briefingHtml(b: BriefingInfo): string {
   return `
     <div class="sheet${b.animate ? " intro" : ""}">
       <header class="top">
-        <h1>${title}${b.template ? `<span class="template"> – ${b.template.name}</span>` : ""}${b.template?.boss ? `<span class="boss">Boss</span>` : ""}</h1>
-        <ul class="modifiers">
-          <li class="goal">${ICONS.crown}${b.goal}</li>
-          ${b.modifiers.map((m) => `<li><b>${m.name}</b> ${m.blurb}</li>`).join("")}
-        </ul>
-      </header>
-      <section class="controls">
-        <div class="modes" role="group" aria-label="Input mode">
-          ${modeButton("keyboard", `${ICONS.keyboard}Keyboard`)}
-          ${modeButton("mouse", `${ICONS.keyboard}+${ICONS.mouse}Mouse`)}
-          ${modeButton("gamepad", `${ICONS.gamepad}Gamepad`)}
-          ${buttons("switchMode")}
+        <div class="info">
+          <h1>${title}${b.template ? `<span class="template"> – ${b.template.name}</span>` : ""}${b.template?.boss ? `<span class="boss">Boss</span>` : ""}</h1>
+          <ul class="modifiers">
+            <li class="goal">${ICONS.crown}${b.goal}</li>
+            ${b.modifiers.map((m) => `<li><b>${m.name}</b> ${m.blurb}</li>`).join("")}
+          </ul>
         </div>
-        ${moves.map(([k, t]) => `<div class="move"><span class="keys">${k}</span><span>${t}</span></div>`).join("")}
-      </section>
+        <section class="controls">
+          <div class="modes" role="group" aria-label="Input mode">
+            ${modeButton("keyboard", `${ICONS.keyboard}Keyboard`)}
+            ${modeButton("mouse", `${ICONS.keyboard}+${ICONS.mouse}Mouse`)}
+            ${modeButton("gamepad", `${ICONS.gamepad}Gamepad`)}
+          </div>
+          <div class="moves">${moves.map(([k, t]) => `<div class="move"><span class="keys">${k}</span><span>${t}</span></div>`).join("")}</div>
+        </section>
+      </header>
       ${playerCard(b)}
       <p class="hint">${buttons("mute")} mutes · ${buttons("pause")} pauses</p>
       <button class="start" data-start>${b.reason === "pause" ? "Resume" : "Start"} <span>${buttons("confirm", " ")}</span></button>
