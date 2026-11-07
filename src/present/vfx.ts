@@ -1,8 +1,10 @@
+import { HitVolume } from "../combat/components";
 import type { World } from "../game/world";
 import { boidColor } from "../render/sprites";
 import { ISLAND_TOP } from "../world/island";
 
-// Visual effects: hit sparks, shock rings, sword strikes fading out, and dust. None of it affects
+// Visual effects: hit sparks, shock rings, sword strikes fading out, dust, and the embers a burning
+// spear leaves along its way. None of it affects
 // play: it's built from the world's events and the player's state, after each step, and only the
 // renderer reads it.
 
@@ -15,6 +17,20 @@ export interface Spark {
   vz: number;
   life: number;
   color: string;
+}
+
+/** An ember left by a burning spear: it drifts up, flickers, and cools from yellow to red. */
+export interface Ember {
+  x: number;
+  y: number;
+  alt: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  age: number;
+  life: number;
+  size: number;
+  seed: number;
 }
 
 /** An expanding shock ring: a bomber's explosion, the queen's blast, the smash. */
@@ -93,6 +109,7 @@ export interface HoleLook {
 
 export class Vfx {
   sparks: Spark[] = [];
+  embers: Ember[] = [];
   blasts: BlastRing[] = [];
   strikes: StrikeLook[] = [];
   dust: Dust[] = [];
@@ -112,6 +129,7 @@ export class Vfx {
     const p = w.player;
     this.arrival = arrival ? { x: p.x, y: p.y, age: 0 } : null;
     this.sparks = [];
+    this.embers = [];
     this.blasts = [];
     this.strikes = [];
     this.dust = [];
@@ -195,6 +213,17 @@ export class Vfx {
   /** Age everything by world time `dt`; kick up dust while the player slides along a rim. */
   update(w: World, dt: number) {
     const p = w.player;
+    for (const [o, v] of w.objects.query(HitVolume)) if (v.projectile?.flame) this.emitEmbers(o, v.projectile.scale, v.projectile.flame, dt);
+    for (let i = this.embers.length - 1; i >= 0; i--) {
+      const e = this.embers[i]!;
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+      e.alt += e.vz * dt;
+      e.vx *= Math.exp(-2 * dt);
+      e.vy *= Math.exp(-2 * dt);
+      e.age += dt;
+      if (e.age >= e.life) this.embers.splice(i, 1);
+    }
     if (p.mode === "hang" && p.freeze <= 0 && p.slide) {
       const e = w.islands[p.island]!.pointAt(p.s);
       this.emitDust(e.x, e.y, Math.min(1, Math.abs(p.slide) / 300), dt);
@@ -245,6 +274,34 @@ export class Vfx {
         vz: (Math.random() - 0.3) * 120,
         life: 0.5 + Math.random() * 0.5,
         color,
+      });
+    }
+  }
+
+  /** Embers along the way a burning projectile flew this step, about one per few units, more the bigger its flame. */
+  private emitEmbers(o: { x: number; y: number; alt: number; vx: number; vy: number }, scale: number, flame: number, dt: number) {
+    const speed = Math.hypot(o.vx, o.vy) || 1;
+    const ux = o.vx / speed;
+    const uy = o.vy / speed;
+    const n = (speed * dt * flame) / 5;
+    const count = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0);
+    for (let i = 0; i < count; i++) {
+      // Somewhere between the tip's last step and the flame's tail, a little either side.
+      const back = Math.random() * speed * dt + Math.random() * 14 * flame * scale;
+      const side = (Math.random() - 0.5) * 8 * flame * scale;
+      const a = Math.random() * Math.PI * 2;
+      const sp = 6 + Math.random() * 24;
+      this.embers.push({
+        x: o.x - ux * back - uy * side,
+        y: o.y - uy * back + ux * side,
+        alt: o.alt + (Math.random() - 0.5) * 4,
+        vx: Math.cos(a) * sp + o.vx * 0.04,
+        vy: Math.sin(a) * sp + o.vy * 0.04,
+        vz: 10 + Math.random() * 25,
+        age: 0,
+        life: 0.2 + Math.random() * 0.3,
+        size: (0.7 + Math.random() * 0.6) * Math.sqrt(flame * scale),
+        seed: Math.random() * 100,
       });
     }
   }
