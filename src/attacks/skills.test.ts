@@ -95,11 +95,21 @@ test("the tutorial has the swipe only, and winning it leads straight to level 1"
   expect(SKILL_IDS.filter((id) => session.world.skill(id) > 0)).toEqual(["swipe"]);
 });
 
+test("the thrust reaches halfway further at step 2, twice as far from step 3", () => {
+  const params = makeParams();
+  const reach = (lv: number) => {
+    const s = { ...params.player.thrust };
+    SKILLS.thrust.modify!("thrust", s, lv, params);
+    return s.maxLength / params.player.thrust.maxLength;
+  };
+  expect([1, 2, 3, 4].map(reach)).toEqual([1, 1.5, 2, 2]);
+});
+
 test("the instant thrust puts the player at the furthest enemy at once, striking the one on the way", () => {
   const params = makeParams();
   const session = new Session(params, { skipBriefings: true, seed: 4 });
   const drill = scenario("melee-drill")!;
-  session.start({ kind: "scenario", scenario: { ...drill, spec: { ...drill.spec, skills: { swipe: 1, thrust: 3 } } } });
+  session.start({ kind: "scenario", scenario: { ...drill, spec: { ...drill.spec, skills: { swipe: 1, thrust: 4 } } } });
   const w = session.world;
   const p = w.player;
   // In the air, still, with two boids straight ahead: one in the swipe's reach, one past it.

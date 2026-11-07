@@ -64,7 +64,7 @@ export const THRUST: AttackDef = {
     const through = c.skill("thrust") >= 2;
     const target = through ? furthestIn(c, reach) : c.world.combat.closestIn(reach, "player");
     if (!target) return thrust(c);
-    const instant = c.skill("thrust") >= 3;
+    const instant = c.skill("thrust") >= 4;
     if (through) {
       // What it passes on the way is struck too (the target gets the strike): by a blade around
       // the player through the lunge, or for an instant one, along the line it skips.

@@ -179,7 +179,8 @@ export const DEFAULTS = {
       range: 1.3, // Step 4: reach (×)
     },
     thrust: {
-      range: 2, // Step 4: reach (×)
+      throughRange: 1.5, // Step 2: reach (×)
+      range: 2, // Step 3: reach (×)
     },
     smash: {
       blastRadius: 1.4, // Step 2: blast radius (×)

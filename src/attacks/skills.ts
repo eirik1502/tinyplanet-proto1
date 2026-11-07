@@ -88,12 +88,13 @@ const THRUST: Skill = {
   icon: "lunge",
   steps: [
     "Hit with the swipe to chain a thrust that lunges at the closest enemy in reach.",
-    "The lunge goes through to the furthest enemy, striking all on the way.",
-    "The lunge is instant.",
+    "The thrust reaches further, and the lunge goes through to the furthest enemy, striking all on the way.",
     "The thrust reaches twice as far.",
+    "The lunge is instant.",
   ],
   modify(group, s, lv, params) {
-    if (group === "thrust" && lv >= 4) scale(s, ["length", "maxLength"], params.skills.thrust.range);
+    const k = params.skills.thrust;
+    if (group === "thrust" && lv >= 2) scale(s, ["length", "maxLength"], lv >= 3 ? k.range : k.throughRange);
   },
 };
 
