@@ -1,11 +1,12 @@
 import { expect, test } from "bun:test";
-import { Hurtable } from "../combat/components";
+import { HitVolume, Hurtable } from "../combat/components";
 import { GameObject } from "../core/object";
 import { mulberry32 } from "../core/rng";
 import { Session } from "../game/session";
 import { NO_INPUT, type Action } from "../input/types";
 import { makeParams } from "../params/store";
 import { scenario } from "../scenarios";
+import { ISLAND_TOP } from "../world/island";
 import { loadoutFor } from ".";
 import { offer, SKILL_IDS, SKILLS, type SkillLevels } from "./skills";
 
@@ -176,4 +177,42 @@ test("the spear pierces two enemies at step 2, five at step 4, each for less dam
   s4.damage.forEach((d, i) => expect(d).toBeCloseTo([1, 0.75, 0.5, 0.25, 0.25][i]!));
   expect(s4.sp.hitRadius).toBeCloseTo(params.player.spear.hitRadius * params.skills.spear.size);
   expect(s4.sp.size).toBe(params.player.spear.size);
+});
+
+test("every landing blasts, bigger the faster; the landslide bounces rocks off the edge, more and faster the harder", () => {
+  const params = makeParams();
+  const k = params.skills.landing;
+  // `tilt`: how far the landing leans from straight into the rim (radians, toward its tangent).
+  const land = (landing: number, speed: number, tilt = 0) => {
+    const session = new Session(params, { skipBriefings: true, seed: 3 });
+    session.start({ kind: "normal", level: 1, template: null, skills: { swipe: 1, landing } });
+    const w = session.world;
+    const p = w.player;
+    const blasts: number[] = [];
+    w.events.on("blast", (e) => blasts.push(e.radius));
+    const e = w.islands[p.island]!.pointAt(p.s);
+    const vx = (-e.nx * Math.cos(tilt) + e.tx * Math.sin(tilt)) * speed;
+    const vy = (-e.ny * Math.cos(tilt) + e.ty * Math.sin(tilt)) * speed;
+    w.events.emit("land", { source: p.id, x: e.x, y: e.y, alt: ISLAND_TOP, speed, vx, vy });
+    const rocks = w.objects.query(HitVolume).filter(([, v]) => v.attack === "landing.rock");
+    // All headed out, away from the island; on average along the edge as the landing was.
+    for (const [o] of rocks) expect(o.vx * e.nx + o.vy * e.ny).toBeGreaterThan(0);
+    const along = rocks.reduce((sum, [o]) => sum + (o.vx * e.tx + o.vy * e.ty) / Math.hypot(o.vx, o.vy), 0) / Math.max(1, rocks.length);
+    const fastest = Math.max(0, ...rocks.map(([o]) => Math.hypot(o.vx, o.vy)));
+    return { blast: blasts[0], rocks: rocks.length, along, fastest };
+  };
+  expect(land(1, 50).blast).toBeCloseTo((k.radius * 50) / k.refSpeed);
+  expect(land(1, k.refSpeed).blast).toBeCloseTo(k.radius);
+  expect(land(1, 5000).blast).toBeCloseTo(k.radius * k.maxScale);
+  expect(land(1, k.refSpeed).rocks).toBe(0);
+  expect(land(2, k.refSpeed).rocks).toBe(k.rocks);
+  expect(land(3, k.refSpeed).rocks).toBe(k.rocksUp);
+  expect(land(3, 5000).rocks).toBe(k.rocksUp);
+  // A soft landing: fewer, slower rocks.
+  const soft = land(3, k.refSpeed / 3);
+  expect(soft.rocks).toBe(Math.round(k.rocksUp / 3));
+  expect(soft.fastest).toBeLessThanOrEqual((k.rockSpeed / 3) * (1 + k.rockJitter));
+  // Landing leaning one way along the edge throws the rocks on along it.
+  expect(land(3, k.refSpeed, 0.6).along).toBeGreaterThan(0.2);
+  expect(land(3, k.refSpeed, -0.6).along).toBeLessThan(-0.2);
 });

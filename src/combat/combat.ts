@@ -104,6 +104,7 @@ export class Combat {
     // Projectiles: fly, hit what they touch until they've hit `pierce` things, and stop on islands.
     for (const [o, v] of volumes) {
       if (!v.projectile || !o.alive) continue;
+      o.vz -= (v.projectile.gravity ?? 0) * dt;
       o.x += o.vx * dt;
       o.y += o.vy * dt;
       o.alt += o.vz * dt;

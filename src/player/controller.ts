@@ -382,9 +382,10 @@ export class PlayerController {
 
       if (hit) {
         const speed = Math.hypot(p.vx, p.vy, p.vz);
-        this.grab(hit.island, hit.s, p.vx, p.vy);
+        const { vx, vy } = p;
+        this.grab(hit.island, hit.s, vx, vy);
         const e = w.islands[hit.island]!.pointAt(hit.s);
-        w.events.emit("land", { source: p.id, x: e.x, y: e.y, alt: ISLAND_TOP, speed });
+        w.events.emit("land", { source: p.id, x: e.x, y: e.y, alt: ISLAND_TOP, speed, vx, vy });
       } else if (netBounce(w, p, p.netUsed)) {
         p.netUsed = true;
         p.jumpHeld = false;

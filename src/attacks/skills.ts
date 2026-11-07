@@ -1,5 +1,6 @@
+import { wrapAngle } from "../core/math";
 import { component, GameObject } from "../core/object";
-import type { Rng } from "../core/rng";
+import { mulberry32, type Rng } from "../core/rng";
 import type { World } from "../game/world";
 import type { Params } from "../params/store";
 import type { StatGroup } from "./types";
@@ -148,22 +149,61 @@ const LANDING: Skill = {
   name: "Landing hard",
   kind: "passive",
   icon: "landing",
-  steps: ["Hard landings throw back enemies around you.", "Every landing does, wider.", "Landings stun the enemies they throw, and throw harder."],
+  steps: ["Land hard with a shockwave.", "Landslide.", "Landings stun the enemies they throw, throw harder, and the landslide doubles."],
   install(w, lv) {
     const k = w.params.skills.landing;
+    const p = w.player;
+    const rand = mulberry32(w.planet.seed ^ 0x2c1b3c6d);
     w.events.on(
       "land",
       (e) => {
-        if (lv < 2 && e.speed <= k.minSpeed) return;
+        // The faster the landing, the bigger the blast: full at `refSpeed`, about what a
+        // jump and a double jump the same way reach.
+        const f = Math.min(k.maxScale, e.speed / k.refSpeed);
         playerBlast(w, e.x, e.y, e.alt, {
-          radius: k.radius * (lv >= 2 ? k.growth : 1),
-          damage: k.damage,
-          push: k.push * (lv >= 3 ? k.pushUp : 1),
+          radius: k.radius * f,
+          damage: k.damage * f,
+          push: k.push * f * (lv >= 3 ? k.pushUp : 1),
           stun: lv >= 3 ? k.stun : undefined,
           kind: "landing",
         });
+        if (lv < 2) return;
+        // Rocks knocked off the rim: the landing bounced off the edge (straight back from a
+        // straight landing), fanned out, but never back into the island. Fewer, slower and weaker
+        // the softer the landing.
+        const rim = w.islands[p.island]!.pointAt(p.s);
+        const out = Math.atan2(rim.ny, rim.nx);
+        const into = e.vx * rim.nx + e.vy * rim.ny;
+        const bounce = Math.hypot(e.vx, e.vy) > 1 ? wrapAngle(Math.atan2(e.vy - 2 * into * rim.ny, e.vx - 2 * into * rim.nx) - out) : 0;
+        const g = Math.min(1, e.speed / k.refSpeed);
+        const n = Math.max(1, Math.round((lv >= 3 ? k.rocksUp : k.rocks) * g));
+        const edge = ((90 - k.rockEdge) * Math.PI) / 180;
+        const cone = (k.rockCone * Math.PI) / 180;
+        const jitter = (k.rockAngleJitter * Math.PI) / 180;
+        for (let i = 0; i < n; i++) {
+          // Evenly across the cone, each nudged a little.
+          const spread = ((i + 0.5) / n - 0.5) * cone + (rand() - 0.5) * 2 * jitter;
+          const a = out + Math.max(-edge, Math.min(edge, bounce + spread));
+          const v = k.rockSpeed * g * (1 - k.rockJitter + rand() * 2 * k.rockJitter);
+          w.combat.spawnVolume(
+            {
+              team: "player",
+              owner: p.id,
+              attack: "landing.rock",
+              weapon: "rock",
+              shape: { radius: k.rockRadius },
+              damage: k.rockDamage * g,
+              power: 0,
+              active: Infinity,
+              age: 0,
+              projectile: { life: k.rockLife, scale: 0.7 + rand() * 0.6, gravity: k.rockGravity },
+              hits: new Set(),
+            },
+            { x: e.x + rim.nx * 8, y: e.y + rim.ny * 8, alt: e.alt + 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: k.rockLift * (0.5 + rand()) },
+          );
+        }
       },
-      { source: w.player.id, owner: w.lifetime },
+      { source: p.id, owner: w.lifetime },
     );
   },
 };

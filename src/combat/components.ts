@@ -73,9 +73,9 @@ export interface HitVolume {
    * Projectiles: seconds left, and their size multiplier. They end on islands and after `pierce`
    * hits (default 1), and blades can block them. Each hit after the first does `falloff` less of
    * the damage than the one before, down to `minDamage` of it. `flame`: how big a flame burns
-   * from the tip.
+   * from the tip. `gravity`: it falls (they fly straight without).
    */
-  projectile?: { life: number; scale: number; pierce?: number; falloff?: number; minDamage?: number; flame?: number };
+  projectile?: { life: number; scale: number; pierce?: number; falloff?: number; minDamage?: number; flame?: number; gravity?: number };
   /** A blade blocks the other team's projectiles it touches. */
   blocks?: boolean;
   /** Ids of everything it has hit. */

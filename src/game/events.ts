@@ -18,8 +18,8 @@ export interface GameEvents {
   /** Jumped off a rim. */
   jump: At & { source: number };
   doubleJump: At & { source: number };
-  /** Grabbed a rim, arriving at `speed`. */
-  land: At & { source: number; speed: number };
+  /** Grabbed a rim, arriving at `speed`, flying sideways at (vx, vy). */
+  land: At & { source: number; speed: number; vx: number; vy: number };
   /** The safety bounce below the rim. */
   netBounce: At & { source: number };
   /** Fell into the haze. */

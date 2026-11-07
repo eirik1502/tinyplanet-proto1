@@ -194,13 +194,25 @@ export const DEFAULTS = {
       maxPierce: 3, // Step 4: enemies it hits
     },
     landing: {
-      minSpeed: 250, // Step 1: least landing speed
+      refSpeed: 480, // Landing speed for the full blast
+      maxScale: 1.5, // Most the blast grows past that (×)
       radius: 120, // Blast radius
       damage: 1, // Blast damage (at the centre)
       push: 520, // Blast knockback (at the centre)
-      growth: 1.35, // Step 2: radius (×)
+      rocks: 5, // Step 2: landslide rocks (most)
+      rockCone: 110, // Step 2: rock cone (degrees)
+      rockAngleJitter: 8, // Step 2: rock angle randomness (± degrees)
+      rockEdge: 10, // Step 2: rocks keep off the rim by (degrees)
+      rockSpeed: 504, // Step 2: rock speed (most)
+      rockJitter: 0.3, // Step 2: rock speed randomness (±×)
+      rockLift: 160, // Step 2: rock up speed
+      rockGravity: 700, // Step 2: rock gravity
+      rockLife: 0.35, // Step 2: rock flight time (s)
+      rockRadius: 9, // Step 2: rock hit radius
+      rockDamage: 2, // Step 2: rock damage (most)
       stun: 0.8, // Step 3: stun (s)
       pushUp: 1.5, // Step 3: knockback (×)
+      rocksUp: 10, // Step 3: landslide rocks (most)
     },
     safetyDoom: {
       radius: 130, // Blast radius

@@ -203,7 +203,7 @@ function drawFlame(ctx: CanvasRenderingContext2D, tip: { x: number; y: number },
   ctx.globalCompositeOperation = "source-over";
 }
 
-/** Projectiles in flight: the spear, and the boids' orbs. */
+/** Projectiles in flight: the spear, the landslide's rocks, and the boids' orbs. */
 export const projectilesLayer: WorldLayer = (p, s, out) => {
   const { ctx, proj } = p;
   const w = s.world;
@@ -247,6 +247,30 @@ export const projectilesLayer: WorldLayer = (p, s, out) => {
           ctx.lineTo(neck.x + hx * 6 - hy * 7, neck.y + hy * 6 + hx * 7);
           ctx.lineTo(neck.x, neck.y);
           ctx.lineTo(neck.x + hx * 6 + hy * 7, neck.y + hy * 6 - hx * 7);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        },
+      });
+    } else if (v.attack === "landing.rock") {
+      out.push({
+        alt: o.alt,
+        draw: () => {
+          const pr = proj.project(o.x, o.y, o.alt);
+          if (!pr.visible) return;
+          // A tumbling lump of rim: a few uneven corners, its shape from its id.
+          const r = 6 * pr.kt * scale;
+          const spin = o.id * 1.7 + v.age * 9;
+          ctx.fillStyle = "#e8c48a";
+          ctx.strokeStyle = "#a9814f";
+          ctx.lineWidth = Math.max(1, 1.2 * pr.kt);
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const a = spin + (i / 6) * Math.PI * 2;
+            const rr = r * (0.7 + 0.3 * Math.abs(Math.sin(o.id * 3.1 + i * 2.3)));
+            if (i === 0) ctx.moveTo(pr.x + Math.cos(a) * rr, pr.y + Math.sin(a) * rr);
+            else ctx.lineTo(pr.x + Math.cos(a) * rr, pr.y + Math.sin(a) * rr);
+          }
           ctx.closePath();
           ctx.fill();
           ctx.stroke();
