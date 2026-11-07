@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { Hurtable } from "../combat/components";
+import { GameObject } from "../core/object";
 import { mulberry32 } from "../core/rng";
 import { Session } from "../game/session";
 import { NO_INPUT, type Action } from "../input/types";
@@ -130,4 +132,45 @@ test("the instant thrust puts the player at the furthest enemy at once, striking
   for (let i = 0; i < 3; i++) session.step(1 / 60, frame([], []));
   expect(hits).toContain("near:sword.thrust");
   expect(hits).toContain("far:sword.thrust");
+});
+
+test("the spear pierces two enemies at step 2, all on its way at step 4, and burns from step 3", () => {
+  const params = makeParams();
+  const throwThrough = (spear: number) => {
+    const session = new Session(params, { skipBriefings: true, seed: 3 });
+    session.start({ kind: "normal", level: 1, template: null, skills: { swipe: 1, spear } });
+    const w = session.world;
+    for (const [o, h] of w.objects.query(Hurtable)) if (h.team === "swarm") w.objects.destroy(o);
+    // A row of dummies ahead, then a spear thrown down it.
+    const hit: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const o = w.objects.add(new GameObject("dummy"));
+      Object.assign(o, { x: 1000 + 40 * i, y: 0, alt: 50 });
+      o.add(Hurtable, {
+        team: "swarm",
+        hurtbox: () => ({ x: o.x, y: o.y, alt: o.alt, radius: 8 }),
+        targetable: () => true,
+        hit: () => (hit.push(i), true),
+        push: () => {},
+      });
+    }
+    const sp = w.attacks.stats("spear");
+    w.combat.spawnVolume(
+      { team: "player", owner: 0, attack: "spear", shape: { radius: sp.hitRadius }, damage: 1, power: 0, active: Infinity, age: 0, hits: new Set(), projectile: { life: 5, scale: 1, pierce: sp.pierce, flame: sp.flame } },
+      { x: 940, y: 0, alt: 50, vx: 300, vy: 0 },
+    );
+    for (let i = 0; i < 120; i++) w.combat.update(1 / 60);
+    return { hit, sp };
+  };
+  expect(throwThrough(1).hit).toEqual([0]);
+  expect(throwThrough(1).sp.flame).toBe(0);
+  expect(throwThrough(2).hit).toEqual([0, 1]);
+  const s3 = throwThrough(3);
+  expect(s3.hit).toEqual([0, 1]);
+  expect(s3.sp.flame).toBeGreaterThan(0);
+  expect(s3.sp.speed * s3.sp.life).toBeCloseTo(params.player.spear.speed * params.player.spear.life * params.skills.spear.range);
+  const s4 = throwThrough(4);
+  expect(s4.hit).toEqual([0, 1, 2, 3]);
+  expect(s4.sp.hitRadius).toBeCloseTo(params.player.spear.hitRadius * params.skills.spear.size);
+  expect(s4.sp.size).toBe(params.player.spear.size);
 });

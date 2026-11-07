@@ -101,7 +101,7 @@ export class Combat {
         this.w.events.emit("block", { x: s.x, y: s.y, alt: s.alt, what: "projectile" });
       }
     }
-    // Projectiles: fly, hit the first thing they touch, and stop on islands.
+    // Projectiles: fly, hit what they touch until they've hit `pierce` things, and stop on islands.
     for (const [o, v] of volumes) {
       if (!v.projectile || !o.alive) continue;
       o.x += o.vx * dt;
@@ -111,11 +111,13 @@ export class Combat {
       v.age += dt;
       const hitbox = this.volumeBox(o, v);
       for (const [t, h] of this.targets(v.team)) {
-        if (!this.overlaps(hitbox, h.hurtbox())) continue;
+        if (v.hits.has(t.id) || !this.overlaps(hitbox, h.hurtbox())) continue;
         v.hits.add(t.id);
         h.hit({ damage: v.damage, fromX: o.x - o.vx * 0.05, fromY: o.y - o.vy * 0.05, source: v.owner, weapon: v.weapon, attack: v.attack });
-        this.w.objects.destroy(o);
-        break;
+        if (v.hits.size >= (v.projectile.pierce ?? 1)) {
+          this.w.objects.destroy(o);
+          break;
+        }
       }
       if (o.alive && this.w.islands.some((i) => i.intersects(o.x, o.y, o.alt, 2))) {
         this.w.events.emit("thud", { x: o.x, y: o.y, alt: o.alt, fromPlayer: v.team === "player" });

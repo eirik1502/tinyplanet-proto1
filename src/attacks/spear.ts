@@ -2,6 +2,7 @@ import { lerp } from "../core/math";
 import type { AttackDef, Weapon } from "./types";
 
 // The spear: thrown (from a rim too, over the island). Power scales its speed, damage and size.
+// Its skill makes it pierce enemies and burn from the tip.
 
 export const THROW: AttackDef = {
   id: "spear",
@@ -17,7 +18,7 @@ export const THROW: AttackDef = {
         shape: { radius: sp.hitRadius * scale },
         damage: lerp(sp.damage, sp.maxDamage, c.power),
         active: Infinity,
-        projectile: { life: sp.life, scale },
+        projectile: { life: sp.life, scale, pierce: sp.pierce, flame: sp.flame },
       },
       { x: c.x + c.dx * 10, y: c.y + c.dy * 10, alt: c.alt, vx: c.dx * speed, vy: c.dy * speed, vz: 0 },
     );

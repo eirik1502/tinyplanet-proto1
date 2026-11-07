@@ -172,6 +172,37 @@ function drawQueenWarning(p: Painter, q: Boid) {
   }
 }
 
+/**
+ * A flame burning from the spear's tip and streaming back past its head, `size` big on screen.
+ * Flickers by `seed`, so spears in flight don't burn alike.
+ */
+function drawFlame(ctx: CanvasRenderingContext2D, tip: { x: number; y: number }, neck: { x: number; y: number }, size: number, seed: number) {
+  const t = performance.now() / 1000 + seed * 1.7;
+  const dl = Math.hypot(tip.x - neck.x, tip.y - neck.y) || 1;
+  const bx = (neck.x - tip.x) / dl;
+  const by = (neck.y - tip.y) / dl;
+  ctx.globalCompositeOperation = "lighter";
+  // Tongues from the tip back, smaller and redder the further back, wavering across the line.
+  const N = 6;
+  for (let i = N - 1; i >= 0; i--) {
+    const f = i / (N - 1);
+    const back = (2 + f * 26) * size;
+    const wave = Math.sin(t * 23 + i * 1.9) * 3 * f * size;
+    const x = tip.x + bx * back - by * wave;
+    const y = tip.y + by * back + bx * wave;
+    const r = (11 - f * 6) * size * (0.85 + 0.15 * Math.sin(t * 31 + i * 2.3));
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, f < 0.3 ? "rgba(255,245,200,0.9)" : `rgba(255,${Math.round(190 - f * 110)},60,0.7)`);
+    g.addColorStop(0.45, `rgba(255,${Math.round(130 - f * 70)},30,${0.5 - f * 0.25})`);
+    g.addColorStop(1, "rgba(200,40,0,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+
 /** Projectiles in flight: the spear, and the boids' orbs. */
 export const projectilesLayer: WorldLayer = (p, s, out) => {
   const { ctx, proj } = p;
@@ -193,6 +224,7 @@ export const projectilesLayer: WorldLayer = (p, s, out) => {
           const tip = proj.project(o.x + ux * 4 * scale, o.y + uy * 4 * scale, o.alt);
           if (!tip.visible) return;
           const k = tip.kt * scale;
+          if (v.projectile!.flame) drawFlame(ctx, tip, neck, v.projectile!.flame * k, o.id);
           // Glow so it reads at speed
           ctx.globalCompositeOperation = "screen";
           ctx.drawImage(BLOBS.glow, tip.x - 16 * k, tip.y - 16 * k, 32 * k, 32 * k);

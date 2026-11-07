@@ -165,6 +165,8 @@ export const DEFAULTS = {
       maxScale: 1.8, // Size at full power
       size: 1, // Size (×)
       length: 46,
+      pierce: 1, // Enemies it hits before it stops
+      flame: 0, // Flame from the tip (size, 0: none)
       cooldown: 0.45, // Cooldown (s)
     },
   },
@@ -183,9 +185,10 @@ export const DEFAULTS = {
       blastPush: 3, // Step 4: blast knockback (×)
     },
     spear: {
-      range: 1.5, // Step 2: range (×)
+      pierce: 2, // Step 2: enemies it hits
       speed: 1.45, // Step 3: speed (×)
-      size: 2, // Step 4: size (×)
+      range: 1.5, // Step 3: range (×)
+      size: 1.5, // Step 4: hit size and flame (×)
     },
     landing: {
       minSpeed: 250, // Step 1: least landing speed
