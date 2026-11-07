@@ -10,7 +10,7 @@ import { launch, stepFlight } from "./flight";
 // attacking meanwhile, but steering in the air still works.
 
 function start() {
-  const s = new Session(liveParams, { skipBriefings: true });
+  const s = new Session(liveParams, { skipBriefings: true, seed: 3 });
   s.start({ kind: "normal", level: 1, template: null });
   const w = s.world;
   const p = w.player;

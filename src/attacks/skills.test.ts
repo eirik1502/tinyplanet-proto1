@@ -145,8 +145,10 @@ test("the instant thrust puts the player at the furthest enemy at once, striking
   expect(hits).toContain("far:sword.thrust");
 });
 
-test("the spear pierces two enemies at step 2, five at step 4, each for less damage, and burns from step 3", () => {
+test("the spear pierces more enemies at steps 2 and 4, each for less damage, and burns from step 3", () => {
   const params = makeParams();
+  const k = params.skills.spear;
+  const first = (n: number) => Array.from({ length: n }, (_, i) => i);
   const throwThrough = (spear: number) => {
     const session = new Session(params, { skipBriefings: true, seed: 3 });
     session.start({ kind: "normal", level: 1, template: null, skills: { swipe: 1, spear } });
@@ -174,18 +176,18 @@ test("the spear pierces two enemies at step 2, five at step 4, each for less dam
     for (let i = 0; i < 120; i++) w.combat.update(1 / 60);
     return { hit, damage, sp };
   };
-  expect(throwThrough(1).hit).toEqual([0]);
+  expect(throwThrough(1).hit).toEqual(first(params.player.spear.pierce));
   expect(throwThrough(1).sp.flame).toBe(0);
-  expect(throwThrough(2).hit).toEqual([0, 1]);
+  expect(throwThrough(2).hit).toEqual(first(k.pierce));
   const s3 = throwThrough(3);
-  expect(s3.hit).toEqual([0, 1]);
+  expect(s3.hit).toEqual(first(k.pierce));
   expect(s3.sp.flame).toBeGreaterThan(0);
-  expect(s3.sp.speed * s3.sp.life).toBeCloseTo(params.player.spear.speed * params.player.spear.life * params.skills.spear.range);
+  expect(s3.sp.speed * s3.sp.life).toBeCloseTo(params.player.spear.speed * params.player.spear.life * k.range);
   const s4 = throwThrough(4);
-  expect(s4.hit).toEqual([0, 1, 2, 3, 4]);
-  // 25% less each, down to 25%.
-  s4.damage.forEach((d, i) => expect(d).toBeCloseTo([1, 0.75, 0.5, 0.25, 0.25][i]!));
-  expect(s4.sp.hitRadius).toBeCloseTo(params.player.spear.hitRadius * params.skills.spear.size);
+  expect(s4.hit).toEqual(first(k.maxPierce));
+  // Less for each enemy gone through, down to a floor.
+  s4.damage.forEach((d, i) => expect(d).toBeCloseTo(Math.max(params.player.spear.minDamage, 1 - params.player.spear.falloff * i)));
+  expect(s4.sp.hitRadius).toBeCloseTo(params.player.spear.hitRadius * k.size);
   expect(s4.sp.size).toBe(params.player.spear.size);
 });
 
