@@ -45,8 +45,8 @@ export const DEFAULT_STYLE: FlockStyle = {
   giveUpRange: 350,
   grudge: 6,
   hunts: 0,
-  attackers: 2,
-  rush: 1.6,
+  attackers: 3,
+  rush: 2.6,
 };
 
 export const STYLE_INPUTS: Record<keyof FlockStyle, ParamInput> = {
