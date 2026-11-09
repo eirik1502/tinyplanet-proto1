@@ -65,7 +65,6 @@ export const SLIDERS: Record<string, Slider> = {
   "world.modifiers.reinforceSize": ["Reinforcement flock size", 1, 12, 1, true],
   "world.modifiers.reinforceCap": ["Swarm cap (× starting swarm)", 0.5, 3, 0.1, true],
   "world.modifiers.eliteHp": ["Elite health (×)", 1, 5, 0.5, true],
-  "world.modifiers.eliteSize": ["Elite size (×)", 1, 2, 0.05, true],
   "world.level4.budget": ["Swarm budget", 0, 200, 0.5, true],
   "world.perLevel.budget": ["Swarm budget", 0, 50, 0.1, true],
 

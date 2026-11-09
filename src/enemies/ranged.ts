@@ -27,8 +27,7 @@ export const RANGED: BoidType<RangedParams> = {
   params: {
     hp: 2,
     speed: 160,
-    size: 1,
-    cost: 1.5,
+    costPerHp: 0.75,
     damage: 2,
     keepAway: 230,
     range: 420,
@@ -43,8 +42,7 @@ export const RANGED: BoidType<RangedParams> = {
   inputs: {
     hp: ["Health", 1, 50, 1],
     speed: ["Speed", 20, 600, 5],
-    size: ["Size", 0.5, 3, 0.1],
-    cost: ["Budget cost", 0.1, 10, 0.1],
+    costPerHp: ["Budget cost per health", 0.1, 10, 0.05],
     damage: ["Damage (%)", 0, 50, 0.5],
     keepAway: ["Keep-away distance", 0, 800, 10],
     range: ["Shooting range", 50, 1500, 10],

@@ -13,7 +13,7 @@ export const MELEE_SPRITE: BoidSprite<MeleeParams> = {
       // The lunge's path, solid once the aim has locked.
       ctx.save();
       ctx.rotate(b.heading);
-      const len = ((p.lungeSpeed * p.lungeTime) / p.size) * k;
+      const len = ((p.lungeSpeed * p.lungeTime) / b.size) * k;
       const grad = ctx.createLinearGradient(10 * k, 0, len, 0);
       grad.addColorStop(0, `rgba(255,80,100,${locked ? 0.55 : 0.12 + 0.25 * t})`);
       grad.addColorStop(1, "rgba(255,80,100,0)");

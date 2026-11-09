@@ -315,7 +315,7 @@ export const NO_LEVEL_RULES: LevelRules = {
   gravity: 1,
   wind: { x: 0, y: 0 },
   fog: 0,
-  swarm: { shield: 0, reinforce: null, hp: 1, size: 1 },
+  swarm: { shield: 0, reinforce: null, hp: 1 },
 };
 
 export function levelRules(spec: LevelSpec, cfg: Params["world"]["modifiers"], rand: () => number): LevelRules {
@@ -334,7 +334,6 @@ export function levelRules(spec: LevelSpec, cfg: Params["world"]["modifiers"], r
           ? { every: cfg.reinforceEvery, flocks: spec.flocks, cap: Math.round(swarmSize * cfg.reinforceCap) }
           : null,
       hp: has("elite") ? cfg.eliteHp : 1,
-      size: has("elite") ? cfg.eliteSize : 1,
     },
   };
 }

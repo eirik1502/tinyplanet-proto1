@@ -18,6 +18,8 @@ export interface BoidLook<P extends BaseParams = BaseParams> {
   windup: number;
   recover: number;
   flash: number;
+  /** Body size (× the type's base radius). */
+  size: number;
   params: P;
   flock: { engaged: boolean };
 }
@@ -41,7 +43,7 @@ export const SPRITES = {
 export const boidColor = (id: string) => SPRITES[id]?.color ?? "#ffffff";
 
 export function drawBoidBody(ctx: CanvasRenderingContext2D, type: BoidType<BaseParams>, b: BoidLook, k: number) {
-  const ks = k * b.params.size;
+  const ks = k * b.size;
   ctx.save();
   SPRITES[type.id]?.draw(ctx, b, ks);
   ctx.restore();

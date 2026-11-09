@@ -10,7 +10,7 @@ import { resolveParams, type ParamInput } from "./types";
 export interface FlockStyle {
   /** How far members may stray from the flock's centre before being pulled back hard. */
   spread: number;
-  /** Personal space each member keeps from the others. */
+  /** Personal space each member keeps from the others (between their bodies). */
   spacing: number;
   /** 0..1: how strongly members are drawn together. */
   tightness: number;
@@ -34,7 +34,7 @@ export interface FlockStyle {
 
 export const DEFAULT_STYLE: FlockStyle = {
   spread: 80,
-  spacing: 50,
+  spacing: 34,
   tightness: 0.3,
   coordination: 0.45,
   restlessness: 0.35,
@@ -60,12 +60,17 @@ export const STYLE_INPUTS: Record<keyof FlockStyle, ParamInput> = {
   attackers: ["Attacking at once", 1, 12, 1],
 };
 
-/** Members of one type: how many, and any param overrides. */
+/** Members of one type: how many, their health (default: the type's), and any other param overrides. */
 export interface MemberSpec {
   type: MemberTypeId;
   count: number;
+  hp?: number;
   params?: Record<string, number>;
 }
+
+/** One member's params: its type's defaults with the member's overrides. */
+export const memberParams = (m: MemberSpec) =>
+  resolveParams(boidType(m.type), m.hp === undefined ? m.params : { ...m.params, hp: m.hp });
 
 /** A concrete flock: who is in it and how it flies. */
 export interface FlockSpec {
@@ -104,8 +109,8 @@ export const BIG_PACK: FlockTemplate = {
 };
 export const BRUTES: FlockTemplate = {
   name: "Brutes",
-  members: [{ type: "melee", count: 2, params: { hp: 6, size: 1.6, speed: 150, cost: 3, damage: 4 } }],
-  style: { spacing: 70, pace: 55 },
+  members: [{ type: "melee", count: 2, hp: 6, params: { speed: 150, damage: 4 } }],
+  style: { spacing: 45, pace: 55 },
 };
 export const ROYAL_GUARD: FlockTemplate = {
   name: "Royal guard",
@@ -132,9 +137,12 @@ export function resolveFlock(t: FlockTemplate, rand: () => number = Math.random)
   return { name: t.name, members: MEMBER_TYPES.filter((k) => counts[k]).map((type) => ({ type, count: counts[type]! })), style };
 }
 
-/** A flock's share of a swarm budget: its members' costs. */
+/** A flock's share of a swarm budget: its members' health, at their types' cost per health. */
 export const flockCost = (f: FlockSpec) =>
-  f.members.reduce((s, m) => s + m.count * resolveParams(boidType(m.type), m.params).cost, 0);
+  f.members.reduce((s, m) => {
+    const p = memberParams(m);
+    return s + m.count * p.hp * p.costPerHp;
+  }, 0);
 
 export const flockSize = (f: FlockSpec) => f.members.reduce((s, m) => s + Math.max(0, Math.round(m.count)), 0);
 
@@ -142,5 +150,5 @@ export const flockSize = (f: FlockSpec) => f.members.reduce((s, m) => s + Math.m
 export const describeFlock = (f: FlockSpec) =>
   f.members
     .filter((m) => m.count > 0)
-    .map((m) => `${m.count} ${m.type}${m.params && Object.keys(m.params).length ? "*" : ""}`)
+    .map((m) => `${m.count} ${m.type}${m.hp !== undefined ? ` hp ${m.hp}` : ""}${m.params && Object.keys(m.params).length ? "*" : ""}`)
     .join(", ") || "empty";

@@ -22,7 +22,6 @@ export const DEFAULTS = {
       reinforceSize: 4, // Reinforcement flock size
       reinforceCap: 1.2, // Swarm cap (× starting swarm)
       eliteHp: 2, // Elite health (×)
-      eliteSize: 1.35, // Elite size (×)
     },
   },
   move: {

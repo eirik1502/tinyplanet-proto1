@@ -1,7 +1,7 @@
 import { GameObject } from "../core/object";
 import { Health } from "../combat/components";
 import type { Flock } from "./swarm";
-import type { BaseParams, BoidType } from "./types";
+import { bodySize, type BaseParams, type BoidType } from "./types";
 
 // A boid: one enemy, as a game object. Its type gives its behaviour; the fields are the state that
 // behaviour keeps. Health and the hurtbox are components, so combat treats it like anything else
@@ -9,6 +9,8 @@ import type { BaseParams, BoidType } from "./types";
 
 export class Boid<P extends BaseParams = BaseParams> extends GameObject {
   readonly health: Health;
+  /** Body size (× the type's base radius), from its health; the sprite scales with it. */
+  readonly size: number;
   /** Body radius (the type's, × size); the same as the hurtbox's. */
   r: number;
   cooldown = 0;
@@ -40,7 +42,8 @@ export class Boid<P extends BaseParams = BaseParams> extends GameObject {
   ) {
     super(type.id);
     this.health = this.add(Health, { hp: params.hp, max: params.hp });
-    this.r = type.radius * params.size;
+    this.size = bodySize(type as unknown as BoidType, params.hp);
+    this.r = type.radius * this.size;
   }
 
   get hp() {

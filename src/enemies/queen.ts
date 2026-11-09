@@ -26,8 +26,7 @@ export const QUEEN: BoidType<QueenParams> = {
   params: {
     hp: 24,
     speed: 85,
-    size: 1,
-    cost: 0,
+    costPerHp: 0,
     fleeRange: 320,
     threatRadius: 410,
     recruitRange: 900,
@@ -42,8 +41,7 @@ export const QUEEN: BoidType<QueenParams> = {
   inputs: {
     hp: ["Health", 1, 200, 1],
     speed: ["Speed", 0, 400, 5],
-    size: ["Size", 0.5, 3, 0.1],
-    cost: ["Budget cost", 0, 10, 0.1],
+    costPerHp: ["Budget cost per health", 0, 10, 0.05],
     fleeRange: ["Flee range", 0, 1000, 10],
     threatRadius: ["Guard screens her within", 0, 1500, 10],
     recruitRange: ["Calls flocks to guard from within", 0, 3000, 50],

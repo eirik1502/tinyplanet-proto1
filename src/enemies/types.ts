@@ -13,10 +13,8 @@ export interface BaseParams {
   hp: number;
   /** Top speed. */
   speed: number;
-  /** Body size (× the type's base radius); the sprite scales with it. */
-  size: number;
-  /** What one costs out of a level's swarm budget. */
-  cost: number;
+  /** What each point of health costs out of a level's swarm budget. */
+  costPerHp: number;
 }
 
 /** [label, min, max, step] for a param's input in the dev panel. */
@@ -102,6 +100,12 @@ export interface BoidType<P extends BaseParams = BaseParams> {
   /** Extra vertical reach of its hurtbox (and its own touch) beyond the usual hit height; Infinity = any altitude. */
   reach?(b: Boid<P>): number;
 }
+
+/**
+ * Body size (× the type's base radius) for a boid of `hp`: tougher boids are bigger, by the
+ * square root of their health against the type's default.
+ */
+export const bodySize = (t: BoidType, hp: number) => Math.sqrt(Math.max(1, hp) / t.params.hp);
 
 /** A type's defaults with `over` on top (only keys the type has, only numbers). */
 export function resolveParams<P extends BaseParams>(t: BoidType<P>, over: Partial<BaseParams> & Record<string, number> = {}): P {

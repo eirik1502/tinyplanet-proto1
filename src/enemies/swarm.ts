@@ -6,7 +6,7 @@ import type { World } from "../game/world";
 import { ISLAND_TOP, type Island } from "../world/island";
 import { Boid } from "./boid";
 import type { BomberParams } from "./bomber";
-import { DEFAULT_STYLE, type FlockSpec, type FlockStyle } from "./flocks";
+import { DEFAULT_STYLE, memberParams, type FlockSpec, type FlockStyle } from "./flocks";
 import { boidType, BOID_TYPES, type BoidTypeId } from "./index";
 import type { QueenParams } from "./queen";
 import { resolveParams, type BaseParams, type BoidApi, type BoidContext, type BoidType, type PlayerView } from "./types";
@@ -47,12 +47,11 @@ export interface SwarmRules {
   shield: number;
   /** A copy of one of `flocks` arrives from the boundary this often (s), hunting, while the swarm is under `cap`; null = never. */
   reinforce: { every: number; flocks: FlockSpec[]; cap: number } | null;
-  /** Boids' health and body size multipliers (the queen's excluded). */
+  /** Boids' health multiplier (the queen's excluded); bodies grow with it. */
   hp: number;
-  size: number;
 }
 
-export const NO_RULES: SwarmRules = { shield: 0, reinforce: null, hp: 1, size: 1 };
+export const NO_RULES: SwarmRules = { shield: 0, reinforce: null, hp: 1 };
 
 const CRUISE_ALT = ISLAND_TOP + 35;
 
@@ -138,10 +137,9 @@ export class Swarm implements BoidApi {
     this.flocks.push(f);
     for (const m of spec.members) {
       const type = boidType(m.type);
-      const p = resolveParams(type, m.params);
-      // Elite levels: tougher and bigger.
+      const p = memberParams(m);
+      // Elite levels: tougher (and so bigger).
       p.hp = Math.max(1, Math.round(p.hp * this.rules.hp));
-      p.size *= this.rules.size;
       for (let i = 0; i < Math.round(m.count); i++) {
         const a = this.rand() * Math.PI * 2;
         const d = 20 + this.rand() * 40;
@@ -563,7 +561,8 @@ export class Swarm implements BoidApi {
   }
 
   /**
-   * The boids rules within a flock, from its style: members keep their spacing, match the flock's
+   * The boids rules within a flock, from its style: members keep their spacing (between their
+   * bodies, so big ones don't crowd), match the flock's
    * heading (coordination), are drawn to its centre (tightness), and past its spread are pulled
    * back harder the further out they are, so the flock never comes apart. Escorts also keep
    * clear of the queen's larger body.
@@ -582,8 +581,8 @@ export class Swarm implements BoidApi {
       sx += (ox / d) * push;
       sy += (oy / d) * push;
     };
-    for (const o of f.members) if (o !== b) clear(o, st.spacing);
-    if (f.escort && this.queen && this.queen.hp > 0) clear(this.queen, st.spacing + this.queen.r);
+    for (const o of f.members) if (o !== b) clear(o, st.spacing + b.r + o.r);
+    if (f.escort && this.queen && this.queen.hp > 0) clear(this.queen, st.spacing + b.r + this.queen.r);
     steer.ax += sx * SEPARATION;
     steer.ay += sy * SEPARATION;
 
