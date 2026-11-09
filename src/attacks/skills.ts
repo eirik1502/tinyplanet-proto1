@@ -336,6 +336,17 @@ export function airJumpSpeed(w: World) {
   return w.skill("jumpForce") >= 3 ? base * w.params.skills.jumpForce.speed : base;
 }
 
+/**
+ * Sideways speed after a double jump, when `along` of the flight's speed already points its way:
+ * that plus the jump's speed, at least the jump's least speed (both grown by the skills), up to
+ * the max speed.
+ */
+export function doubleJumpSpeed(w: World, along: number) {
+  const push = airJumpSpeed(w);
+  const least = w.params.move.airJump.minSpeed * (push / w.params.move.airJump.speed || 1);
+  return Math.min(w.params.move.limits.maxSpeed, Math.max(least, Math.max(0, along) + push));
+}
+
 // ---------------------------------------------------------------------------------------------
 // Offers
 // ---------------------------------------------------------------------------------------------

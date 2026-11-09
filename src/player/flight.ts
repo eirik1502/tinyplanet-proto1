@@ -45,17 +45,19 @@ export const maxLean = (w: World) => (w.params.move.jump.maxLean * Math.PI) / 18
 
 /**
  * Launch state for a jump from rim parameter `s` in direction `angle`. Moving along the rim adds
- * to the jump speed but not to its direction: a slide by `jump.slideFactor`, and climbing (`climb`,
- * the climb speed along the rim from the input) by `jump.climbFactor` for the part of it that goes
- * the jump's way (climbing away from it adds nothing).
+ * to the jump speed but not to its direction, for the part of it that goes the jump's way (moving
+ * away from it adds nothing): a slide by `jump.slideFactor`, and climbing (`climb`, the climb speed
+ * along the rim from the input) by `jump.climbFactor`.
  */
 export function launch(w: World, islandIdx: number, s: number, angle: number, slide: number, climb = 0): Flight {
   const e = w.islands[islandIdx]!.pointAt(s);
   const j = w.params.move.jump;
   const dx = Math.cos(angle);
   const dy = Math.sin(angle);
-  const climbing = Math.max(0, climb * (e.tx * dx + e.ty * dy)) * j.climbFactor;
-  const v = Math.min(w.params.move.limits.maxSpeed, j.speed + Math.abs(slide) * j.slideFactor + climbing);
+  const along = e.tx * dx + e.ty * dy;
+  const sliding = Math.max(0, slide * along) * j.slideFactor;
+  const climbing = Math.max(0, climb * along) * j.climbFactor;
+  const v = Math.min(w.params.move.limits.maxSpeed, j.speed + sliding + climbing);
   return { x: e.x + e.nx * 12, y: e.y + e.ny * 12, alt: ISLAND_TOP, vx: dx * v, vy: dy * v, vz: riseSpeed(w, j.height), t: 0 };
 }
 
@@ -67,20 +69,24 @@ export function netBounce(w: World, f: { alt: number; vz: number }, used: boolea
 }
 
 /**
- * Advance a flight by dt, within the air limits. Returns the island and rim parameter if it hit one: either by crossing a
+ * Advance a flight by dt, within the air limits; with `drag`, speed above `air.cruise` bleeds off
+ * (a lunge flies at its own speed). Returns the island and rim parameter if it hit one: either by crossing a
  * rim (from above or level with it, so you can't jump over an island) or by touching the body below. High up and fast
  * (`air.overHeight` above the rims at `air.overSpeed`, as after a hard knockback), a flight passes over islands.
  */
-export function stepFlight(w: World, f: Flight, dt: number, fromIsland: number): { island: number; s: number } | null {
+export function stepFlight(w: World, f: Flight, dt: number, fromIsland: number, drag = true): { island: number; s: number } | null {
   const ox = f.x;
   const oy = f.y;
   f.vz -= gravityAt(w, f.vz) * dt;
   f.vx += w.rules.wind.x * dt;
   f.vy += w.rules.wind.y * dt;
   // Caps: a rise peaks by the height limit at the latest, and sideways speed stops at the max.
+  // Bursts past cruise speed (knockback, double jumps along the flight) fade back down to it.
   if (f.vz > 0) f.vz = Math.min(f.vz, riseSpeed(w, ISLAND_TOP + w.params.move.limits.maxHeight - f.alt));
   const sp = Math.hypot(f.vx, f.vy);
-  const max = w.params.move.limits.maxSpeed;
+  const { cruise, drag: rate } = w.params.move.air;
+  const slowed = drag && sp > cruise ? cruise + (sp - cruise) * Math.exp(-rate * dt) : sp;
+  const max = Math.min(slowed, w.params.move.limits.maxSpeed);
   if (sp > max) {
     f.vx *= max / sp;
     f.vy *= max / sp;

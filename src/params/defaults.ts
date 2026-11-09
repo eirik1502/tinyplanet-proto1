@@ -32,7 +32,7 @@ export const DEFAULTS = {
     jump: {
       speed: 260, // Jump speed (sideways)
       height: 70, // Full jump height (Space held)
-      slideFactor: 1, // Slide speed added to the jump speed (×)
+      slideFactor: 0.4, // Slide speed along the jump added to the jump speed (×)
       climbFactor: 0.5, // Climb speed along the jump added to the jump speed (×)
       maxLean: 85, // Most a jump leans from straight out of the rim (degrees)
       regrab: 0.35, // Can't grab the island jumped from for (s)
@@ -48,6 +48,8 @@ export const DEFAULTS = {
       fallGrab: 45, // Grab radius when falling
       overHeight: 80, // Flies over islands this high above the rims…
       overSpeed: 550, // …at this speed or more (sideways)
+      cruise: 420, // Speed above this fades back down… (sideways)
+      drag: 2, // …this fast (per s)
     },
     assist: {
       angle: 14, // Most a jump is nudged toward an island (degrees)
@@ -59,6 +61,7 @@ export const DEFAULTS = {
     },
     airJump: {
       speed: 220, // Double jump speed (sideways)
+      minSpeed: 340, // Least speed after a double jump (sideways)
       height: 60, // Double jump height
       minPeak: 90, // Lowest peak above the rims
       snapCone: 30, // Snap cone ahead (degrees)

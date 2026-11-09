@@ -1,5 +1,5 @@
 import type { Vec } from "../core/math";
-import { airJumpSpeed } from "../attacks/skills";
+import { doubleJumpSpeed } from "../attacks/skills";
 import { wrapAngle } from "../core/math";
 import { box } from "../combat/hitbox";
 import { Health, Hurtable, type HitInfo } from "../combat/components";
@@ -354,8 +354,8 @@ export class PlayerController {
       if (p.jumpHeld && p.vz <= 0) p.jumpHeld = false;
 
       // Double jump: a fresh rise toward the aim, snapping to an island ahead. The jump speed adds
-      // to whatever of the current velocity already points that way (never less), up to the max
-      // speed, so jumping along the flight speeds it up.
+      // to whatever of the current velocity already points that way (never less than the double
+      // jump's least speed), up to the max speed, so jumping along the flight speeds it up.
       if (jumpPressed && p.airJumps > 0) {
         p.airJumps = 0;
         // Whatever the vertical speed was, the jump starts over: it rises `airJump.height` from here,
@@ -363,10 +363,9 @@ export class PlayerController {
         const aj = prm.move.airJump;
         p.vz = riseSpeed(w, Math.max(aj.height, ISLAND_TOP + aj.minPeak - p.alt));
         p.jumpHeld = true;
-        const push = airJumpSpeed(w);
-        const to = this.doubleJumpDir(push, aim, dir);
+        const to = this.doubleJumpDir(aim, dir);
         if (to) {
-          const sp = Math.min(prm.move.limits.maxSpeed, Math.max(0, p.vx * to.x + p.vy * to.y) + push);
+          const sp = doubleJumpSpeed(w, p.vx * to.x + p.vy * to.y);
           p.vx = to.x * sp;
           p.vy = to.y * sp;
         }
@@ -377,7 +376,7 @@ export class PlayerController {
       if (lunge) this.steerLunge(lunge.target, lunge.speed);
       else if (!w.attacks.aim) this.steerAir(dir, dt);
       const f = flightOf(p);
-      const hit = stepFlight(w, f, dt, p.launchIsland);
+      const hit = stepFlight(w, f, dt, p.launchIsland, !lunge);
       Object.assign(p, { x: f.x, y: f.y, alt: f.alt, vz: f.vz, airTime: f.t });
       if (Math.hypot(p.vx, p.vy) > 1) p.facing = Math.atan2(p.vy, p.vx);
 
@@ -534,11 +533,11 @@ export class PlayerController {
 
   /**
    * The island to snap a double jump to: the one with the nearest rim point inside the snap cone
-   * around `heading` that a double jump of `push` speed can reach (heading there at the push speed
+   * around `heading` that a double jump can reach (heading there at the double jump's speed
    * before falling back to rim height). Failing that, the nearest one inside the cone; never one
    * outside it.
    */
-  private islandAhead(push: number, heading: number): Island | null {
+  private islandAhead(heading: number): Island | null {
     const w = this.w;
     const p = this.player;
     const half = (w.params.move.airJump.snapCone * Math.PI) / 360;
@@ -570,7 +569,7 @@ export class PlayerController {
           inCone = i;
           coneD = d;
         }
-        const speed = Math.min(w.params.move.limits.maxSpeed, Math.max(0, (p.vx * dx + p.vy * dy) / d) + push);
+        const speed = doubleJumpSpeed(w, (p.vx * dx + p.vy * dy) / d);
         if (d < reachD && d <= speed * t) {
           reachable = i;
           reachD = d;
@@ -587,7 +586,7 @@ export class PlayerController {
    * the least turn (an outer edge). Null without any heading: the jump only rises.
    * Call after the jump's rise is set: `p.vz` decides how long the jump stays up.
    */
-  private doubleJumpDir(push: number, aim: Vec | null, dir: Vec): Vec | null {
+  private doubleJumpDir(aim: Vec | null, dir: Vec): Vec | null {
     const p = this.player;
     const islands = this.w.islands;
     let heading: number;
@@ -601,7 +600,7 @@ export class PlayerController {
     const hits = (i: Island) =>
       !i.contains(p.x, p.y) && i.segmentHit(p.x, p.y, p.x + ahead.x * far, p.y + ahead.y * far) !== null;
     if (islands.some(hits)) return ahead;
-    const isl = this.islandAhead(push, heading);
+    const isl = this.islandAhead(heading);
     if (!isl) return ahead;
 
     let tx = 0;
