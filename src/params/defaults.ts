@@ -167,9 +167,9 @@ export const DEFAULTS = {
       maxScale: 1.8, // Size at full power
       size: 1, // Size (×)
       length: 46,
-      pierce: 1, // Enemies it hits before it stops
-      falloff: 0.25, // Damage lost per enemy it went through (of the first hit's)
-      minDamage: 0.25, // Least damage after going through enemies (of the first hit's)
+      pierce: 1, // Enemies it hits
+      falloff: 0.25, // Damage lost per enemy gone through (×)
+      minDamage: 0.25, // Least damage after going through (×)
       flame: 0, // Flame from the tip (size, 0: none)
       cooldown: 0.45, // Cooldown (s)
     },
@@ -222,12 +222,12 @@ export const DEFAULTS = {
       damage: 0, // Blast damage (at the centre)
       push: 600, // Blast knockback (at the centre)
       pullRadius: 100, // Step 2: black hole pull radius
-      pull: 1400, // Step 2: pull strength
-      delay: 1.2, // Step 2: blows up after (s)
+      pull: 2400, // Step 2: pull strength
+      delay: 2, // Step 2: blows up after (s)
       growth: 1.5, // Step 3: pull radius, blast (×)
     },
     jumpForce: {
-      radius: 8, // Strike radius around the player (on top of the enemy's body)
+      radius: 16, // Strike radius around the player
       time: 0.35, // Strike lasts (s), with armor as long
       damage: 0.5, // Damage
       falloff: 0.25, // Less damage each further hit (of the first's)
