@@ -226,7 +226,7 @@ const SAFETY_DOOM: Skill = {
   kind: "passive",
   icon: "net",
   steps: [
-    "The safety bounce explodes, hurting what's around you.",
+    "The safety bounce explodes, throwing back what's around you.",
     "It leaves a black hole that pulls enemies in, then explodes.",
     "The black hole pulls from further, and explodes harder.",
   ],
