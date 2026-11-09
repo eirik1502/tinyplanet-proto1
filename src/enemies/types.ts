@@ -69,6 +69,8 @@ export interface BoidContext {
   dP: number;
   /** Whether its flock is fighting the player (engaged, or screening the queen). */
   fighting: boolean;
+  /** Its top speed this frame: faster while rushing in to fight or screening the queen. */
+  speed: number;
   steer: Steer;
   /** Steer toward a point at `speed` with `weight`; `arrive` slows down on the way in. */
   seek(tx: number, ty: number, speed: number, weight: number, arrive?: boolean): void;
@@ -95,6 +97,8 @@ export interface BoidType<P extends BaseParams = BaseParams> {
   preempt?(b: Boid<P>, c: BoidContext): boolean;
   /** Steering while its flock is fighting; sets `c.steer.alt` too. */
   fight?(b: Boid<P>, c: BoidContext): void;
+  /** How close it must be to attack: an engaged flock's members farther than this rush in. */
+  range?(b: Boid<P>): number;
   /** Attack when fighting and the cooldown is over; true ends the boid's frame. */
   attack?(b: Boid<P>, c: BoidContext): boolean;
   /** Extra vertical reach of its hurtbox (and its own touch) beyond the usual hit height; Infinity = any altitude. */

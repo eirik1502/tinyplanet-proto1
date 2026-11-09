@@ -76,8 +76,10 @@ export const MELEE: BoidType<MeleeParams> = {
     return false;
   },
 
+  range: (b) => b.params.lungeRange,
+
   fight(b, c) {
-    c.seek(c.player.x, c.player.y, b.params.speed, 1.6);
+    c.seek(c.player.x, c.player.y, c.speed, 1.6);
     c.steer.alt = c.player.alt + 6;
   },
 

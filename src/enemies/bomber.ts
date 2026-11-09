@@ -35,9 +35,12 @@ export const BOMBER: BoidType<BomberParams> = {
     return true;
   },
 
+  // Rushes in until its blast would reach, then dives at its own speed.
+  range: (b) => b.params.blastRadius,
+
   fight(b, c) {
     // Dive straight at the player.
-    c.seek(c.player.x, c.player.y, b.params.speed, 2.5, false);
+    c.seek(c.player.x, c.player.y, c.speed, 2.5, false);
     c.steer.alt = c.player.alt + 4;
   },
 };

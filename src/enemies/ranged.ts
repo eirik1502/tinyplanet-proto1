@@ -84,13 +84,15 @@ export const RANGED: BoidType<RangedParams> = {
     return false;
   },
 
+  range: (b) => b.params.range,
+
   fight(b, c) {
     // Hold off at keep-away distance on the side it's on, drifting sideways.
     const ring = b.params.keepAway;
     const side = 60 * Math.sign(Math.sin(b.id));
     const tx = c.player.x - (c.px / c.dP) * ring + (-c.py / c.dP) * side;
     const ty = c.player.y - (c.py / c.dP) * ring + (c.px / c.dP) * side;
-    c.seek(tx, ty, b.params.speed, 1.6);
+    c.seek(tx, ty, c.speed, 1.6);
     c.steer.alt = c.player.alt + 6;
   },
 

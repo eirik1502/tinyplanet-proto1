@@ -478,6 +478,10 @@ export class Swarm implements BoidApi {
       const flock = b.flock;
       // The queen's guard screens her from the player.
       const guarding = queenThreatened && flock.escort;
+      const fighting = player.targetable && (flock.engaged || guarding);
+      // An engaged flock rushes in: each member flies faster until it's in range to attack.
+      const rushing = fighting && !guarding && b.type.range !== undefined && dP > b.type.range(b);
+      const speed = b.params.speed * (guarding ? 1.3 : rushing ? flock.style.rush : 1);
       const steer = { ax: 0, ay: 0, alt: CRUISE_ALT + Math.sin(b.phase * 1.3) * 10 };
       const c: BoidContext = {
         dt,
@@ -485,7 +489,8 @@ export class Swarm implements BoidApi {
         px,
         py,
         dP,
-        fighting: player.targetable && (flock.engaged || guarding),
+        fighting,
+        speed,
         steer,
         swarm: this,
         rand: this.rand,
@@ -517,7 +522,7 @@ export class Swarm implements BoidApi {
         const dist = q.r + 45 + (b.id % 4) * 22;
         const gx = q.x + (qx * Math.cos(spread) - qy * Math.sin(spread)) * dist;
         const gy = q.y + (qx * Math.sin(spread) + qy * Math.cos(spread)) * dist;
-        c.seek(gx, gy, b.params.speed * 1.3, 2.5);
+        c.seek(gx, gy, speed, 2.5);
         steer.alt = player.alt + 6;
       } else if (c.fighting) {
         type.fight?.(b, c);
@@ -540,7 +545,7 @@ export class Swarm implements BoidApi {
       // Only so many members of a flock attack at once, so a flock comes at you in a readable rhythm.
       if (c.fighting && b.cooldown <= 0 && this.attacking(flock) < flock.style.attackers && type.attack?.(b, c)) continue;
 
-      this.fly(b, steer.ax, steer.ay, b.params.speed * (guarding ? 1.3 : 1), 4, dt);
+      this.fly(b, steer.ax, steer.ay, speed, 4, dt);
       const alt = Math.max(ISLAND_TOP - 15, Math.min(ISLAND_TOP + 170, steer.alt));
       b.alt += Math.max(-90 * dt, Math.min(90 * dt, alt - b.alt));
     }
