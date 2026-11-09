@@ -1,11 +1,11 @@
-import { DEFAULT_STYLE, MELEE_PACK, resolveFlock, type FlockSpec, type FlockStyle } from "../enemies/flocks";
+import { DEFAULT_STYLE, FLOCKS, MELEE_PACK, resolveFlock, type FlockSpec, type FlockStyle } from "../enemies/flocks";
 import { MEMBER_TYPES } from "../enemies";
 import type { Params } from "../params/store";
 import { SKILLS, type SkillLevels } from "../attacks/skills";
 import { ALL_TEMPLATES, LAYOUTS, levelBase, PLACEMENTS, QUEEN_SPOTS, resolveLevel, type LevelSpec } from "./levels";
 
 // Level specs for custom levels: an empty one, a template's as on a level, checking one read back
-// from storage, and turning one (or a flock) into source for levels.ts / flocks.ts.
+// from storage, and turning one into source for levels.ts.
 
 /** Every attack, not upgraded: what a custom level starts with. */
 const ALL_ATTACKS: SkillLevels = { swipe: 1, thrust: 1, smash: 1, spear: 1 };
@@ -79,18 +79,30 @@ const literal = (v: unknown, indent = 0) =>
     .split("\n")
     .join("\n" + " ".repeat(indent));
 
-/** A flock as a FlockTemplate literal (style: only what differs from the default). */
-function flockTemplate(f: FlockSpec) {
+/** Marks a predefined flock's name in the literal, unquoted once it's printed. */
+const REF = "@flock:";
+
+/**
+ * A flock for a LevelTemplate literal: the predefined flock it is, by name, or (one saved before
+ * flocks were all predefined) a FlockTemplate literal, its style only what differs from the default.
+ */
+function flockRef(f: FlockSpec) {
+  const name = Object.keys(FLOCKS).find((k) => FLOCKS[k]!.name === f.name);
+  if (name) return REF + name;
   const style: Partial<FlockStyle> = {};
   for (const k of Object.keys(DEFAULT_STYLE) as (keyof FlockStyle)[]) if (f.style[k] !== DEFAULT_STYLE[k]) style[k] = f.style[k];
-  const members = f.members.map((m) => (m.params && Object.keys(m.params).length ? m : { type: m.type, count: m.count }));
-  return { name: f.name, members, ...(Object.keys(style).length ? { style } : {}) };
+  return { name: f.name, members: f.members, ...(Object.keys(style).length ? { style } : {}) };
 }
 
-export const flockSource = (f: FlockSpec) => `const flock: FlockTemplate = ${literal(flockTemplate(f))};\n`;
-
-/** The level as a LevelTemplate literal for levels.ts (fixed size, its flocks listed). */
+/** The level as a LevelTemplate literal for levels.ts (fixed size, its flocks listed; repeats counted). */
 export function levelSource(s: LevelSpec) {
+  const flocks: { flock: unknown; count?: number }[] = [];
+  for (const f of s.flocks) {
+    const flock = flockRef(f);
+    const last = flocks[flocks.length - 1];
+    if (last && typeof flock === "string" && last.flock === flock) last.count = (last.count ?? 1) + 1;
+    else flocks.push({ flock });
+  }
   const t = {
     name: "Custom level",
     blurb: "",
@@ -98,10 +110,10 @@ export function levelSource(s: LevelSpec) {
     fixed: { radius: s.radius, islands: s.islands },
     placement: s.placement,
     queen: s.queenSpot,
-    ...(s.queen ? { queenParams: s.queen.params, escort: flockTemplate(s.queen.escort) } : { noQueen: true }),
-    flocks: s.flocks.map((f) => ({ flock: flockTemplate(f) })),
+    ...(s.queen ? { queenParams: s.queen.params, escort: flockRef(s.queen.escort) } : { noQueen: true }),
+    flocks,
     ...(s.modifiers.length ? { modifiers: s.modifiers } : {}),
     ...(s.theme ? { theme: s.theme } : {}),
   };
-  return `const customLevel: LevelTemplate = ${literal(t)};\n`;
+  return `const customLevel: LevelTemplate = ${literal(t).replace(/"@flock:(\w+)"/g, "$1")};\n`;
 }

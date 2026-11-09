@@ -57,6 +57,8 @@ const STYLE = `
   #devui .status { margin-top: 8px; padding: 5px 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.25); color: #d8f6ff; }
   #devui .row { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; }
   #devui .row.wrap { flex-wrap: wrap; }
+  #devui .row > .spacer { flex: 1; }
+  #devui .row > .dim { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   #devui input[type=number], #devui select { background: rgba(0, 0, 0, 0.3); color: #fff; font: inherit;
     border: 1px solid rgba(170, 150, 255, 0.3); border-radius: 4px; padding: 2px 4px; box-sizing: border-box; }
   #devui select { width: 100%; }
@@ -78,20 +80,13 @@ const STYLE = `
   #devui .field { display: grid; grid-template-columns: 110px 1fr; gap: 6px; align-items: center; margin-bottom: 4px; }
   #devui .field input[type=number] { width: 100%; }
   #devui .slider { display: grid; grid-template-columns: 1fr auto; row-gap: 1px; margin-bottom: 4px; }
-  #devui details.flock { margin-bottom: 6px; padding: 4px 8px 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(170, 150, 255, 0.18); }
   #devui details > summary { cursor: pointer; list-style: none; }
   #devui details > summary::-webkit-details-marker { display: none; }
   #devui details > summary::before { content: "▸"; display: inline-block; width: 12px; color: #a99be8; }
   #devui details[open] > summary::before { content: "▾"; }
-  #devui details.flock > summary { display: flex; gap: 6px; align-items: center; padding: 2px 0; }
-  #devui details.flock > summary .summary { color: #a99be8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-  #devui details.flock > summary .spacer { flex: 1; }
   #devui details.sub { margin: 4px 0 4px 6px; }
   #devui details.sub > summary { color: #c9b8e8; margin-bottom: 4px; }
   #devui details.params .field { grid-template-columns: 1fr 80px; }
-  #devui .member { margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(170, 150, 255, 0.18); }
-  #devui .member .row > input[type=number] { width: 56px; }
   #devui .inspect pre { margin: 0; font: 10px/1.35 ui-monospace, monospace; white-space: pre-wrap; color: #d8d0ff; }
   #devui .inspect .log { max-height: 160px; overflow-y: auto; background: rgba(0, 0, 0, 0.25); border-radius: 4px; padding: 4px 6px; }
 `;

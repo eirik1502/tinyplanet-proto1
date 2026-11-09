@@ -60,13 +60,11 @@ The **Dev** box in the top-right corner (click it to show or hide) has two secti
   - **Normal run** plays the game: pick the level to start from, and optionally one template to
     use on every level.
   - **Custom level** sets up a level to test. Start from **Empty** or **Load** any game template
-    (resolved as on the level you pick; loading again rerolls its sampled flocks), then edit
-    everything: layout, size, where flocks spawn, weapons, modifiers, the queen (her params and
-    escort), and the flocks. Add flocks from scratch or from the predefined flock templates. Each
-    flock lists its members (type, count, and per-group param overrides; a blank param uses the
-    type's default) and its style. Without a queen you win by killing every boid; clearing a
-    custom level starts it again. **Copy** gives a flock as a `FlockTemplate` for `flocks.ts`, or
-    the whole level as a `LevelTemplate` for `levels.ts`.
+    (resolved as on the level you pick; loading again rerolls its pool), then edit it: layout,
+    size, where flocks spawn, weapons, modifiers, the queen (her params, and her escort from the
+    predefined flocks), and the flocks, added from the predefined ones in `flocks.ts`. Without a
+    queen you win by killing every boid; clearing a custom level starts it again. **Copy** gives
+    the whole level as a `LevelTemplate` for `levels.ts`, its flocks by name.
 - **Tuning** holds the game params as sliders, one tab per group. Changes are saved in the
   browser. **Copy** puts every value on the clipboard as a replacement for `DEFAULTS` in
   `src/params/defaults.ts`.
@@ -78,16 +76,18 @@ The **Dev** box in the top-right corner (click it to show or hide) has two secti
 - **Boid types** live in `src/enemies/`, one file per type (melee, ranged, bomber, queen). Each one
   has its default params and its behaviour; its sprite is in `src/render/sprites/` and its
   briefing card in `src/ui/briefing/cards.ts`. A boid is an instance
-  of a type with param overrides, so a level can field, say, bigger and tougher melee boids
-  without a new type. The sprite scales with the `size` param.
-- **Flocks** (`src/enemies/flocks.ts`) list their members, or sample them by weight to a size range. A
-  flock has a style: spread, spacing, tightness, coordination, restlessness, roaming pace, aggro
-  and give-up ranges, grudge, and whether it hunts you from the start. Members flock with the
+  of a type with param overrides, so a level can field, say, tougher melee boids without a new
+  type. A boid's body (hurtbox and sprite) grows with its health, by the square root of it
+  against the type's default.
+- **Flocks** (`src/enemies/flocks.ts`) are all predefined, each listing its members (type, count,
+  and optionally health and other param overrides). A flock has a style: spread, spacing,
+  tightness, coordination, restlessness, roaming pace, aggro and give-up ranges, grudge, whether
+  it hunts you from the start, how many attack at once, and how much faster it rushes in when engaged. Members flock with the
   boids rules, pulled toward the whole flock and leashed past its spread, so a flock stays
   together. When the queen's guard thins out, the nearest whole flock comes to guard her.
 - **Level templates** (`src/levels/levels.ts`) give a layout and size, flocks every planet has, and a
-  pool of flock templates to spend the rest of the level's swarm budget on (each boid type has a
-  budget cost). A template on a level resolves to a `LevelSpec`, the plain data a planet is
+  pool of predefined flocks to spend the rest of the level's swarm budget on (each boid type has a
+  budget cost per health). A template on a level resolves to a `LevelSpec`, the plain data a planet is
   generated from. Custom levels edit a `LevelSpec` directly.
 
 ## Controls

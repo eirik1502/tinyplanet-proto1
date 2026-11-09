@@ -183,8 +183,8 @@ export const ROYAL_GUARD: FlockTemplate = {
   style: { tightness: 0.4 },
 };
 
-/** The predefined flocks, for the dev panel. */
-export const FLOCK_TEMPLATES: FlockTemplate[] = [
+/** The predefined flocks by their names in this file (the dev panel's levels refer to them so). */
+export const FLOCKS: Record<string, FlockTemplate> = {
   MELEE_PACK,
   SKIRMISHERS,
   BOMBER_RUN,
@@ -200,7 +200,10 @@ export const FLOCK_TEMPLATES: FlockTemplate[] = [
   ARMORED_BOMBERS,
   ELITE_SKIRMISHERS,
   ROYAL_GUARD,
-];
+};
+
+/** The predefined flocks, for the dev panel. */
+export const FLOCK_TEMPLATES: FlockTemplate[] = Object.values(FLOCKS);
 
 /** A concrete flock from a template. */
 export function resolveFlock(t: FlockTemplate): FlockSpec {

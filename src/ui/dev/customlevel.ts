@@ -1,27 +1,17 @@
 import { SKILLS, SKILL_IDS, type SkillLevels } from "../../attacks/skills";
-import { boidType, BOID_TYPES, MEMBER_TYPES, type MemberTypeId } from "../../enemies";
+import { BOID_TYPES } from "../../enemies";
 import type { ParamInput } from "../../enemies/types";
-import {
-  DEFAULT_STYLE,
-  describeFlock,
-  FLOCK_TEMPLATES,
-  resolveFlock,
-  ROYAL_GUARD,
-  STYLE_INPUTS,
-  type FlockSpec,
-  type FlockStyle,
-  type MemberSpec,
-} from "../../enemies/flocks";
-import { emptyLevel, flockSource, templateLevel } from "../../levels/custom";
+import { describeFlock, FLOCK_TEMPLATES, resolveFlock, ROYAL_GUARD, type FlockSpec } from "../../enemies/flocks";
+import { emptyLevel, templateLevel } from "../../levels/custom";
 import { ALL_TEMPLATES, LAYOUTS, MODIFIERS, PLACEMENTS, QUEEN_SPOTS, type LayoutId, type LevelSpec, type ModifierId, type PlacementId } from "../../levels/levels";
 import { liveParams } from "../../params/store";
 import type { QueenSpot } from "../../world/planet";
-import { button, checkbox, copyButton, el, numberInput, select, slider } from "../dom";
+import { button, checkbox, el, numberInput, select } from "../dom";
 
 // The custom level editor in the dev panel's Run section. A custom level is a LevelSpec: start
-// from an empty one or load a game template (as on a given level), then edit everything: the
-// planet, the player's skills, modifiers, the queen and her escort, and the flocks with their members,
-// the members' params and the flocks' style. Copy turns a flock or the whole level into source.
+// from an empty one or load a game template (as on a given level), then edit it: the planet, the
+// player's skills, modifiers, the queen (her params and escort), and the flocks, picked from the
+// predefined ones (flocks.ts). Copy turns the whole level into source.
 
 // ---------------------------------------------------------------------------------------------
 // Editor
@@ -146,16 +136,18 @@ export function customEditor(state: CustomState, changed: () => void, rerender: 
     const q = s.queen;
     queen.push(
       paramsEditor("Queen's params", BOID_TYPES.queen.inputs, BOID_TYPES.queen.params as unknown as Record<string, number>, q.params, changed),
-      flockCard(q.escort, "Escort", changed, structural),
+      field("Escort", flockPicker(q.escort.name, (t) => ((q.escort = resolveFlock(t)), structural()))),
+      el("div", { className: "dim", textContent: describeFlock(q.escort) }),
     );
   }
 
   // Flocks
-  let addFrom = "";
+  let addFrom = FLOCK_TEMPLATES[0]!.name;
+  let addCount = 1;
   const flocks: Node[] = [
     el("h4", { textContent: "Flocks" }),
     ...s.flocks.map((f, i) =>
-      flockCard(f, `Flock ${i + 1}`, changed, structural, () => {
+      flockRow(f, () => {
         s.flocks.splice(i, 1);
         structural();
       }),
@@ -163,16 +155,43 @@ export function customEditor(state: CustomState, changed: () => void, rerender: 
     el(
       "div",
       { className: "row" },
-      select([["", "New flock"], ...FLOCK_TEMPLATES.map((t): [string, string] => [t.name, t.name])], addFrom, (v) => (addFrom = v)),
-      button("+ Add flock", () => {
-        const t = FLOCK_TEMPLATES.find((t) => t.name === addFrom);
-        s.flocks.push(t ? resolveFlock(t) : { name: "New flock", members: [{ type: "melee", count: 1 }], style: { ...DEFAULT_STYLE } });
+      flockPicker(addFrom, (t) => (addFrom = t.name)),
+      el("span", { className: "dim", textContent: "×" }),
+      numberInput(addCount, 1, 20, 1, (v) => (addCount = v ?? 1)),
+      button("+ Add", () => {
+        const t = FLOCK_TEMPLATES.find((t) => t.name === addFrom)!;
+        for (let i = 0; i < addCount; i++) s.flocks.push(resolveFlock(t));
         structural();
       }),
     ),
   ];
 
   return [...startFrom, ...planet, ...queen, ...flocks];
+}
+
+/** A dropdown of the predefined flocks, on `current` (one that isn't predefined shows as such). */
+function flockPicker(current: string, pick: (t: (typeof FLOCK_TEMPLATES)[number]) => void) {
+  const known = FLOCK_TEMPLATES.some((t) => t.name === current);
+  return select(
+    [...(known ? [] : [[current, `${current} (not predefined)`] as [string, string]]), ...FLOCK_TEMPLATES.map((t): [string, string] => [t.name, t.name])],
+    current,
+    (v) => {
+      const t = FLOCK_TEMPLATES.find((t) => t.name === v);
+      if (t) pick(t);
+    },
+  );
+}
+
+/** A flock in the list: its name, who's in it, and a remove button. */
+function flockRow(f: FlockSpec, remove: () => void) {
+  return el(
+    "div",
+    { className: "row" },
+    el("b", { textContent: f.name }),
+    el("span", { className: "dim", textContent: describeFlock(f) }),
+    el("span", { className: "spacer" }),
+    button("×", remove, "remove", "Remove this flock"),
+  );
 }
 
 /** Which collapsible sections are open, by the object they edit (kept across re-renders). */
@@ -188,73 +207,6 @@ function section(key: object, cls: string, head: HTMLElement, ...body: Node[]) {
 /** A label and its control on one row. */
 function field(label: string, control: HTMLElement) {
   return el("label", { className: "field" }, el("span", { textContent: label }), control);
-}
-
-/** A collapsible card for a flock: its members (with their params) and its style. */
-function flockCard(f: FlockSpec, label: string, changed: () => void, structural: () => void, remove?: () => void) {
-  const summary = el("span", { className: "summary", textContent: describeFlock(f) });
-  const edited = () => {
-    if (!f.name.endsWith(" (edited)") && f.name !== "New flock") f.name += " (edited)";
-    title.textContent = `${label}: ${f.name}`;
-    summary.textContent = describeFlock(f);
-    changed();
-  };
-  const title = el("b", { textContent: `${label}: ${f.name}` });
-  const head = el(
-    "summary",
-    {},
-    title,
-    summary,
-    el("span", { className: "spacer" }),
-    copyButton("Copy", () => flockSource(f), "Copy as a FlockTemplate for flocks.ts"),
-    ...(remove ? [button("×", remove, "remove", "Remove this flock")] : []),
-  );
-
-  const members = f.members.map((m, i) => memberRow(m, edited, () => {
-    f.members.splice(i, 1);
-    edited();
-    structural();
-  }));
-  const addMember = button("+ Member", () => {
-    f.members.push({ type: "melee", count: 1 });
-    edited();
-    structural();
-  });
-
-  const style = section(
-    f.style,
-    "sub",
-    el("summary", { textContent: "Style" }),
-    ...(Object.keys(STYLE_INPUTS) as (keyof FlockStyle)[]).map((k) => {
-      const [name, min, max, step] = STYLE_INPUTS[k];
-      if (k === "hunts") return checkbox(name, f.style.hunts >= 0.5, (on) => ((f.style.hunts = on ? 1 : 0), edited()));
-      return slider(name, f.style[k], min, max, step, (v) => ((f.style[k] = v), edited()));
-    }),
-  );
-
-  return section(f, "flock", head, ...members, el("div", { className: "row" }, addMember), style);
-}
-
-/** A member group: type, count, and its params (blank = the type's default). */
-function memberRow(m: MemberSpec, edited: () => void, remove: () => void) {
-  const type = select(
-    MEMBER_TYPES.map((t): [string, string] => [t, BOID_TYPES[t].name]),
-    m.type,
-    (v) => {
-      m.type = v as MemberTypeId;
-      m.params = {}; // other types have other params
-      edited();
-      paramsBox.replaceWith((paramsBox = paramsFor()));
-    },
-  );
-  const count = numberInput(m.count, 0, 40, 1, (v) => ((m.count = v ?? 0), edited()));
-  const paramsFor = () => {
-    const t = boidType(m.type);
-    m.params ??= {};
-    return paramsEditor("Params", t.inputs as Record<string, ParamInput>, t.params as unknown as Record<string, number>, m.params, edited);
-  };
-  let paramsBox = paramsFor();
-  return el("div", { className: "member" }, el("div", { className: "row" }, type, count, button("×", remove, "remove", "Remove")), paramsBox);
 }
 
 /** Number inputs for a type's params; a blank one uses the default (shown greyed). */
