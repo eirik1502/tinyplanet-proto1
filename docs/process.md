@@ -10,7 +10,7 @@ Add in cd pipeline
 - Increase lowest speed boost on double jump
 - Input bug with controller: Direction many times defaults to down (at least while climbing)
 
-## Skill building
+## ✅ Skill building
 Add "skills", enhancement to different aspects of the player.
 Skills should be obtained throughout a run.
 They should be chosen along the way, so the player can decide their build direction.
@@ -50,30 +50,6 @@ Initial suggestion:
 Choosing skills:
 - After every level, three skills are presented, the player picks one
 - The presented skill will always be the next upgrade of that skill
-
-
-Apply skills to the following:
-- 
-
-Power up / skills:
-- Safety bounce: 
-  - Explode on bounce
-  - Make black hole on landing, sucking enemies in
-  - Extra safety bounce
-- Landing/grabbing:
-  - Explode on landing
-  - Push away on landing (wind)
-- Double jump: 
-  - Float while holding jump for up to 3s
-  - Explode on double jump
-- Spear
-  - Beam upgrade: shoot a beam (instant / multihit)
-  - Grappling hook upgrade: Hook that connects with island or enemy. Laser rope, kills enemies touched
-  - Explosion upgrade: Explode (push back) surrounding enemies on impact
-- Sword
-  - Range upgrade
-  - Strength upgrade
-  - Lance upgrade: Longer ranged, thinner
 
 
 ## ✅Story segway
