@@ -58,7 +58,7 @@ const mixed: Scenario = {
     islands: 9,
     placement: "anywhere",
     queenSpot: "far",
-    queen: { params: { hp: 12 }, escort: resolveFlock(ROYAL_GUARD, () => 0.5) },
+    queen: { params: { hp: 12 }, escort: resolveFlock(ROYAL_GUARD) },
     flocks: [resolveFlock(MELEE_PACK), resolveFlock(SKIRMISHERS), resolveFlock(BOMBER_RUN)],
     modifiers: [],
     skills: ALL_ATTACKS,

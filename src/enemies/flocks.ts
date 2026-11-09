@@ -1,10 +1,10 @@
-import { boidType, MEMBER_TYPES, type MemberTypeId } from "./index";
+import { boidType, type MemberTypeId } from "./index";
 import { resolveParams, type ParamInput } from "./types";
 
 // Flocks: groups of boids that fly and fight together, held together by the boids rules (spacing,
 // alignment, cohesion toward the whole flock) and a soft leash, so a flock never comes apart.
-// A flock template gives its members (listed, or sampled by weight) and its style; resolving it
-// gives a concrete flock spec, which levels and the dev panel's custom levels are made of.
+// A flock template gives its members and its style; resolving it gives a concrete flock spec,
+// which levels and the dev panel's custom levels are made of.
 
 /** How a flock flies and fights, in intuitive terms (the swarm maps them to the boids weights). */
 export interface FlockStyle {
@@ -33,7 +33,7 @@ export interface FlockStyle {
 }
 
 export const DEFAULT_STYLE: FlockStyle = {
-  spread: 80,
+  spread: 120,
   spacing: 34,
   tightness: 0.3,
   coordination: 0.45,
@@ -79,62 +79,129 @@ export interface FlockSpec {
   style: FlockStyle;
 }
 
-/** A flock template: members listed, or sampled by weight to a size within a range. */
+/** A flock template: its members, and how it flies where that differs from the default. */
 export interface FlockTemplate {
   name: string;
-  members?: MemberSpec[];
-  sample?: { weights: Partial<Record<MemberTypeId, number>>; size: [number, number] };
+  members: MemberSpec[];
   style?: Partial<FlockStyle>;
 }
 
-export const MELEE_PACK: FlockTemplate = { name: "Melee pack", members: [{ type: "melee", count: 4 }] };
+// The predefined flocks, by how far into a run they show up. Early ones have the types' default
+// health; later ones are fewer and tougher (and so bigger) for the same budget.
+
+export const MELEE_PACK: FlockTemplate = { name: "Melee pack", members: [{ type: "melee", count: 7 }] };
 export const SKIRMISHERS: FlockTemplate = {
   name: "Skirmishers",
-  members: [{ type: "ranged", count: 3 }],
-  style: { spread: 110, aggroRange: 320, giveUpRange: 500 },
+  members: [{ type: "ranged", count: 5 }],
+  style: { spread: 140, aggroRange: 320, giveUpRange: 500 },
 };
 export const BOMBER_RUN: FlockTemplate = {
   name: "Bomber run",
   members: [{ type: "bomber", count: 3 }],
-  style: { coordination: 0.7, pace: 95 },
+  style: { spread: 80, coordination: 0.7, pace: 95 },
 };
 export const MIXED_FLOCK: FlockTemplate = {
   name: "Mixed flock",
-  sample: { weights: { melee: 0.55, ranged: 0.35, bomber: 0.1 }, size: [3, 5] },
+  members: [
+    { type: "melee", count: 5 },
+    { type: "ranged", count: 3 },
+    { type: "bomber", count: 1 },
+  ],
+  style: { attackers: 3 },
+};
+export const MIXED_RANGED: FlockTemplate = {
+  name: "Mixed flock (ranged-heavy)",
+  members: [
+    { type: "melee", count: 3 },
+    { type: "ranged", count: 5 },
+    { type: "bomber", count: 1 },
+  ],
+  style: { spread: 140, attackers: 3 },
 };
 export const BIG_PACK: FlockTemplate = {
   name: "Big pack",
-  sample: { weights: { melee: 0.75, ranged: 0.25 }, size: [6, 8] },
-  style: { spread: 110, tightness: 0.4 },
+  members: [
+    { type: "melee", count: 9 },
+    { type: "ranged", count: 3 },
+  ],
+  style: { spread: 160, tightness: 0.4, attackers: 3 },
 };
-export const BRUTES: FlockTemplate = {
-  name: "Brutes",
-  members: [{ type: "melee", count: 2, hp: 6, params: { speed: 150, damage: 4 } }],
-  style: { spacing: 45, pace: 55 },
+
+export const VETERANS: FlockTemplate = { name: "Veterans", members: [{ type: "melee", count: 6, hp: 4 }] };
+export const GUNLINE: FlockTemplate = {
+  name: "Gunline",
+  members: [
+    { type: "melee", count: 4, hp: 4 },
+    { type: "ranged", count: 4 },
+  ],
+  style: { spread: 140, aggroRange: 280, giveUpRange: 450, attackers: 3 },
 };
+export const HEAVY_BOMBERS: FlockTemplate = {
+  name: "Heavy bombers",
+  members: [{ type: "bomber", count: 3, hp: 2 }],
+  style: { spread: 80, coordination: 0.7, pace: 95 },
+};
+export const MIXED_VETERANS: FlockTemplate = {
+  name: "Mixed veterans",
+  members: [
+    { type: "melee", count: 4, hp: 4 },
+    { type: "ranged", count: 3, hp: 3 },
+  ],
+  style: { attackers: 3 },
+};
+
+const BRUTE: MemberSpec = { type: "melee", count: 2, hp: 10, params: { speed: 150, damage: 4 } };
+export const BRUTES: FlockTemplate = { name: "Brutes", members: [BRUTE], style: { spacing: 45, pace: 55 } };
+export const BRUTE_SQUAD: FlockTemplate = {
+  name: "Brute squad",
+  members: [BRUTE, { type: "melee", count: 5 }],
+  style: { spread: 140, attackers: 3 },
+};
+export const ARMORED_BOMBERS: FlockTemplate = {
+  name: "Armored bombers",
+  members: [{ type: "bomber", count: 3, hp: 3 }],
+  style: { spread: 80, coordination: 0.7, pace: 85 },
+};
+export const ELITE_SKIRMISHERS: FlockTemplate = {
+  name: "Elite skirmishers",
+  members: [{ type: "ranged", count: 5, hp: 4 }],
+  style: { spread: 140, aggroRange: 320, giveUpRange: 500 },
+};
+
+/** The queen's escort unless a template gives its own. */
 export const ROYAL_GUARD: FlockTemplate = {
   name: "Royal guard",
-  sample: { weights: { melee: 0.49, ranged: 0.29, bomber: 0.22 }, size: [4, 4] },
+  members: [
+    { type: "melee", count: 2 },
+    { type: "ranged", count: 1 },
+    { type: "bomber", count: 1 },
+  ],
   style: { tightness: 0.4 },
 };
 
 /** The predefined flocks, for the dev panel. */
-export const FLOCK_TEMPLATES: FlockTemplate[] = [MELEE_PACK, SKIRMISHERS, BOMBER_RUN, MIXED_FLOCK, BIG_PACK, BRUTES, ROYAL_GUARD];
+export const FLOCK_TEMPLATES: FlockTemplate[] = [
+  MELEE_PACK,
+  SKIRMISHERS,
+  BOMBER_RUN,
+  MIXED_FLOCK,
+  MIXED_RANGED,
+  BIG_PACK,
+  VETERANS,
+  GUNLINE,
+  HEAVY_BOMBERS,
+  MIXED_VETERANS,
+  BRUTES,
+  BRUTE_SQUAD,
+  ARMORED_BOMBERS,
+  ELITE_SKIRMISHERS,
+  ROYAL_GUARD,
+];
 
-/** A concrete flock from a template (sampled ones draw their members from `rand`). */
-export function resolveFlock(t: FlockTemplate, rand: () => number = Math.random): FlockSpec {
+/** A concrete flock from a template. */
+export function resolveFlock(t: FlockTemplate): FlockSpec {
   const style = { ...DEFAULT_STYLE, ...t.style };
-  if (t.members) return { name: t.name, members: t.members.map((m) => ({ ...m, params: m.params && { ...m.params } })), style };
-  const { weights, size } = t.sample!;
-  const n = Math.round(size[0] + rand() * (size[1] - size[0]));
-  const total = MEMBER_TYPES.reduce((s, k) => s + (weights[k] ?? 0), 0) || 1;
-  const counts: Partial<Record<MemberTypeId, number>> = {};
-  for (let i = 0; i < n; i++) {
-    let r = rand() * total;
-    const k = MEMBER_TYPES.find((k) => (r -= weights[k] ?? 0) < 0) ?? MEMBER_TYPES[0]!;
-    counts[k] = (counts[k] ?? 0) + 1;
-  }
-  return { name: t.name, members: MEMBER_TYPES.filter((k) => counts[k]).map((type) => ({ type, count: counts[type]! })), style };
+  return { name: t.name, members: t.members.map((m) => ({ ...m, params: m.params && { ...m.params } })), style };
 }
 
 /** A flock's share of a swarm budget: its members' health, at their types' cost per health. */

@@ -6,15 +6,23 @@ import { BOID_TYPES } from "../enemies";
 import type { SwarmRules } from "../enemies/swarm";
 import { resolveParams } from "../enemies/types";
 import {
+  ARMORED_BOMBERS,
   BIG_PACK,
   BOMBER_RUN,
+  BRUTE_SQUAD,
   BRUTES,
+  ELITE_SKIRMISHERS,
   flockCost,
+  GUNLINE,
+  HEAVY_BOMBERS,
   MELEE_PACK,
   MIXED_FLOCK,
+  MIXED_RANGED,
+  MIXED_VETERANS,
   resolveFlock,
   ROYAL_GUARD,
   SKIRMISHERS,
+  VETERANS,
   type FlockSpec,
   type FlockTemplate,
 } from "../enemies/flocks";
@@ -376,7 +384,7 @@ const openSkies: LevelTemplate = {
   blurb: "Islands scattered far and wide.",
   layout: "scatter",
   planet: { radius: 850, islands: 10 },
-  pool: [MIXED_FLOCK],
+  pool: [MIXED_FLOCK, MIXED_RANGED, MELEE_PACK, SKIRMISHERS],
 };
 
 const theRing: LevelTemplate = {
@@ -384,7 +392,7 @@ const theRing: LevelTemplate = {
   blurb: "A ring of islands around an empty sky. The swarm gathers in the middle.",
   layout: "ring",
   planet: { radius: 950, islands: 11 },
-  pool: [MIXED_FLOCK],
+  pool: [MIXED_FLOCK, MIXED_RANGED, MELEE_PACK],
   placement: "middle",
 };
 
@@ -403,7 +411,7 @@ const theGauntlet: LevelTemplate = {
   blurb: "One long path to the queen, watched by ranged boids.",
   layout: "gauntlet",
   planet: { radius: 1050, islands: 10 },
-  pool: [SKIRMISHERS, SKIRMISHERS, MELEE_PACK],
+  pool: [SKIRMISHERS, SKIRMISHERS, GUNLINE, MELEE_PACK, VETERANS],
   placement: "ambush",
 };
 
@@ -420,7 +428,7 @@ const queensCourt: LevelTemplate = {
   blurb: "The whole swarm stays close to the queen.",
   layout: "scatter",
   planet: { radius: 800, islands: 10 },
-  pool: [MIXED_FLOCK],
+  pool: [MIXED_VETERANS, MIXED_FLOCK, VETERANS, HEAVY_BOMBERS],
   placement: "guardQueen",
   theme: { hue: [270, 330] },
 };
@@ -430,7 +438,7 @@ const citadel: LevelTemplate = {
   blurb: "The queen holds the heart of a dense island cluster. Patrols circle the outskirts.",
   layout: "core",
   planet: { radius: 900, islands: 9 },
-  pool: [MIXED_FLOCK],
+  pool: [MIXED_VETERANS, MIXED_FLOCK, GUNLINE, MELEE_PACK],
   queen: "centre",
   placement: "edges",
 };
@@ -440,7 +448,7 @@ const thicket: LevelTemplate = {
   blurb: "Sparse islands at first, crowding together toward the queen.",
   layout: "gradient",
   planet: { radius: 950, islands: 13 },
-  pool: [MIXED_FLOCK],
+  pool: [BRUTE_SQUAD, ELITE_SKIRMISHERS, MIXED_VETERANS, VETERANS],
   placement: "guardQueen",
 };
 
@@ -449,7 +457,7 @@ const continentsTemplate: LevelTemplate = {
   blurb: "A few huge islands with pebbles between them. Big melee packs, and brutes.",
   layout: "continents",
   planet: { radius: 1000, islands: 10 },
-  pool: [BIG_PACK, MELEE_PACK, BRUTES],
+  pool: [BIG_PACK, BRUTES, BRUTE_SQUAD, VETERANS],
 };
 
 const leaps: LevelTemplate = {
@@ -457,7 +465,7 @@ const leaps: LevelTemplate = {
   blurb: "Wide gaps between every island. Save your double jump.",
   layout: "longLeaps",
   planet: { radius: 950, islands: 9 },
-  pool: [SKIRMISHERS, SKIRMISHERS, MIXED_FLOCK],
+  pool: [SKIRMISHERS, SKIRMISHERS, GUNLINE, MIXED_VETERANS],
 };
 
 const theWilds: LevelTemplate = {
@@ -465,7 +473,7 @@ const theWilds: LevelTemplate = {
   blurb: "Islands bunch up and thin out at random.",
   layout: "wilds",
   planet: { radius: 1000, islands: 13 },
-  pool: [MIXED_FLOCK],
+  pool: [BRUTE_SQUAD, ARMORED_BOMBERS, ELITE_SKIRMISHERS, MIXED_VETERANS, GUNLINE],
   theme: { hue: [20, 70] },
 };
 
@@ -479,7 +487,7 @@ const theHive: LevelTemplate = {
   queenHp: 2,
   // Reinforcements make up the difference.
   budget: 0.8,
-  pool: [MIXED_FLOCK],
+  pool: [MIXED_FLOCK, MIXED_RANGED, MELEE_PACK],
   placement: "guardQueen",
   modifiers: ["shield", "reinforcements"],
   theme: { hue: [25, 50], sat: [0.5, 0.65] },
@@ -495,7 +503,7 @@ const royalGuard: LevelTemplate = {
   queenHp: 2.5,
   // Elite boids have double health: half as many of them.
   budget: 0.5,
-  pool: [MIXED_FLOCK, BRUTES],
+  pool: [MIXED_VETERANS, VETERANS, BRUTES],
   placement: "guardQueen",
   modifiers: ["elite", "shield", "fog"],
   theme: { hue: [200, 260] },
@@ -510,7 +518,7 @@ const theStorm: LevelTemplate = {
   queenHp: 3,
   // Elite boids have double health, and reinforcements top the swarm up.
   budget: 0.5,
-  pool: [MIXED_FLOCK, MELEE_PACK],
+  pool: [MIXED_VETERANS, VETERANS, BRUTE_SQUAD],
   placement: "middle",
   modifiers: ["wind", "elite", "reinforcements"],
   theme: { hue: [180, 230], sat: [0.25, 0.4] },
@@ -589,7 +597,7 @@ export function planLevel(
 
 /**
  * The spec for a template on a level: the template's planet, its listed flocks, then flocks from its pool until the level's budget (less the listed
- * flocks and the escort) is spent. Sampled flocks draw from `rand`.
+ * flocks and the escort) is spent, picked with `rand`.
  */
 export function resolveLevel(
   t: LevelTemplate,
@@ -597,13 +605,13 @@ export function resolveLevel(
   opts: { modifiers: ModifierId[]; skills: SkillLevels; rand?: Rng },
 ): LevelSpec {
   const rand = opts.rand ?? Math.random;
-  const escort = resolveFlock(t.escort ?? ROYAL_GUARD, rand);
+  const escort = resolveFlock(t.escort ?? ROYAL_GUARD);
   const flocks: FlockSpec[] = [];
-  for (const e of t.flocks ?? []) for (let i = 0; i < (e.count ?? 1); i++) flocks.push(resolveFlock(e.flock, rand));
+  for (const e of t.flocks ?? []) for (let i = 0; i < (e.count ?? 1); i++) flocks.push(resolveFlock(e.flock));
   if (t.pool?.length) {
     let budget = base.budget * (t.budget ?? 1) - flockCost(escort) - flocks.reduce((s, f) => s + flockCost(f), 0);
     for (let guard = 0; budget > 0 && guard < 200; guard++) {
-      const f = resolveFlock(t.pool[Math.floor(rand() * t.pool.length)]!, rand);
+      const f = resolveFlock(t.pool[Math.floor(rand() * t.pool.length)]!);
       const cost = flockCost(f);
       // Stop rather than overshoot by more than half a flock.
       if (cost - budget > cost / 2) break;

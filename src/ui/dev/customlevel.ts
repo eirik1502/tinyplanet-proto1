@@ -82,7 +82,7 @@ export function customEditor(state: CustomState, changed: () => void, rerender: 
         state.fromLevel = v ?? 1;
         changed();
       }),
-      button("Load", load, "", "Replace the level below (a template's sampled flocks are rolled again)"),
+      button("Load", load, "", "Replace the level below (a template's pool is rolled again)"),
     ),
   ];
 
