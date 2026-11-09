@@ -229,10 +229,10 @@ export const DEFAULTS = {
     jumpForce: {
       radius: 16, // Strike radius around the player
       time: 0.35, // Strike lasts (s), with armor as long
-      damage: 0.5, // Damage
+      damage: 1, // Damage
       falloff: 0.25, // Less damage each further hit (of the first's)
       minDamage: 0.25, // Least damage (of the first's)
-      push: 450, // Knockback aside
+      push: 600, // Knockback aside
       growth: 1.5, // Step 2: strike radius (×)
       speed: 1.4, // Step 3: double jump speed (×)
     },
