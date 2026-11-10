@@ -7,7 +7,7 @@ import type { World } from "./world";
 // Info lessons have nothing to do: they show for a moment after something happens (the safety
 // net catching the player) and count as learned once seen.
 //
-// Lesson text marks buttons in braces: {jump}, {sword}, {spear} (actions), {move} (the move
+// Lesson text marks buttons in braces: {jump}, {sword}, {lunge}, {spear} (actions), {move} (the move
 // input) and {aim} (what aims a jump: the move input, or the pointer). The HUD draws them as keys.
 
 /** Scratch state a lesson's `check` may keep (reset on a new world). */
@@ -101,17 +101,24 @@ export const LESSONS: Lesson[] = [
   },
   {
     id: "combo",
-    text: "{sword} {sword} keep hitting: swipe, then lunge",
+    text: "{sword} {sword} keep hitting: swipe, then poke",
     after: ["sword"],
-    when: (w) => w.skill("thrust") > 0 && enemyDistance(w) < 300,
+    when: (w) => w.skill("poke") > 0 && enemyDistance(w) < 300,
     done: on("attack", (e) => e.weapon === "sword" && e.step === 2),
   },
   {
     id: "smash",
-    text: "{sword} {sword} {sword} keep hitting: swipe, lunge, then smash",
+    text: "{sword} {sword} {sword} keep hitting: swipe, poke, then smash",
     after: ["combo"],
     when: (w) => w.skill("smash") > 0 && enemyDistance(w) < 300,
     done: on("attack", (e) => e.weapon === "sword" && e.step === 3),
+  },
+  {
+    id: "lunge",
+    text: "{lunge} lunge at an enemy",
+    after: ["combo"],
+    when: (w) => hasWeapon(w, "lunge") && enemyDistance(w) < 300,
+    done: on("attack", (e) => e.weapon === "lunge"),
   },
   {
     id: "airHit",

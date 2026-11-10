@@ -1,4 +1,4 @@
-import { SKILL_IDS, SKILLS, type SkillLevels } from "../attacks/skills";
+import { SKILL_IDS, SKILLS, START_SKILLS } from "../attacks/skills";
 import { resolveFlock, MELEE_PACK, SKIRMISHERS, BOMBER_RUN, ROYAL_GUARD } from "../enemies/flocks";
 import type { Scenario } from "../game/scenario";
 import { TUTORIAL, TUTORIAL_BLURB, TUTORIAL_NAME, TUTORIAL_SEED } from "../levels/tutorial";
@@ -6,7 +6,7 @@ import { TUTORIAL, TUTORIAL_BLURB, TUTORIAL_NAME, TUTORIAL_SEED } from "../level
 // Scenarios for testing: a fixed planet with fixed enemies. Add one by adding an entry here.
 
 /** Every attack, not upgraded. */
-const ALL_ATTACKS: SkillLevels = { swipe: 1, thrust: 1, smash: 1, spear: 1 };
+const ALL_ATTACKS = START_SKILLS;
 
 /** No enemies to speak of: one far-off melee boid, so the round doesn't end. Jump around and tune the movement. */
 const movement: Scenario = {

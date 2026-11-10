@@ -79,8 +79,9 @@ export class BotInput implements InputSource {
     let move: Vec = { x: 0, y: 0 };
     if (target) move = { x: (target.x - p.x) / (target.d || 1), y: (target.y - p.y) / (target.d || 1) };
 
-    if (target && !portal && !this.holds.has("sword") && !this.holds.has("spear")) {
-      if (target.d < 150 && w.attacks.ready("sword")) press("sword", 0.1 + this.rand() * 0.4);
+    if (target && !portal && !this.holds.has("sword") && !this.holds.has("lunge") && !this.holds.has("spear")) {
+      if (target.d > 90 && target.d < 160 && w.attacks.ready("lunge") && this.rand() < 0.05) press("lunge", 0.1 + this.rand() * 0.3);
+      else if (target.d < 150 && w.attacks.ready("sword")) press("sword", 0.1 + this.rand() * 0.4);
       else if (target.d < 450 && w.attacks.ready("spear") && this.rand() < 0.03) press("spear", 0.2 + this.rand() * 0.3);
     }
     if (p.mode === "hang" && this.jumpWait <= 0 && (!target || portal || target.d > 110)) {

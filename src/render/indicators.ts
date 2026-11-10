@@ -66,7 +66,7 @@ export const aimIndicator: Overlay = (p, s) => {
   }
 
   // Arrow along the aim; longer and broader with power.
-  const len = aim.weapon.id === "sword" ? 30 + 40 * power : 40 + 80 * power;
+  const len = aim.weapon.id !== "spear" ? 30 + 40 * power : 40 + 80 * power;
   const head = 8 + 10 * power;
   const half = 4 + 6 * power;
   const tip = at(a, len);

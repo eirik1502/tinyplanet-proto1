@@ -31,6 +31,7 @@ export function setBriefingInput(i: BrowserInput) {
 export const ICONS = {
   sword: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 3.5H20v5.5L9 20l-5-5z"/><path d="M5 14l5 5M3 21l3-3"/></svg>`,
   spear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21L15 9"/><path d="M14 4l6-1-1 6-4 1-2-2z" fill="currentColor"/></svg>`,
+  poke: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h14"/><path d="M15 8l6 4-6 4z" fill="currentColor"/></svg>`,
   lunge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h12M12 6l6 6-6 6"/><path d="M20 5v14"/></svg>`,
   orb: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="17" cy="12" r="4" fill="currentColor"/><path d="M3 12h6M5 8h5M5 16h5"/></svg>`,
   blast: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.2 5.6L20 6l-2.8 5.2L22 15l-6 .8L15 22l-3-4.6L9 22l-1-6.2-6-.8 4.8-3.8L4 6l5.8 1.6z"/></svg>`,
@@ -45,9 +46,9 @@ export const ICONS = {
   mouse: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="2.5" width="12" height="19" rx="6"/><path d="M12 2.5V10M6 10h12"/></svg>`,
 };
 
-/** A mouse with its left or right button lit. */
-function mouseButton(side: "left" | "right") {
-  const fill = side === "left" ? "M12 3H12A6 6 0 0 0 6.2 9.5H12z" : "M12 3A6 6 0 0 1 17.8 9.5H12z";
+/** A mouse with its left, middle (the wheel) or right button lit. */
+function mouseButton(side: "left" | "middle" | "right") {
+  const fill = side === "left" ? "M12 3H12A6 6 0 0 0 6.2 9.5H12z" : side === "right" ? "M12 3A6 6 0 0 1 17.8 9.5H12z" : "M10.5 4h3v5h-3z";
   return `<span class="mouse" title="${side} click"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="${fill}" fill="currentColor" stroke="none"/><rect x="6" y="2.5" width="12" height="19" rx="6"/><path d="M12 2.5V10M6 10h12"/></svg></span>`;
 }
 
@@ -111,12 +112,12 @@ interface Ability {
   fresh?: boolean;
 }
 
-/** Skill `id`'s steps past `from` (what unlocks the item), if any. */
+/** Skill `id`'s steps past `from` (what unlocks the item), if any; the pips count only those. */
 function upgrade(skills: SkillLevels, fresh: string[], id: SkillId, from: number, name?: string): Upgrade[] {
   const sk = SKILLS[id];
   const lv = level(skills, id);
   if (lv <= from) return [];
-  return [{ name, pips: pips(lv, sk.steps.length), text: sk.steps.slice(from, lv).join(" "), fresh: fresh.includes(id) }];
+  return [{ name, pips: pips(lv - from, sk.steps.length - from), text: sk.steps.slice(from, lv).join(" "), fresh: fresh.includes(id) }];
 }
 
 function ability(a: Ability) {
@@ -155,7 +156,7 @@ function playerCard(b: BriefingInfo) {
       upgrades: upgrade(skills, fresh, "swipe", 1),
     });
     // The chained strikes: attacks of their own.
-    for (const id of ["thrust", "smash"] as const) {
+    for (const id of ["poke", "smash"] as const) {
       if (!level(skills, id)) continue;
       const sk = SKILLS[id];
       attacks.push({
@@ -168,6 +169,16 @@ function playerCard(b: BriefingInfo) {
       });
     }
   }
+  if (b.weapons.includes("lunge"))
+    attacks.push({
+      icon: ICONS.lunge,
+      name: "Lunge",
+      text: SKILLS.lunge.steps[0]!,
+      stats: [dmg(pl.lunge), `${fmt(pl.lunge.cooldown)}s recharge`],
+      input: buttons("lunge"),
+      upgrades: upgrade(skills, fresh, "lunge", 1),
+      fresh: unlocked("lunge"),
+    });
   if (b.weapons.includes("spear"))
     attacks.push({
       icon: ICONS.spear,

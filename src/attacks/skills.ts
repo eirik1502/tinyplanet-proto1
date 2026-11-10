@@ -7,21 +7,21 @@ import type { Params } from "../params/store";
 import type { StatGroup } from "./types";
 
 // Skills: what the player builds up over a run. After each level they pick one of three offered
-// skills, and it goes up a step. Attack skills start at the attack itself (step 1 unlocks it),
-// then three upgrades; passive skills add to the movement abilities in three steps. A skill
+// skills, and it goes up a step. Attack skills start at the attack itself (step 1, owned from the
+// start of a run), then three upgrades; passive skills add to the movement abilities in three steps. A skill
 // changes stats (`modify`, for the attacks' stat groups), adds behaviour by listening to the
 // world's events (`install`), keeps a system of its own going (`update`), or is read where it
-// matters (the thrust's lunge, the double jump's speed). Its numbers are the `skills.*` params.
+// matters (the lunge's reach, the double jump's speed). Its numbers are the `skills.*` params.
 
-export type SkillId = "swipe" | "thrust" | "smash" | "spear" | "landing" | "safetyDoom" | "jumpForce";
+export type SkillId = "swipe" | "poke" | "smash" | "lunge" | "spear" | "landing" | "safetyDoom" | "jumpForce";
 /** Each skill's step: 0 (or missing) is not owned. */
 export type SkillLevels = Partial<Record<SkillId, number>>;
-export type SkillIcon = "sword" | "lunge" | "smash" | "spear" | "landing" | "net" | "jump";
+export type SkillIcon = "sword" | "poke" | "lunge" | "smash" | "spear" | "landing" | "net" | "jump";
 
 export interface Skill {
   id: SkillId;
   name: string;
-  /** Attacks: step 1 unlocks it. Passives: upgrade the movement abilities. */
+  /** Attacks: step 1 is the attack itself. Passives: upgrade the movement abilities. */
   kind: "attack" | "passive";
   /** Offered only once this one is owned. */
   requires?: SkillId;
@@ -37,7 +37,7 @@ export interface Skill {
 }
 
 /** The skill levels a normal run starts with. */
-export const START_SKILLS: SkillLevels = { swipe: 1 };
+export const START_SKILLS: SkillLevels = { swipe: 1, poke: 1, smash: 1, lunge: 1, spear: 1 };
 
 export const level = (skills: SkillLevels, id: SkillId) => skills[id] ?? 0;
 
@@ -81,20 +81,40 @@ const SWIPE: Skill = {
   },
 };
 
-const THRUST: Skill = {
-  id: "thrust",
-  name: "Lunging thrust",
+const POKE: Skill = {
+  id: "poke",
+  name: "Poke",
+  kind: "attack",
+  icon: "poke",
+  steps: [
+    "Hit with the swipe to chain a poke that stands its ground.",
+    "The poke reaches further.",
+    "The poke stuns the enemies it hits.",
+    "The poke's stun lasts twice as long.",
+  ],
+  modify(group, s, lv, params) {
+    const k = params.skills.poke;
+    if (group !== "poke") return;
+    if (lv >= 2) scale(s, ["length", "maxLength"], k.range);
+    if (lv >= 3) s.stun = Math.max(s.stun!, k.stun);
+    if (lv >= 4) scale(s, ["stun"], k.stunUp);
+  },
+};
+
+const LUNGE: Skill = {
+  id: "lunge",
+  name: "Lunge",
   kind: "attack",
   icon: "lunge",
   steps: [
-    "Hit with the swipe to chain a thrust that lunges at the closest enemy in reach.",
-    "The thrust reaches further, and the lunge goes through to the furthest enemy, striking all on the way.",
-    "The thrust reaches twice as far.",
+    "Lunge at the closest enemy in reach.",
+    "The lunge reaches further, and goes through to the furthest enemy, striking all on the way.",
+    "The lunge reaches twice as far.",
     "The lunge is instant.",
   ],
   modify(group, s, lv, params) {
-    const k = params.skills.thrust;
-    if (group === "thrust" && lv >= 2) scale(s, ["length", "maxLength"], lv >= 3 ? k.range : k.throughRange);
+    const k = params.skills.lunge;
+    if (group === "lunge" && lv >= 2) scale(s, ["length", "maxLength"], lv >= 3 ? k.range : k.throughRange);
   },
 };
 
@@ -102,10 +122,9 @@ const SMASH: Skill = {
   id: "smash",
   name: "Smash",
   kind: "attack",
-  requires: "thrust",
   icon: "smash",
   steps: [
-    "Hit with the thrust to chain a smash, whose blast throws back everything around it.",
+    "Hit with the poke to chain a smash, whose blast throws back everything around it.",
     "The smash's blast is bigger.",
     "The smash itself is bigger.",
     "The smash's blast throws three times as hard.",
@@ -326,7 +345,7 @@ const JUMP_FORCE: Skill = {
 
 /** Every skill, in the order the briefing and the dev panel list them. */
 export const SKILLS: Record<SkillId, Skill> = Object.fromEntries(
-  [SWIPE, THRUST, SMASH, SPEAR, LANDING, SAFETY_DOOM, JUMP_FORCE].map((s) => [s.id, s]),
+  [SWIPE, POKE, SMASH, LUNGE, SPEAR, LANDING, SAFETY_DOOM, JUMP_FORCE].map((s) => [s.id, s]),
 ) as Record<SkillId, Skill>;
 export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 

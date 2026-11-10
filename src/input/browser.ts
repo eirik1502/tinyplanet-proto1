@@ -9,7 +9,7 @@ import { type Action, type AimMode, type Glyph, type InputFrame, type InputSourc
 //
 // Input modes: "keyboard": the arrows / WASD both move and aim. "mouse": they still move, but
 // jumps, double jumps and attacks aim at the cursor, and the mouse buttons attack (left: sword,
-// right: spear). "gamepad": like keyboard mode, with the left stick (analog) or d-pad to move and
+// middle: lunge, right: spear). "gamepad": like keyboard mode, with the left stick (analog) or d-pad to move and
 // the face buttons to jump and attack. The mode is cycled with I and remembered; using a pad
 // switches to gamepad mode, and using the keyboard or mouse again switches back.
 
@@ -22,28 +22,31 @@ type Bindings = Partial<Record<Action, string[]>>;
 const KEYS: Bindings = {
   jump: ["Space"],
   sword: ["KeyZ", "KeyJ"],
+  lunge: ["KeyC", "KeyL"],
   spear: ["KeyX", "KeyK"],
   confirm: ["Enter", "Space"],
   pause: ["Escape"],
   mute: ["KeyM"],
   switchMode: ["KeyI"],
 };
-/** Mouse buttons ("Mouse0": left, "Mouse2": right); only in mouse mode. */
-const MOUSE: Bindings = { sword: ["Mouse0"], spear: ["Mouse2"] };
+/** Mouse buttons ("Mouse0": left, "Mouse1": middle, "Mouse2": right); only in mouse mode. */
+const MOUSE: Bindings = { sword: ["Mouse0"], lunge: ["Mouse1"], spear: ["Mouse2"] };
 /**
  * Gamepad buttons by position (see gamepad.ts). B (right on Xbox, bottom on Nintendo) or the
- * right trigger for the sword, the left face button or left trigger for the spear.
+ * right trigger for the sword, the top face button or right bumper for the lunge, the left face
+ * button or left trigger for the spear.
  */
 const PAD: Bindings = {
   jump: ["PadA"],
   sword: ["PadB", "PadRT"],
+  lunge: ["PadY", "PadRB"],
   spear: ["PadX", "PadLT"],
   confirm: ["PadA", "PadStart"],
   pause: ["PadStart"],
   mute: ["PadBack"],
 };
 const MOVE_KEYS = { left: ["KeyA", "ArrowLeft"], right: ["KeyD", "ArrowRight"], up: ["KeyW", "ArrowUp"], down: ["KeyS", "ArrowDown"] };
-const ACTIONS: Action[] = ["jump", "sword", "spear", "confirm", "pause", "mute", "switchMode"];
+const ACTIONS: Action[] = ["jump", "sword", "lunge", "spear", "confirm", "pause", "mute", "switchMode"];
 
 /** Bindings that work in each mode: the keyboard and pad always work, the mouse buttons only in mouse mode. */
 const LIVE: Record<InputMode, Bindings[]> = { keyboard: [KEYS, PAD], mouse: [KEYS, MOUSE, PAD], gamepad: [KEYS, PAD] };
@@ -124,6 +127,7 @@ export class BrowserInput implements InputSource {
     });
     canvas.addEventListener("mousedown", (e) => {
       if (this.currentMode === "gamepad") this.setMode(this.deskMode);
+      if (e.button === 1) e.preventDefault(); // no autoscroll
       this.press(`Mouse${e.button}`);
     });
     window.addEventListener("mouseup", (e) => this.held.delete(`Mouse${e.button}`));
@@ -200,7 +204,7 @@ export class BrowserInput implements InputSource {
 
   private glyph(code: string): Glyph {
     if (code.startsWith("Pad")) return { kind: "pad", label: padLabel(code, this.padLayout) };
-    if (code.startsWith("Mouse")) return { kind: "mouse", side: code === "Mouse0" ? "left" : "right" };
+    if (code.startsWith("Mouse")) return { kind: "mouse", side: code === "Mouse0" ? "left" : code === "Mouse1" ? "middle" : "right" };
     return { kind: "key", label: KEY_LABELS[code] ?? code.replace(/^(Key|Digit)/, ""), wide: code === "Space" };
   }
 

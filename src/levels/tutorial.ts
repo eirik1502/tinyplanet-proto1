@@ -1,3 +1,4 @@
+import { START_SKILLS } from "../attacks/skills";
 import type { Vec } from "../core/math";
 import { resolveFlock } from "../enemies/flocks";
 import type { Layout } from "../world/planet";
@@ -84,7 +85,7 @@ export const TUTORIAL: LevelSpec = {
   queen: null,
   flocks: [DUMMIES],
   modifiers: [],
-  skills: { swipe: 1 },
+  skills: { ...START_SKILLS },
   goal: "portal",
   lessons: "all",
   noFallDamage: true,

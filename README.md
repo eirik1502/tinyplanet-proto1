@@ -25,7 +25,7 @@ bun run test       # tests (the tutorial can be finished)
 | `core/` | Event bus (`events.ts`), game objects with typed components (`object.ts`), math, seeded RNG |
 | `game/` | `World` (one planet: objects, systems, `step(dt, input)`), `Session` (levels, briefings, rounds), the event catalog, scenarios |
 | `player/` | The player object, its movement controller and flight physics |
-| `attacks/` | Weapons and attacks as data + hooks (`sword.ts`, `spear.ts`), the attack controller (aim, charge, combos, lunges), skills (what the player picks up over a run) |
+| `attacks/` | Weapons and attacks as data + hooks (`sword.ts`, `lunge.ts`, `spear.ts`), the attack controller (aim, charge, combos, lunges), skills (what the player picks up over a run) |
 | `combat/` | Hit/hurtboxes, the `Health` / `Hurtable` / `HitVolume` components, and the rules every hit follows |
 | `enemies/` | Boid types (behaviour only), flocks and the swarm |
 | `world/`, `levels/` | Islands and planet generation; level specs, templates, progression |
@@ -41,7 +41,7 @@ narrow to one object (`{ source: id }` / `{ target: id }`) and are removed with 
 
 Extending:
 - **Input device**: an `InputSource` producing `InputFrame`s, plus a presenter for its outputs (see `present/rumble.ts`).
-- **Skill**: a `Skill` in `attacks/skills.ts`: its steps' texts, and how it changes stats, listens to events or runs each step; its numbers go in the `skills.*` params. A normal run starts with the swipe and offers three skills to pick from after each win; custom levels and scenarios set `LevelSpec.skills`.
+- **Skill**: a `Skill` in `attacks/skills.ts`: its steps' texts, and how it changes stats, listens to events or runs each step; its numbers go in the `skills.*` params. A normal run starts with every attack (swipe, poke, smash, lunge, spear), each with three upgrades to pick, and offers three skills to pick from after each win; custom levels and scenarios set `LevelSpec.skills`.
 - **Dev UI**: a `DevSection` in `ui/dev/`, a debug layer in `render/debug.ts`, or a HUD widget in `ui/hud/`.
 - **Test setup**: a `Scenario` in `src/scenarios` (fixed planet and enemies). Play it with `?scenario=<id>`, the Run → Scenario tab, or `bun run sim --scenario <id>`.
 
@@ -96,14 +96,15 @@ The **Dev** box in the top-right corner (click it to show or hide) has two secti
 | --- | --- |
 | Arrows / WASD | Climb; steer, speed up and brake while airborne |
 | Space | Jump at once (hold for full height); press again in the air to double jump |
-| Z / J | Sword |
-| X / K | Spear (from level 3) |
+| Z / J | Sword (swipe → poke → smash) |
+| C / L | Lunge |
+| X / K | Spear |
 | M | Mute / unmute sound |
 | I | Switch input mode: keyboard only / keyboard + mouse / gamepad |
 | Esc | Pause and show the controls |
 
 While you play, short prompts under the player teach the controls one at a time (climb, jump, aim, steer, double
-jump, sword, combo, spear), each until you've done it, plus a note the first time the safety net catches you or
+jump, sword, combo, lunge, spear), each until you've done it, plus a note the first time the safety net catches you or
 you fall into the haze. Learned lessons are remembered in the browser; the dev panel's Debug section shows them all
 again. Lessons live in `src/game/lessons.ts`.
 
@@ -118,18 +119,18 @@ within a jump of the nearest island; fly into it to win the level and follow her
 dropping in through the portal as it closes. Her swarm keeps fighting until you're through.
 
 Each level opens with a briefing: pick the input mode, and see the controls and enemies for that
-level. The first levels introduce things one at a time: level 1 has the sword and a small queen
-flock of melee boids, level 2 adds ranged boids, and level 3 adds the spear and bombers. From level
-4 on everything is unlocked and the swarm grows each level.
+level. Every attack is there from the start; the enemies come in one at a time: level 1 has a small
+queen flock of melee boids, level 2 adds ranged boids, and level 3 adds bombers. From level 4 on the
+swarm grows each level.
 
 In keyboard + mouse mode, movement (climbing, air steering) stays on the arrows / WASD, but all
 aiming follows the cursor: jumps launch toward it, double jumps snap to an island in a narrow cone toward it, and
-attacks point at it. Left click attacks with the sword and right click with the spear (Z / X still
-work too). The mode is remembered between sessions.
+attacks point at it. Left click attacks with the sword, middle click lunges and right click throws the spear
+(the keys still work too). The mode is remembered between sessions.
 
 Gamepad mode works like keyboard mode, with the left stick or d-pad in place of the arrows. The
 stick is analog: a partly pushed stick climbs, steers and speeds up less. A jumps (the bottom face
-button on Xbox, the right one on Switch), B or the right trigger is the sword, the left face button
+button on Xbox, the right one on Switch), B or the right trigger is the sword, Y or the right bumper the lunge, the left face button
 (X on Xbox, Y on Switch) or the left trigger is the spear, Start / + pauses and Back / − mutes. The
 briefing shows the letters printed on the pad in use. Using a pad switches to gamepad mode. Pads the
 browser doesn't map itself need a profile in `src/input/gamepad.ts` (PowerA pads have one). Where the
@@ -160,11 +161,14 @@ Steering in the air still works. High up and fast (80 above the rims at 550 or m
 instead of grabbing them (`player.stun` and `move.air` in the tuning panel).
 
 The sword strikes in a 1-2-3 combo: a hit opens a short window in which the next strike is the next
-one along, else it starts over. 1 is the swipe; 2 a long, thin thrust that lunges at the closest
-enemy in its reach and strikes once near it (off a rim, too); 3 a small, strong smash whose blast
-hurts and throws back everything around it, more the closer it is. The aim indicator shows which
-strike is coming. Strikes can follow each other every 0.16 s (real time, so hit stop and
-slow motion don't stretch it), and a press that comes too early (up to 0.3 s) goes off as soon as it can.
+one along, else it starts over. 1 is the swipe; 2 a poke, a rectangle along the aim that doesn't move
+you; 3 a small, strong smash whose blast hurts and throws back everything around it, more the closer
+it is. The aim indicator shows which strike is coming. A swipe or poke that hits is followed by a
+short cooldown (0.18 s); the smash or a miss by the full one (0.48 s). Cooldowns run on real time, so hit stop and
+slow motion don't stretch them, and a press that comes too early (up to 0.3 s) goes off as soon as it can.
+
+The lunge, on its own button and with its own cooldown, is a long, thin thrust that lunges at the closest
+enemy in its reach and strikes once near it (off a rim, too). It doesn't touch the sword's combo.
 While attacking you have armor: through a lunge and for 0.1 s after any attack goes off, enemy hits don't land;
 explosions (bombers, the queen's blast) still do (`player.armor` in the tuning panel).
 

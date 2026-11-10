@@ -126,20 +126,29 @@ export const DEFAULTS = {
       max: 1.5, // Longest stun (s)
     },
     sword: {
-      range: 40, // Reach
-      maxRange: 68, // Reach at full power
+      range: 52, // Reach
+      maxRange: 88, // Reach at full power
       arc: 1.35, // Half arc (rad)
       damage: 2, // Damage
       maxDamage: 5, // Damage at full power
       activeTime: 0.18, // Active time (s)
       fadeTime: 0.12,
-      cooldown: 0.48, // Cooldown (s)
+      cooldown: 0.48, // Cooldown after the smash or a miss (s)
+      stepCooldown: 0.18, // Cooldown after a swipe or poke that hits (s)
       knockback: 1, // Knockback (×)
       comboWindow: 1.2, // Combo window after a hit (s)
     },
-    thrust: {
-      length: 75, // Reach
-      maxLength: 105, // Reach at full power
+    poke: {
+      length: 86, // Reach
+      maxLength: 129, // Reach at full power
+      width: 40, // Width
+      damage: 3, // Damage
+      maxDamage: 6, // Damage at full power
+      stun: 0, // Stuns the enemies it hits (s)
+    },
+    lunge: {
+      length: 120, // Reach
+      maxLength: 170, // Reach at full power
       width: 32, // Width
       damage: 3, // Damage
       maxDamage: 6, // Damage at full power
@@ -147,13 +156,14 @@ export const DEFAULTS = {
       lungeTime: 0.3, // Longest lunge (s)
       strikeDistance: 34, // Strikes this close to the target
       strikeLength: 60, // Reach of the strike after a lunge
+      cooldown: 0.48, // Cooldown (s)
     },
     smash: {
-      size: 34, // Size
-      maxSize: 46, // Size at full power
+      size: 46, // Size
+      maxSize: 62, // Size at full power
       damage: 6, // Damage
       maxDamage: 12, // Damage at full power
-      blastRadius: 60, // Blast radius
+      blastRadius: 85, // Blast radius
       blastDamage: 4, // Blast damage (at the centre)
       blastPush: 520, // Blast knockback (at the centre)
     },
@@ -180,7 +190,12 @@ export const DEFAULTS = {
       knockback: 2.2, // Step 3: knockback (×)
       range: 1.3, // Step 4: reach (×)
     },
-    thrust: {
+    poke: {
+      range: 1.5, // Step 2: reach (×)
+      stun: 0.8, // Step 3: stun (s)
+      stunUp: 2, // Step 4: stun (×)
+    },
+    lunge: {
       throughRange: 1.5, // Step 2: reach (×)
       range: 2, // Step 3: reach (×)
     },

@@ -215,7 +215,7 @@ export class Vfx {
     on("jump", (e) => this.emitDust(e.x, e.y, 6, 1 / 60), owner);
     on("land", (e) => this.emitDust(e.x, e.y, 4 + Math.min(10, e.speed / 80), 1 / 60), owner);
     on("attack", (e) => {
-      if (e.weapon !== "sword" || e.reach === undefined) return;
+      if ((e.weapon !== "sword" && e.weapon !== "lunge") || e.reach === undefined) return;
       this.strikes.push({
         attack: e.attack,
         x: e.x,

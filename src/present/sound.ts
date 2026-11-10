@@ -28,7 +28,7 @@ export class SoundPresenter {
     on("blink", () => sfx.thrustWhoosh(0), owner);
     on("attack", (e) => {
       if (e.attack === "sword.swipe") sfx.swing(e.power);
-      else if (e.attack === "sword.thrust") {
+      else if (e.attack === "lunge" || e.attack === "sword.poke") {
         if (e.lunged) sfx.thrustClash(e.power);
         else {
           sfx.thrustWhoosh(0.1);

@@ -47,6 +47,9 @@ function loadLive(): Params {
     if (saved.move?.jump && "length" in saved.move.jump) delete saved.move;
     // From before skills: the attacks' tuned values are now what their skills reach, the base less.
     if (!saved.skills && saved.player) for (const g of ["sword", "thrust", "smash", "spear"]) delete saved.player[g];
+    // From before the lunge was its own attack: the sword's hitboxes went back to their old sizes.
+    if (saved.player?.thrust) for (const g of ["sword", "thrust", "smash"]) delete saved.player[g];
+    if (saved.skills?.thrust) delete saved.skills.thrust;
     applyPatch(p, saved as ParamsPatch);
   } catch {
     // Corrupt: keep defaults.

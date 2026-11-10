@@ -18,8 +18,8 @@ const HELP = `Usage: bun run sim [options]
   --scenario <id>      play a scenario (${SCENARIOS.map((s) => s.id).join(", ")})
   --level <n>          play the progression from level n (default 1)
   --template <name>    with --level: use this template on every level
-  --skills <list>      with --level: the skills the run starts with, e.g. swipe=2,thrust=1,spear=1
-                       (default swipe=1); after each win the bot picks one at random
+  --skills <list>      with --level: the skills the run starts with, e.g. swipe=2,lunge=3,spear=1
+                       (default: every attack); after each win the bot picks one at random
   --input bot|idle     who plays (default bot)
   --rounds <n>         stop after this many rounds (default 1)
   --seconds <s>        stop after this much game time in all (default 600)

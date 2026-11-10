@@ -162,7 +162,8 @@ export class PlayerController {
   private onOwnHit(weapon: string | undefined, damage: number) {
     const p = this.player;
     const w = this.w;
-    if (weapon === "sword" && p.mode !== "lost") {
+    const blade = weapon === "sword" || weapon === "lunge";
+    if (blade && p.mode !== "lost") {
       p.freeze = Math.max(p.freeze, w.combat.hitStop(damage));
       if (p.mode === "air" && !p.turn) p.turnWindow = w.params.move.turn.window;
     }
@@ -170,7 +171,7 @@ export class PlayerController {
     // The double jump's own strike doesn't give it back.
     if (weapon !== "jumpForce") p.airJumps = 1;
     p.focus = Math.min(1, p.focus + w.params.player.focus.perHit);
-    if (weapon === "sword") {
+    if (blade) {
       p.vz = Math.max(p.vz, w.params.move.airJump.bounce);
       p.jumpHeld = false;
       w.events.emit("hitBounce", { source: p.id });

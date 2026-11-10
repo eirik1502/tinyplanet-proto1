@@ -62,6 +62,8 @@ export interface HitVolume {
   damage: number;
   /** How hard its hits throw, × the usual (default 1). */
   knockback?: number;
+  /** Staggers the boids it hits this long (s). */
+  stun?: number;
   /** Each hit after the first does `falloff` less of the damage than the one before, down to `minDamage` of it. */
   falloff?: number;
   minDamage?: number;

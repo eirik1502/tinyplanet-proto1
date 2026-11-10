@@ -12,13 +12,15 @@ function pickHtml(session: Session) {
     const lv = level(session.skills, id);
     const unlock = sk.kind === "attack" && lv === 0;
     const tag = unlock ? "New attack" : sk.kind === "attack" ? "Attack" : "Passive";
-    const input = unlock ? `<span class="ability-input">${buttons(id === "spear" ? "spear" : "sword")}</span>` : "";
+    const input = unlock ? `<span class="ability-input">${buttons(id === "spear" || id === "lunge" ? id : "sword")}</span>` : "";
+    // Attacks count their upgrades: step 1 is the attack itself.
+    const base = sk.kind === "attack" ? 1 : 0;
     return `
       <button class="unit pick${i === session.choice ? " on" : ""}${unlock ? " unlock" : ""}" data-pick="${i}">
         <span class="pick-tag">${tag}</span>
         <span class="ability-icon">${skillIcon(sk.icon)}</span>
         <h3>${sk.name}</h3>
-        <span class="pips">${pips(lv + 1, sk.steps.length)}</span>
+        <span class="pips">${pips(lv + 1 - base, sk.steps.length - base)}</span>
         <span class="ability-text">${sk.steps[lv]}</span>
         ${input}
       </button>`;

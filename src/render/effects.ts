@@ -65,7 +65,17 @@ export const effectsLayer: WorldLayer = (p, s, out) => {
   }
 };
 
-/** How each sword attack looks while it plays out: the swipe's crescent, the thrust's spike, the smash's square. */
+/** A spike along the aim, for the poke and the lunge. */
+function spike(p: Painter, st: StrikeLook, t: number, fade: number) {
+  const grow = 1 - (1 - Math.min(1, t * 1.8)) ** 2;
+  const rgb = st.power >= 1 ? "255,236,170" : "255,250,235";
+  const len = st.reach * grow;
+  p.rectPath(st.x, st.y, st.alt, st.dx, st.dy, len, st.halfWidth * 0.7, Math.min(len, 24));
+  p.ctx.fillStyle = `rgba(${rgb},${0.9 * fade})`;
+  p.ctx.fill();
+}
+
+/** How each sword attack looks while it plays out: the swipe's crescent, the poke's and the lunge's spike, the smash's square. */
 const STRIKE_LOOKS: Record<string, (p: Painter, st: StrikeLook, t: number, fade: number, s: Scene) => void> = {
   "sword.swipe": (p, st, t, fade, s) => {
     const { ctx, proj } = p;
@@ -91,14 +101,8 @@ const STRIKE_LOOKS: Record<string, (p: Painter, st: StrikeLook, t: number, fade:
     ctx.fillStyle = st.power >= 1 ? `rgba(255,236,170,${0.95 * fade})` : `rgba(255,250,235,${0.9 * fade})`;
     ctx.fill();
   },
-  "sword.thrust": (p, st, t, fade) => {
-    const grow = 1 - (1 - Math.min(1, t * 1.8)) ** 2;
-    const rgb = st.power >= 1 ? "255,236,170" : "255,250,235";
-    const len = st.reach * grow;
-    p.rectPath(st.x, st.y, st.alt, st.dx, st.dy, len, st.halfWidth * 0.7, Math.min(len, 24));
-    p.ctx.fillStyle = `rgba(${rgb},${0.9 * fade})`;
-    p.ctx.fill();
-  },
+  "sword.poke": spike,
+  lunge: spike,
   "sword.smash": (p, st, t, fade) => {
     const ctx = p.ctx;
     const grow = 1 - (1 - Math.min(1, t * 1.8)) ** 2;

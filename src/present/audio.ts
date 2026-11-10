@@ -338,13 +338,13 @@ export const sfx = {
     noise({ f: 2500, f2: 300, q: 0.7, dur: 0.6, vol: 0.35 * g, pan, filter: "lowpass", wet: 0.6 });
     for (const [i, n] of [79, 75, 72].entries()) tone({ f: midi(n), type: "sine", dur: 0.7, vol: 0.06 * g, pan, at: 0.06 + i * 0.05, wet: 0.8 });
   },
-  /** The thrust's lunge: a swelling whoosh over the `dur` (s) until it strikes. */
+  /** The lunge: a swelling whoosh over the `dur` (s) until it strikes. */
   thrustWhoosh(dur: number) {
     const d = Math.max(0.1, dur);
     noise({ f: 600, f2: 2600, q: 1.4, dur: d + 0.08, vol: 0.28, attack: d * 0.85 });
     tone({ f: 200, f2: 520, type: "triangle", dur: d + 0.05, vol: 0.06, attack: d * 0.8, lp: 1500 });
   },
-  /** The thrust striking, `at` s from now: a short, ringing clash, brighter with power. */
+  /** The poke or the lunge striking, `at` s from now: a short, ringing clash, brighter with power. */
   thrustClash(power: number, at = 0) {
     noise({ f: 2600, f2: 900, q: 1.2, dur: 0.06, vol: 0.28, at });
     tone({ f: midi(86 + (power >= 1 ? 2 : 0)), type: "triangle", dur: 0.28, vol: 0.12, at, wet: 0.45 });

@@ -98,7 +98,7 @@ export class Combat {
         if (v.hits.has(t.id) || !this.overlaps(hitbox, h.hurtbox())) continue;
         const damage = this.nextDamage(v);
         v.hits.add(t.id);
-        h.hit({ damage, fromX: o.x, fromY: o.y, source: v.owner, weapon: v.weapon, attack: v.attack, step: v.step, knockback: v.knockback });
+        h.hit({ damage, fromX: o.x, fromY: o.y, source: v.owner, weapon: v.weapon, attack: v.attack, step: v.step, knockback: v.knockback, stun: v.stun });
       }
       if (!v.blocks) continue;
       for (const [s, sv] of volumes) {

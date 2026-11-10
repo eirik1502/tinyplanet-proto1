@@ -39,7 +39,7 @@ export class PlayerPresenter {
     on("hitBounce", () => a.bounce(), owner);
     on("turn", (e) => a.backflip(e.angle), owner);
     on("hurt", (e) => a.hurt(e.fromX, e.fromY, e.x, e.y), owner);
-    on("attack", (e) => a.strike(e.weapon as AvatarWeapon, e.angle, e.power, e.attack === "sword.thrust"), owner);
+    on("attack", (e) => a.strike(avatarWeapon(e.weapon), e.angle, e.power, e.attack === "lunge" || e.attack === "sword.poke"), owner);
     on("respawn", (e) => {
       this.x = e.x;
       this.y = e.y;
@@ -82,9 +82,9 @@ export class PlayerPresenter {
       facing: p.facing,
       vz: p.vz,
       aim: at.lunge
-        ? { weapon: at.lunge.weapon.id, angle: at.lunge.angle, power: at.lunge.power }
+        ? { weapon: avatarWeapon(at.lunge.weapon.id), angle: at.lunge.angle, power: at.lunge.power }
         : at.aim
-          ? { weapon: at.aim.weapon.id, angle: at.aim.angle, power: at.power() }
+          ? { weapon: avatarWeapon(at.aim.weapon.id), angle: at.aim.angle, power: at.power() }
           : null,
       spearReady: at.ready("spear"),
       frozen: p.freeze > 0,
@@ -92,3 +92,6 @@ export class PlayerPresenter {
     };
   }
 }
+
+/** What the avatar holds for a weapon: the lunge is done with the sword. */
+const avatarWeapon = (id: string): AvatarWeapon => (id === "spear" ? "spear" : "sword");

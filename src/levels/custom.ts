@@ -1,14 +1,12 @@
 import { DEFAULT_STYLE, FLOCKS, MELEE_PACK, resolveFlock, type FlockSpec, type FlockStyle } from "../enemies/flocks";
 import { MEMBER_TYPES } from "../enemies";
 import type { Params } from "../params/store";
-import { SKILLS, type SkillLevels } from "../attacks/skills";
+import { SKILLS, START_SKILLS } from "../attacks/skills";
 import { ALL_TEMPLATES, LAYOUTS, levelBase, PLACEMENTS, QUEEN_SPOTS, resolveLevel, type LevelSpec } from "./levels";
 
 // Level specs for custom levels: an empty one, a template's as on a level, checking one read back
 // from storage, and turning one into source for levels.ts.
 
-/** Every attack, not upgraded: what a custom level starts with. */
-const ALL_ATTACKS: SkillLevels = { swipe: 1, thrust: 1, smash: 1, spear: 1 };
 
 /** An empty level: a small planet and one melee pack waiting near the start. */
 export function emptyLevel(): LevelSpec {
@@ -21,7 +19,7 @@ export function emptyLevel(): LevelSpec {
     queen: null,
     flocks: [resolveFlock(MELEE_PACK)],
     modifiers: [],
-    skills: { ...ALL_ATTACKS },
+    skills: { ...START_SKILLS },
   };
 }
 
@@ -29,7 +27,7 @@ export function emptyLevel(): LevelSpec {
 export function templateLevel(name: string, level: number, params: Params): LevelSpec {
   const t = ALL_TEMPLATES.find((t) => t.name === name);
   if (!t) return emptyLevel();
-  return resolveLevel(t, levelBase(level, params.world), { modifiers: [...(t.modifiers ?? [])], skills: ALL_ATTACKS });
+  return resolveLevel(t, levelBase(level, params.world), { modifiers: [...(t.modifiers ?? [])], skills: START_SKILLS });
 }
 
 /** Whether `v` looks like a LevelSpec (for one read back from storage). */
@@ -38,7 +36,7 @@ export function isLevelSpec(v: unknown): v is LevelSpec {
   // Saved before skills: its weapons as attacks.
   if (s && !s.skills && Array.isArray(s.weapons)) {
     const sword = s.weapons.includes("sword") ? 1 : 0;
-    s.skills = { swipe: sword, thrust: sword, smash: sword, spear: s.weapons.includes("spear") ? 1 : 0 };
+    s.skills = { swipe: sword, poke: sword, smash: sword, lunge: sword, spear: s.weapons.includes("spear") ? 1 : 0 };
     delete s.weapons;
   }
   // Saved flocks get any style knobs added since they were saved.

@@ -63,13 +63,20 @@ export class AttackController {
     readonly loadout: Loadout,
   ) {
     this.weapons = loadout.weapons;
-    // A hit by a combo's attack opens the window for the next one along.
+    // A hit by a combo's attack opens the window for the next one along, and but for the last,
+    // cuts the cooldown down to the step cooldown (counted from the strike).
     w.events.on(
       "hit",
       (e) => {
         const weapon = this.weapons.find((x) => x.id === e.weapon);
         if (!weapon?.comboWindow || !e.step) return;
-        this.combos.set(weapon.id, { step: (e.step % weapon.attacks.length) + 1, left: weapon.comboWindow((g) => this.stats(g)) });
+        const stats = <G extends StatGroup>(g: G) => this.stats(g);
+        this.combos.set(weapon.id, { step: (e.step % weapon.attacks.length) + 1, left: weapon.comboWindow(stats) });
+        const cd = this.cooldowns.get(weapon.id) ?? 0;
+        if (weapon.stepCooldown && e.step < weapon.attacks.length && cd > 0) {
+          const since = weapon.cooldown(stats) - cd;
+          this.cooldowns.set(weapon.id, Math.min(cd, weapon.stepCooldown(stats) - since));
+        }
       },
       { source: w.player.id, owner: w.player.lifetime },
     );

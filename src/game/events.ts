@@ -42,7 +42,7 @@ export interface GameEvents {
   aimStart: { source: number; weapon: string };
   /** The attack being held reached full power. */
   charged: { source: number; weapon: string };
-  /** An attack went off. `lunged`: the thrust's strike at the end of a lunge. */
+  /** An attack went off. `lunged`: the strike at the end of a lunge. */
   attack: At & {
     source: number;
     weapon: string;
@@ -56,9 +56,9 @@ export interface GameEvents {
     reach?: number;
     halfWidth?: number;
   };
-  /** The thrust lunges at `target` for up to `duration` s. */
+  /** The lunge flies at `target` for up to `duration` s. */
   lungeStart: At & { source: number; target: number; duration: number };
-  /** The instant thrust puts the player at (toX, toY, toAlt) at once. */
+  /** The instant lunge puts the player at (toX, toY, toAlt) at once. */
   blink: At & { source: number; toX: number; toY: number; toAlt: number };
 
   // Combat

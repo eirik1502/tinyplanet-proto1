@@ -9,7 +9,7 @@ import type { Vec } from "../core/math";
  * What the player can do with a button. "confirm" (the primary button) starts / resumes from the
  * briefing and moves on from the end-of-round screen; "switchMode" cycles the input mode.
  */
-export type Action = "jump" | "sword" | "spear" | "confirm" | "pause" | "mute" | "switchMode";
+export type Action = "jump" | "sword" | "lunge" | "spear" | "confirm" | "pause" | "mute" | "switchMode";
 
 /**
  * How attacks and jumps are aimed:
@@ -48,7 +48,7 @@ export const NO_INPUT: InputFrame = { move: { x: 0, y: 0 }, aimMode: "assist", a
 export type Glyph =
   | { kind: "key"; label: string; wide?: boolean }
   | { kind: "pad"; label: string }
-  | { kind: "mouse"; side: "left" | "right" }
+  | { kind: "mouse"; side: "left" | "middle" | "right" }
   | { kind: "arrows" }
   | { kind: "stick" }
   /** A short remark next to the buttons, like "or WASD". */

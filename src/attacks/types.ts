@@ -14,10 +14,10 @@ import type { SkillId, SkillLevels } from "./skills";
 // Numbers come from stat groups (the `player.*` params). Skills are upgrades: they can change any
 // stat group before an attack reads it, and listen to world events to add effects of their own.
 
-export type WeaponId = "sword" | "spear";
+export type WeaponId = "sword" | "lunge" | "spear";
 
 /** The param groups attacks read, by name. */
-export type StatGroup = "aim" | "armor" | "sword" | "thrust" | "smash" | "spear";
+export type StatGroup = "aim" | "armor" | "sword" | "poke" | "lunge" | "smash" | "spear";
 export type Stats<G extends StatGroup> = Params["player"][G];
 
 /** An aim indicator shape, in the aim's frame: +x along the aim, from the player. */
@@ -79,6 +79,8 @@ export interface Weapon {
   name: string;
   /** Cooldown after an attack (s). */
   cooldown(stats: AttackContext["stats"]): number;
+  /** A combo's cooldown after a hit with any of its attacks but the last (s); `cooldown` otherwise. */
+  stepCooldown?(stats: AttackContext["stats"]): number;
   /** One attack, or a combo: the attacks in order, and how long a hit keeps the next one open (s). */
   attacks: AttackDef[];
   /** Thrown: from a rim it aims any way, over the island, not just outward. */
