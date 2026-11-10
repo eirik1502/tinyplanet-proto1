@@ -97,8 +97,8 @@ The **Dev** box in the top-right corner (click it to show or hide) has two secti
 | Arrows / WASD | Climb; steer, speed up and brake while airborne |
 | Space | Jump at once (hold for full height); press again in the air to double jump |
 | Z / J | Sword (swipe → poke → smash) |
-| C / L | Lunge |
-| X / K | Spear |
+| X / K | Lunge |
+| C / L | Spear |
 | M | Mute / unmute sound |
 | I | Switch input mode: keyboard only / keyboard + mouse / gamepad |
 | Esc | Pause and show the controls |
@@ -125,13 +125,13 @@ swarm grows each level.
 
 In keyboard + mouse mode, movement (climbing, air steering) stays on the arrows / WASD, but all
 aiming follows the cursor: jumps launch toward it, double jumps snap to an island in a narrow cone toward it, and
-attacks point at it. Left click attacks with the sword, middle click lunges and right click throws the spear
+attacks point at it. Left click attacks with the sword, right click lunges and middle click throws the spear
 (the keys still work too). The mode is remembered between sessions.
 
 Gamepad mode works like keyboard mode, with the left stick or d-pad in place of the arrows. The
 stick is analog: a partly pushed stick climbs, steers and speeds up less. A jumps (the bottom face
-button on Xbox, the right one on Switch), B or the right trigger is the sword, Y or the right bumper the lunge, the left face button
-(X on Xbox, Y on Switch) or the left trigger is the spear, Start / + pauses and Back / − mutes. The
+button on Xbox, the right one on Switch), B or the right trigger is the sword, the left face button
+(X on Xbox, Y on Switch) or the left trigger is the lunge, the top one or the right bumper is the spear, Start / + pauses and Back / − mutes. The
 briefing shows the letters printed on the pad in use. Using a pad switches to gamepad mode. Pads the
 browser doesn't map itself need a profile in `src/input/gamepad.ts` (PowerA pads have one). Where the
 browser supports it (Chromium), the pad rumbles on hits, blasts, hard landings and full charges.

@@ -126,8 +126,8 @@ export const DEFAULTS = {
       max: 1.5, // Longest stun (s)
     },
     sword: {
-      range: 52, // Reach
-      maxRange: 88, // Reach at full power
+      range: 46, // Reach
+      maxRange: 78, // Reach at full power
       arc: 1.35, // Half arc (rad)
       damage: 2, // Damage
       maxDamage: 5, // Damage at full power
@@ -139,9 +139,9 @@ export const DEFAULTS = {
       comboWindow: 1.2, // Combo window after a hit (s)
     },
     poke: {
-      length: 86, // Reach
-      maxLength: 129, // Reach at full power
-      width: 40, // Width
+      length: 76, // Reach
+      maxLength: 114, // Reach at full power
+      width: 36, // Width
       damage: 3, // Damage
       maxDamage: 6, // Damage at full power
       stun: 0, // Stuns the enemies it hits (s)
@@ -159,11 +159,11 @@ export const DEFAULTS = {
       cooldown: 0.48, // Cooldown (s)
     },
     smash: {
-      size: 46, // Size
-      maxSize: 62, // Size at full power
+      size: 40, // Size
+      maxSize: 54, // Size at full power
       damage: 6, // Damage
       maxDamage: 12, // Damage at full power
-      blastRadius: 85, // Blast radius
+      blastRadius: 72, // Blast radius
       blastDamage: 4, // Blast damage (at the centre)
       blastPush: 520, // Blast knockback (at the centre)
     },
