@@ -39,6 +39,7 @@ export class PlayerPresenter {
     on("hitBounce", () => a.bounce(), owner);
     on("turn", (e) => a.backflip(e.angle), owner);
     on("hurt", (e) => a.hurt(e.fromX, e.fromY, e.x, e.y), owner);
+    on("block", (e) => e.what === "armor" && a.deflect(), owner);
     on("attack", (e) => a.strike(avatarWeapon(e.weapon), e.angle, e.power, e.attack === "lunge" || e.attack === "sword.poke"), owner);
     on("respawn", (e) => {
       this.x = e.x;

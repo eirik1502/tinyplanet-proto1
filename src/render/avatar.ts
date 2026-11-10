@@ -52,6 +52,8 @@ const STRIKE_TIME = 0.3;
 const SWING_TIME = 0.18;
 const FLIP_TIME = 0.42;
 const BACKFLIP_TIME = 0.38;
+/** How long the armor's blink shows (s). */
+const DEFLECT_TIME = 0.15;
 
 const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -112,6 +114,8 @@ export class Avatar {
   private backflipping = false;
   private hurtT = 0;
   private hurtDir = 0;
+  /** Seconds left of the armor's blink. */
+  private deflectT = 0;
   /** `thrust`: a straight jab along the angle rather than a sweep across it. */
   private strikeAnim: { weapon: AvatarWeapon; angle: number; power: number; t: number; thrust: boolean } | null = null;
   private cloak: { x: number; y: number; px: number; py: number }[] = [];
@@ -157,6 +161,11 @@ export class Avatar {
     this.hurtT = 0.35;
     this.hurtDir = Math.atan2(y - fromY, x - fromX);
     this.kick(-0.25);
+  }
+
+  /** The armor took a hit: a round yellow blink over the body. */
+  deflect() {
+    this.deflectT = DEFLECT_TIME;
   }
 
   strike(weapon: AvatarWeapon, angle: number, power: number, thrust = false) {
@@ -216,6 +225,7 @@ export class Avatar {
     if (this.flip < 1) this.flip = Math.min(1, this.flip + dt / this.flipTime);
     else this.backflipping = false;
     this.hurtT = Math.max(0, this.hurtT - dt);
+    this.deflectT = Math.max(0, this.deflectT - dt);
     if (strike && (strike.t += dt) > STRIKE_TIME) this.strikeAnim = null;
 
     this.updateCloak(dt, v, speed);
@@ -350,6 +360,13 @@ export class Avatar {
       ctx.fill();
     }
     ctx.restore();
+    // Armor blink: round, so it doesn't turn or squash with the body.
+    if (this.deflectT > 0) {
+      ctx.fillStyle = `rgba(255,211,77,${(this.deflectT / DEFLECT_TIME) * 0.7})`;
+      ctx.beginPath();
+      ctx.arc(pr.x, pr.y, 9 * k, 0, Math.PI * 2);
+      ctx.fill();
+    }
     if (v.stunned) this.drawStunStars(ctx, pr.x, pr.y, k);
   }
 
