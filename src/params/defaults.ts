@@ -133,8 +133,8 @@ export const DEFAULTS = {
       maxDamage: 5, // Damage at full power
       activeTime: 0.18, // Active time (s)
       fadeTime: 0.12,
-      cooldown: 0.48, // Cooldown after the smash or a miss (s)
-      stepCooldown: 0.18, // Cooldown after a swipe or poke that hits (s)
+      cooldown: 0.60, // Cooldown after the smash or a miss (s)
+      stepCooldown: 0.45, // Cooldown after a swipe or poke that hits (s)
       knockback: 1, // Knockback (×)
       comboWindow: 1.2, // Combo window after a hit (s)
     },
