@@ -34,9 +34,14 @@ export class Player extends GameObject {
   turnWindow = 0;
   /**
    * Turning in the air (a backflip): held in place for `t` more seconds, then off at `angle`
-   * with the speed `speed` and the upward speed `vz` the flight had.
+   * at `speed`, with the upward speed `vz` the flight had.
    */
   turn: { t: number; angle: number; speed: number; vz: number } | null = null;
+  /**
+   * The sideways speed before the current strike's first sword hit in the air slowed the flight,
+   * or null until one does: later hits by the same strike don't slow it again.
+   */
+  hitSpeed: number | null = null;
   /** Speed along the rim (per s) after a fast grab. */
   slide = 0;
   /** Climb speed along the rim (per s) from the input this step (not the climb to a jump's spot). */

@@ -17,7 +17,7 @@ import type { AttackContext, AttackDef, Loadout, StatGroup, Stats, Weapon, Weapo
 /** How long a press made too early waits to go off (real s). */
 const QUEUE_TIME = 0.3;
 /** How much of a lunge's speed the player keeps after its strike. */
-const LUNGE_KEEP = 0.35;
+const LUNGE_KEEP = 0.7;
 
 type Context = AttackContext & { reach?: number; halfWidth?: number; struck?: boolean };
 

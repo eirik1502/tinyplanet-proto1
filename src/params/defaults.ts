@@ -49,6 +49,8 @@ export const DEFAULTS = {
       overSpeed: 550, // …at this speed or more (sideways)
       cruise: 420, // Speed above this fades back down… (sideways)
       drag: 2, // …this fast (per s)
+      hitKeep: 0.5, // Speed kept after a sword hit (×, sideways)
+      hitMinSpeed: 140, // …but a hit slows it to no less than this
     },
     assist: {
       angle: 14, // Most a jump is nudged toward an island (degrees)
@@ -73,6 +75,8 @@ export const DEFAULTS = {
       minTilt: 0.6, // Least stick tilt that turns
       minAngle: 45, // Least turn from the flight that counts (degrees)
       delay: 0.19, // Turn delay, while the backflip starts (s)
+      speed: 240, // Speed after a turn (sideways)…
+      keep: 0.2, // …plus this much of the speed before the hit (×)
     },
     slide: {
       minSpeed: 100, // Slide min speed

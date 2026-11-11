@@ -58,6 +58,8 @@ export class PlayerController {
     // The player's own hits: hit-stop and a chance to turn after sword hits; in the air they refill the
     // double jump (except the double jump's own strike) and some focus, and sword hits bounce the player up.
     w.events.on("hit", (e) => this.onOwnHit(e.weapon, e.damage), { source: p.id, owner: p.lifetime });
+    // Each strike can slow the flight once.
+    w.events.on("attack", () => (p.hitSpeed = null), { source: p.id, owner: p.lifetime });
     this.reset();
   }
 
@@ -172,6 +174,17 @@ export class PlayerController {
     if (weapon !== "jumpForce") p.airJumps = 1;
     p.focus = Math.min(1, p.focus + w.params.player.focus.perHit);
     if (blade) {
+      if (p.hitSpeed === null) {
+        // The strike's first hit slows the flight, down to `air.hitMinSpeed` at most.
+        const sp = Math.hypot(p.vx, p.vy);
+        const { hitKeep, hitMinSpeed } = w.params.move.air;
+        const to = Math.max(sp * hitKeep, Math.min(sp, hitMinSpeed));
+        if (sp > 0) {
+          p.vx *= to / sp;
+          p.vy *= to / sp;
+        }
+        p.hitSpeed = sp;
+      }
       p.vz = Math.max(p.vz, w.params.move.airJump.bounce);
       p.jumpHeld = false;
       w.events.emit("hitBounce", { source: p.id });
@@ -298,7 +311,7 @@ export class PlayerController {
       // Hit-stop: no moving, attacking or animating.
       p.freeze -= dtReal;
     } else if (p.turn) {
-      // The backflip: held in place a moment, then off the new way at the speed it had.
+      // The backflip: held in place a moment, then off the new way at the turn's speed.
       const t = p.turn;
       if (p.mode !== "air") p.turn = null;
       else if ((t.t -= dt) <= 0) {
@@ -431,8 +444,10 @@ export class PlayerController {
     const l = Math.hypot(dir.x, dir.y);
     if (p.mode !== "air" || !this.w.playing || p.stun > 0 || l < tn.minTilt) return;
     const angle = Math.atan2(dir.y, dir.x);
-    const speed = Math.hypot(p.vx, p.vy);
-    if (speed > 1 && Math.abs(wrapAngle(angle - Math.atan2(p.vy, p.vx))) < (tn.minAngle * Math.PI) / 180) return;
+    if (Math.hypot(p.vx, p.vy) > 1 && Math.abs(wrapAngle(angle - Math.atan2(p.vy, p.vx))) < (tn.minAngle * Math.PI) / 180) return;
+    // Off at a set speed, plus a little of the speed before the hit slowed the flight.
+    const before = p.hitSpeed ?? Math.hypot(p.vx, p.vy);
+    const speed = Math.min(this.w.params.move.limits.maxSpeed, tn.speed + tn.keep * before);
     p.turnWindow = 0;
     p.turn = { t: tn.delay, angle, speed, vz: p.vz };
     p.vx = p.vy = p.vz = 0;
