@@ -42,7 +42,7 @@ export class Boid<P extends BaseParams = BaseParams> extends GameObject {
   ) {
     super(type.id);
     this.health = this.add(Health, { hp: params.hp, max: params.hp });
-    this.size = bodySize(type as unknown as BoidType, params.hp);
+    this.size = 2; //bodySize(type as unknown as BoidType, params.hp);
     this.r = type.radius * this.size;
   }
 

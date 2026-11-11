@@ -93,7 +93,57 @@ export interface FlockTemplate {
 // The predefined flocks, by how far into a run they show up. Early ones have the types' default
 // health; later ones are fewer and tougher (and so bigger) for the same budget.
 
-export const MELEE_PACK: FlockTemplate = { name: "Melee pack", members: [{ type: "melee", count: 7 }] };
+export const MELEE_PACK: FlockTemplate = {
+  name: "Melee pack",
+  members: [
+    {
+      type: "melee", count: 7, hp: 100, params: {
+        lungeRange: 160, windup: 1.2, lungeSpeed: 720, lungeTime: 0.3, recover: 0.3, cooldown: 2.3
+      }
+    },
+  ],
+  style: {
+    spread: 500,
+    spacing: 100,
+    tightness: 0,
+    coordination: 0.1,
+    restlessness: 0.9,
+    pace: 50,
+    aggroRange: 200,
+    giveUpRange: 350,
+    grudge: 3,
+    hunts: 0,
+    attackers: 3,
+    rush: 2,
+  }
+};
+
+// export interface FlockStyle {
+//   /** How far members may stray from the flock's centre before being pulled back hard. */
+//   spread: number;
+//   /** Personal space each member keeps from the others (between their bodies). */
+//   spacing: number;
+//   /** 0..1: how strongly members are drawn together. */
+//   tightness: number;
+//   /** 0..1: every boid for itself ↔ moving as one. */
+//   coordination: number;
+//   /** 0..1: calm ↔ jittery. */
+//   restlessness: number;
+//   /** Roaming speed while idle. */
+//   pace: number;
+//   /** Engages when a member is this close to the player. */
+//   aggroRange: number;
+//   /** Gives up once every member is this far away (and the grudge has worn off). */
+//   giveUpRange: number;
+//   /** Stays engaged this long after a member was hit (s). */
+//   grudge: number;
+//   /** 1: hunts the player from the start, wherever they are. */
+//   hunts: number;
+//   /** How many members may be attacking (winding up or lunging) at once. */
+//   attackers: number;
+//   /** Speed (×) while engaged and still out of range to attack. */
+//   rush: number;
+// }
 export const SKIRMISHERS: FlockTemplate = {
   name: "Skirmishers",
   members: [{ type: "ranged", count: 5 }],
