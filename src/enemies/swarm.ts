@@ -479,8 +479,11 @@ export class Swarm implements BoidApi {
       // The queen's guard screens her from the player.
       const guarding = queenThreatened && flock.escort;
       const fighting = player.targetable && (flock.engaged || guarding);
-      // An engaged flock rushes in: each member flies faster until it's in range to attack.
-      const rushing = fighting && !guarding && b.type.range !== undefined && dP > b.type.range(b);
+      // Islands block attacks: a fighting boid with no clear line to the player looks for one.
+      const clear = !fighting || this.clearLine(b.x, b.y, player.x, player.y);
+      const spot = !clear && !guarding && b.type.hold ? this.clearSpot(b, player) : null;
+      // An engaged flock rushes in: each member flies faster until it's in range to attack (and has a clear line).
+      const rushing = fighting && !guarding && b.type.range !== undefined && (dP > b.type.range(b) || spot !== null);
       const speed = b.params.speed * (guarding ? 1.3 : rushing ? flock.style.rush : 1);
       const steer = { ax: 0, ay: 0, alt: CRUISE_ALT + Math.sin(b.phase * 1.3) * 10 };
       const c: BoidContext = {
@@ -524,6 +527,9 @@ export class Swarm implements BoidApi {
         const gy = q.y + (qx * Math.sin(spread) + qy * Math.cos(spread)) * dist;
         c.seek(gx, gy, speed, 2.5);
         steer.alt = player.alt + 6;
+      } else if (spot) {
+        c.seek(spot.x, spot.y, speed, 1.6);
+        steer.alt = player.alt + 6;
       } else if (c.fighting) {
         type.fight?.(b, c);
       } else {
@@ -542,8 +548,8 @@ export class Swarm implements BoidApi {
         }
       }
 
-      // Only so many members of a flock attack at once, so a flock comes at you in a readable rhythm.
-      if (c.fighting && b.cooldown <= 0 && this.attacking(flock) < flock.style.attackers && type.attack?.(b, c)) continue;
+      // Attacks only go off with a clear line to the player; once started, they follow through.
+      if (c.fighting && b.cooldown <= 0 && clear && type.attack?.(b, c)) continue;
 
       this.fly(b, steer.ax, steer.ay, speed, 4, dt);
       const alt = Math.max(ISLAND_TOP - 15, Math.min(ISLAND_TOP + 170, steer.alt));
@@ -551,11 +557,44 @@ export class Swarm implements BoidApi {
     }
   }
 
-  /** How many of a flock's members are winding up or carrying out an attack. */
-  private attacking(f: Flock) {
-    let n = 0;
-    for (const o of f.members) if (o.hp > 0 && (o.windup > 0 || o.lunge > 0)) n++;
-    return n;
+  /**
+   * Whether no island lies between (ax, ay) and the player at (px, py), seen from above. The player
+   * hangs on a rim, so a crossing within their body of them doesn't count.
+   */
+  private clearLine(ax: number, ay: number, px: number, py: number) {
+    const dx = px - ax;
+    const dy = py - ay;
+    const d = Math.hypot(dx, dy);
+    const short = this.w.params.player.hurtbox.radius;
+    if (d <= short) return true;
+    const ex = px - (dx / d) * short;
+    const ey = py - (dy / d) * short;
+    for (const isl of this.islands) {
+      // Cheap reject: the segment passes clear of the island's bounding circle.
+      const u = Math.max(0, Math.min(1, ((isl.cx - ax) * (ex - ax) + (isl.cy - ay) * (ey - ay)) / ((ex - ax) ** 2 + (ey - ay) ** 2 || 1)));
+      if (Math.hypot(ax + (ex - ax) * u - isl.cx, ay + (ey - ay) * u - isl.cy) > isl.radius * 1.35) continue;
+      if (isl.segmentHit(ax, ay, ex, ey) !== null) return false;
+    }
+    return true;
+  }
+
+  /**
+   * The nearest spot, around the player at `b`'s hold distance, with a clear line to them and not
+   * over an island: tried on both sides of `b`'s bearing from the player, closest first.
+   */
+  private clearSpot(b: Boid, player: PlayerView): { x: number; y: number } | null {
+    const ring = b.type.hold!(b);
+    const a0 = Math.atan2(b.y - player.y, b.x - player.x);
+    for (let i = 1; i <= 9; i++) {
+      for (const side of [1, -1]) {
+        const a = a0 + side * i * 0.35;
+        const x = player.x + Math.cos(a) * ring;
+        const y = player.y + Math.sin(a) * ring;
+        if (this.islands.some((isl) => isl.contains(x, y))) continue;
+        if (this.clearLine(x, y, player.x, player.y)) return { x, y };
+      }
+    }
+    return null;
   }
 
   brake(b: Boid, rate: number, dt: number) {

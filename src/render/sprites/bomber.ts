@@ -1,4 +1,4 @@
-import type { BoidSprite } from "./index";
+import { healthLeft, type BoidSprite } from "./index";
 import type { BomberParams } from "../../enemies/bomber";
 import { wings } from "./wings";
 
@@ -11,13 +11,17 @@ export const BOMBER_SPRITE: BoidSprite<BomberParams> = {
     // A dark bulb with a fuse that sparks faster once its flock has found the player.
     const rate = b.flock.engaged ? 18 : 5;
     const blink = 0.5 + 0.5 * Math.sin(b.phase * rate);
-    ctx.fillStyle = "#3a2a24";
+    ctx.fillStyle = "#1a110e";
     ctx.strokeStyle = "#ff9a3c";
     ctx.lineWidth = 1.4 * k;
     ctx.beginPath();
     ctx.arc(0, 0, 8 * k, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    ctx.fillStyle = "#4a3226";
+    ctx.beginPath();
+    ctx.arc(0, 0, 8 * healthLeft(b) * k, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = `rgba(255,${150 + 90 * blink},60,${0.5 + 0.5 * blink})`;
     for (const [ox, r] of [[-3, 2.5 + 1.5 * blink], [3, 1.5 + blink]] as const) {
       ctx.beginPath();

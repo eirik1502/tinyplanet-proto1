@@ -6,7 +6,8 @@ import { RANGED_SPRITE } from "./ranged";
 
 // Boid sprites, one per type, drawn at the origin of `ctx` with `k` screen px per world unit. Each
 // type draws its own body at size 1; `drawBoidBody` scales it by the boid's size and adds the hit
-// flash. Shared by the game view and the briefing's portraits.
+// flash. Health shows in the body: a dark shell whose coloured core shrinks with the health left.
+// Shared by the game view and the briefing's portraits.
 
 /** What a sprite needs to know about its boid (the briefing's portraits make these up). */
 export interface BoidLook<P extends BaseParams = BaseParams> {
@@ -20,6 +21,7 @@ export interface BoidLook<P extends BaseParams = BaseParams> {
   flash: number;
   /** Body size (× the type's base radius). */
   size: number;
+  health: { hp: number; max: number };
   params: P;
   flock: { engaged: boolean };
 }
@@ -38,6 +40,9 @@ export const SPRITES = {
   bomber: BOMBER_SPRITE,
   queen: QUEEN_SPRITE,
 } as unknown as Record<string, BoidSprite>;
+
+/** Share of its health a boid has left (0..1): the scale of its body's core. */
+export const healthLeft = (b: BoidLook) => Math.max(0, Math.min(1, b.health.hp / Math.max(b.health.max, 1e-6)));
 
 /** A boid type's colour. */
 export const boidColor = (id: string) => SPRITES[id]?.color ?? "#ffffff";

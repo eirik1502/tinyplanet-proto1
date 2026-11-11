@@ -1,6 +1,7 @@
 import type { BaseParams, BoidType } from "./types";
 
-// Melee boid: chases the player and, when close, winds up (stops, rears back, aims) and lunges.
+// Melee boid: hovers a little inside its lunge range on its side of the player and, with a clear
+// line to them, winds up (stops, rears back, aims) and lunges: slow to start, then long and fast.
 // The aim locks shortly before the lunge, so a late sidestep dodges it; a whiffed or landed lunge
 // leaves it drifting a moment, and a hit during the windup interrupts it.
 
@@ -17,11 +18,14 @@ export interface MeleeParams extends BaseParams {
 /** Share of the windup, at its end, during which the aim is locked. */
 export const LOCK = 0.35;
 
+/** Distance it hovers at while fighting, as a share of its lunge range. */
+const HOLD = 0.75;
+
 export const MELEE: BoidType<MeleeParams> = {
   id: "melee",
   name: "Melee boid",
   radius: 8,
-  params: { hp: 2, speed: 190, costPerHp: 0.5, damage: 2, lungeRange: 110, windup: 0.45, lungeSpeed: 520, lungeTime: 0.3, recover: 0.5, cooldown: 1.3 },
+  params: { hp: 8, speed: 190, costPerHp: 0.25, damage: 4, lungeRange: 160, windup: 1.2, lungeSpeed: 720, lungeTime: 0.3, recover: 0.5, cooldown: 2.3 },
   inputs: {
     hp: ["Health", 1, 50, 1],
     speed: ["Speed", 20, 600, 5],
@@ -78,8 +82,15 @@ export const MELEE: BoidType<MeleeParams> = {
 
   range: (b) => b.params.lungeRange,
 
+  hold: (b) => b.params.lungeRange * HOLD,
+
   fight(b, c) {
-    c.seek(c.player.x, c.player.y, c.speed, 1.6);
+    // Hover inside lunge range on the side it's on, so the flock surrounds the player.
+    const ring = b.params.lungeRange * HOLD;
+    const side = 40 * Math.sign(Math.sin(b.id));
+    const tx = c.player.x - (c.px / c.dP) * ring + (-c.py / c.dP) * side;
+    const ty = c.player.y - (c.py / c.dP) * ring + (c.px / c.dP) * side;
+    c.seek(tx, ty, c.speed, 1.6);
     c.steer.alt = c.player.alt + 6;
   },
 

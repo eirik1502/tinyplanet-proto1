@@ -1,8 +1,8 @@
 import type { BaseParams, BoidType } from "./types";
 
-// Ranged boid: keeps its distance on its side of the player, circling a little. To shoot it stops
-// and charges (a hit interrupts it), fires an orb with a kick back, and holds a moment before
-// moving on.
+// Ranged boid: keeps its distance on its side of the player, circling a little. To shoot (with a
+// clear line to the player) it stops and charges (a hit interrupts it), fires a fast orb with a
+// kick back, and holds a moment before moving on.
 
 export interface RangedParams extends BaseParams {
   damage: number;
@@ -25,14 +25,14 @@ export const RANGED: BoidType<RangedParams> = {
   name: "Ranged boid",
   radius: 9,
   params: {
-    hp: 2,
+    hp: 8,
     speed: 160,
-    costPerHp: 0.75,
-    damage: 2,
+    costPerHp: 0.375,
+    damage: 4,
     keepAway: 230,
     range: 420,
-    windup: 0.55,
-    orbSpeed: 340,
+    windup: 1,
+    orbSpeed: 520,
     orbLife: 2,
     orbRadius: 6,
     recoil: 240,
@@ -85,6 +85,8 @@ export const RANGED: BoidType<RangedParams> = {
   },
 
   range: (b) => b.params.range,
+
+  hold: (b) => b.params.keepAway,
 
   fight(b, c) {
     // Hold off at keep-away distance on the side it's on, drifting sideways.

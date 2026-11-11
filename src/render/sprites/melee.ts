@@ -1,4 +1,4 @@
-import type { BoidSprite } from "./index";
+import { healthLeft, type BoidSprite } from "./index";
 import { LOCK, type MeleeParams } from "../../enemies/melee";
 import { wings } from "./wings";
 
@@ -38,17 +38,23 @@ export const MELEE_SPRITE: BoidSprite<MeleeParams> = {
     // Rears back while winding up.
     if (b.windup > 0) ctx.translate(-4 * (1 - b.windup / Math.max(p.windup, 0.001)) * k, 0);
     wings(ctx, b, k, "rgba(255,190,210,0.45)");
-    ctx.fillStyle = b.windup > 0 ? "#ff5a76" : "#e23a5a";
+    const body = (s: number) => {
+      ctx.beginPath();
+      ctx.moveTo(11 * s, 0);
+      ctx.lineTo(-7 * s, -6 * s);
+      ctx.lineTo(-3 * s, 0);
+      ctx.lineTo(-7 * s, 6 * s);
+      ctx.closePath();
+    };
+    ctx.fillStyle = "#3a0a16";
     ctx.strokeStyle = "#5a0f22";
     ctx.lineWidth = 1.2 * k;
-    ctx.beginPath();
-    ctx.moveTo(11 * k, 0);
-    ctx.lineTo(-7 * k, -6 * k);
-    ctx.lineTo(-3 * k, 0);
-    ctx.lineTo(-7 * k, 6 * k);
-    ctx.closePath();
+    body(k);
     ctx.fill();
     ctx.stroke();
+    ctx.fillStyle = b.windup > 0 ? "#ff5a76" : "#e23a5a";
+    body(k * healthLeft(b));
+    ctx.fill();
     // The eye dims while it recovers.
     ctx.fillStyle = b.recover > 0 ? "#8a7a80" : "#ffe066";
     ctx.beginPath();

@@ -10,7 +10,7 @@ export const DEFAULTS = {
       budget: 20.5, // Swarm budget
     },
     perLevel: {
-      budget: 9.4, // Swarm budget
+      budget: 5, // Swarm budget
     },
     modifiers: {
       wind: 90, // Wind strength

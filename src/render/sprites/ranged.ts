@@ -1,4 +1,4 @@
-import type { BoidSprite } from "./index";
+import { healthLeft, type BoidSprite } from "./index";
 import { KICK, type RangedParams } from "../../enemies/ranged";
 import { wings } from "./wings";
 
@@ -38,17 +38,22 @@ export const RANGED_SPRITE: BoidSprite<RangedParams> = {
     ctx.scale(1 - 0.25 * kick + 0.1 * charge, 1 + 0.15 * kick + 0.1 * charge);
     // Round body whose core brightens as the next shot charges, white-hot just before it fires.
     const ready = charge > 0 ? 1 : 1 - Math.max(0, Math.min(1, b.cooldown / p.cooldown));
-    ctx.fillStyle = "#1f8f86";
+    const left = healthLeft(b);
+    ctx.fillStyle = "#082a27";
     ctx.strokeStyle = "#0b3b38";
     ctx.lineWidth = 1.2 * k;
     ctx.beginPath();
     ctx.arc(0, 0, 7 * k, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    ctx.fillStyle = "#1f8f86";
+    ctx.beginPath();
+    ctx.arc(0, 0, 7 * left * k, 0, Math.PI * 2);
+    ctx.fill();
     const hot = Math.round(130 + 125 * charge);
     ctx.fillStyle = `rgba(${210 + Math.round(45 * charge)},255,${hot},${0.3 + 0.7 * ready})`;
     ctx.beginPath();
-    ctx.arc(1.5 * k, 0, (2.5 + 1.5 * ready + 1.5 * charge) * k, 0, Math.PI * 2);
+    ctx.arc(1.5 * left * k, 0, (2.5 + 1.5 * ready + 1.5 * charge) * left * k, 0, Math.PI * 2);
     ctx.fill();
   },
 };

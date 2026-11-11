@@ -67,7 +67,7 @@ export const TUTORIAL_LAYOUT: Layout = {
 const DUMMIES = resolveFlock({
   name: "Training dummies",
   members: [{ type: "melee", count: 2 }],
-  style: { aggroRange: 0, giveUpRange: 0, grudge: 0, attackers: 0, pace: 20, spread: 40, restlessness: 0.1 },
+  style: { aggroRange: 0, giveUpRange: 0, grudge: 0, pace: 20, spread: 40, restlessness: 0.1 },
 });
 
 export const TUTORIAL_NAME = "Learning to fly";

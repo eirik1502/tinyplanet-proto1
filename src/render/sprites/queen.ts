@@ -1,4 +1,4 @@
-import type { BoidSprite } from "./index";
+import { healthLeft, type BoidSprite } from "./index";
 import type { QueenParams } from "../../enemies/queen";
 
 export const QUEEN_SPRITE: BoidSprite<QueenParams> = {
@@ -30,10 +30,15 @@ export const QUEEN_SPRITE: BoidSprite<QueenParams> = {
         ctx.fill();
       }
     }
-    // Abdomen with stripes, thorax, head
-    ctx.fillStyle = "#6d1f9e";
+    // Abdomen with stripes, thorax, head; the abdomen and thorax are shells with shrinking cores.
+    const left = healthLeft(b);
+    ctx.fillStyle = "#2a0b3f";
     ctx.beginPath();
     ctx.ellipse(-16 * k, 0, 16 * k, 11 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#6d1f9e";
+    ctx.beginPath();
+    ctx.ellipse(-16 * k, 0, 16 * left * k, 11 * left * k, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = "#e3a6ff";
     ctx.lineWidth = 1.6 * k;
@@ -43,9 +48,13 @@ export const QUEEN_SPRITE: BoidSprite<QueenParams> = {
       ctx.quadraticCurveTo((sx + 3) * k, 0, sx * k, 9 * k);
       ctx.stroke();
     }
-    ctx.fillStyle = "#9b2fd6";
+    ctx.fillStyle = "#3d1158";
     ctx.beginPath();
     ctx.ellipse(2 * k, 0, 11 * k, 10 * k, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#9b2fd6";
+    ctx.beginPath();
+    ctx.ellipse(2 * k, 0, 11 * left * k, 10 * left * k, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "#d58cff";
     ctx.beginPath();

@@ -99,6 +99,8 @@ export interface BoidType<P extends BaseParams = BaseParams> {
   fight?(b: Boid<P>, c: BoidContext): void;
   /** How close it must be to attack: an engaged flock's members farther than this rush in. */
   range?(b: Boid<P>): number;
+  /** How far from the player it keeps while fighting; blocked from the player, it looks for a clear spot this far out. */
+  hold?(b: Boid<P>): number;
   /** Attack when fighting and the cooldown is over; true ends the boid's frame. */
   attack?(b: Boid<P>, c: BoidContext): boolean;
   /** Extra vertical reach of its hurtbox (and its own touch) beyond the usual hit height; Infinity = any altitude. */
@@ -107,9 +109,9 @@ export interface BoidType<P extends BaseParams = BaseParams> {
 
 /**
  * Body size (× the type's base radius) for a boid of `hp`: tougher boids are bigger, by the
- * square root of their health against the type's default.
+ * fourth root of their health against the type's default (4× the health is 1.4× the size).
  */
-export const bodySize = (t: BoidType, hp: number) => Math.sqrt(Math.max(1, hp) / t.params.hp);
+export const bodySize = (t: BoidType, hp: number) => Math.pow(Math.max(1, hp) / t.params.hp, 0.25);
 
 /** A type's defaults with `over` on top (only keys the type has, only numbers). */
 export function resolveParams<P extends BaseParams>(t: BoidType<P>, over: Partial<BaseParams> & Record<string, number> = {}): P {
